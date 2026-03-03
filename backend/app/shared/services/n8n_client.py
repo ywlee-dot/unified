@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
+
+import httpx
+from sqlalchemy import select, func as sa_func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.shared.models.n8n_execution import N8nExecutionModel
+
+logger = logging.getLogger(__name__)
 
 
 class N8nTriggerResponse:
@@ -16,20 +25,15 @@ class N8nTriggerResponse:
 
 
 class N8nClient:
-    """n8n webhook client - mock implementation for scaffold."""
+    """n8n webhook client (trigger only — status is read from DB via callbacks)."""
 
     def __init__(
         self,
-        base_url: str = "http://n8n:5678",
         webhook_base: str = "http://n8n:5678/webhook",
-        api_key: str | None = None,
-        basic_auth: tuple[str, str] | None = None,
         timeout: float = 30.0,
+        **_kwargs,
     ):
-        self.base_url = base_url
-        self.webhook_base = webhook_base
-        self.api_key = api_key
-        self.basic_auth = basic_auth
+        self.webhook_base = webhook_base.rstrip("/")
         self.timeout = timeout
 
     async def trigger_webhook(
@@ -37,26 +41,102 @@ class N8nClient:
         webhook_path: str,
         payload: dict | None = None,
     ) -> N8nTriggerResponse:
-        """Trigger an n8n workflow via webhook (mock)."""
-        run_id = str(uuid.uuid4())
-        return N8nTriggerResponse(
-            run_id=run_id,
-            status="triggered",
-            message=f"Workflow triggered via {webhook_path}",
-        )
+        """Trigger an n8n workflow via webhook."""
+        url = f"{self.webhook_base}{webhook_path}"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                resp = await client.post(url, json=payload or {})
+                resp.raise_for_status()
+                data = resp.json()
+                execution_id = (
+                    data.get("executionId")
+                    or data.get("execution_id")
+                    or str(data.get("id", ""))
+                )
+                return N8nTriggerResponse(
+                    run_id=execution_id,
+                    status="triggered",
+                    message=f"Workflow triggered via {webhook_path}",
+                )
+            except httpx.HTTPStatusError as e:
+                logger.error("n8n webhook error: %s %s", e.response.status_code, e.response.text)
+                return N8nTriggerResponse(
+                    run_id="",
+                    status="failed",
+                    message=f"n8n webhook 호출 실패: {e.response.status_code}",
+                )
+            except httpx.RequestError as e:
+                logger.error("n8n webhook request error: %s", e)
+                return N8nTriggerResponse(
+                    run_id="",
+                    status="failed",
+                    message=f"n8n 연결 실패: {e}",
+                )
 
-    async def get_execution_status(self, execution_id: str) -> dict:
-        """Get execution status (mock)."""
-        return {
-            "run_id": execution_id,
-            "status": "completed",
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "finished_at": datetime.now(timezone.utc).isoformat(),
-        }
 
-    async def get_execution_result(self, execution_id: str) -> dict:
-        """Get execution result data (mock)."""
-        return {
-            "run_id": execution_id,
-            "result_data": {"message": "Mock execution result"},
-        }
+async def create_execution_record(
+    db: AsyncSession,
+    *,
+    execution_id: str,
+    project_slug: str,
+    workflow_id: str,
+    workflow_name: str = "",
+) -> N8nExecutionModel:
+    """Create a 'running' execution record in DB after triggering a webhook."""
+    record = N8nExecutionModel(
+        id=str(uuid.uuid4()),
+        execution_id=execution_id,
+        project_slug=project_slug,
+        workflow_id=workflow_id,
+        workflow_name=workflow_name,
+        status="running",
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return record
+
+
+async def get_execution(db: AsyncSession, execution_id: str) -> N8nExecutionModel | None:
+    """Get a single execution record by execution_id."""
+    stmt = select(N8nExecutionModel).where(
+        N8nExecutionModel.execution_id == execution_id
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def list_executions_from_db(
+    db: AsyncSession,
+    project_slug: str,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """List execution records from DB for a given project slug with pagination."""
+    count_stmt = (
+        select(sa_func.count())
+        .select_from(N8nExecutionModel)
+        .where(N8nExecutionModel.project_slug == project_slug)
+    )
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar() or 0
+
+    offset = (page - 1) * page_size
+    stmt = (
+        select(N8nExecutionModel)
+        .where(N8nExecutionModel.project_slug == project_slug)
+        .order_by(N8nExecutionModel.started_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    items = list(result.scalars().all())
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+    }

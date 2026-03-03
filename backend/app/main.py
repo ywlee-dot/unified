@@ -7,6 +7,7 @@ from app.config import settings
 from app.exceptions import register_exception_handlers
 from app.registry.project_registry import ProjectRegistry
 from app.shared.auth.router import router as auth_router
+from app.shared.routers.n8n_webhook import router as n8n_webhook_router
 
 app = FastAPI(
     title="Unified Workspace API",
@@ -26,6 +27,9 @@ app.add_middleware(
 
 # Auth router
 app.include_router(auth_router, prefix="/api/auth", tags=["인증"])
+
+# n8n callback webhook
+app.include_router(n8n_webhook_router, prefix="/api/webhooks/n8n", tags=["n8n 콜백"])
 
 # Exception handlers
 register_exception_handlers(app)

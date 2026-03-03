@@ -35,8 +35,6 @@ async def get_current_user(
 async def get_n8n_client() -> N8nClient:
     """Return a configured N8nClient instance."""
     return N8nClient(
-        base_url=settings.N8N_BASE_URL,
         webhook_base=settings.N8N_WEBHOOK_BASE,
-        api_key=settings.N8N_API_KEY,
         timeout=30.0,
     )

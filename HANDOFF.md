@@ -1,0 +1,31 @@
+# HANDOFF
+
+## Current [1772528560]
+- **Task**: n8n 콜백 패턴 구현 (폴링 → 콜백 방식 전환)
+- **Completed**:
+  - N8nExecutionModel DB 모델 생성 (n8n_executions 테이블)
+  - POST /api/webhooks/n8n/callback 콜백 수신 엔드포인트 생성
+  - n8n_client.py 간소화 (REST API 폴링 제거, DB 헬퍼 함수 추가)
+  - report_generator service/router DB 기반으로 전환
+  - data_pipeline service/router DB 기반으로 전환
+  - main.py에 콜백 라우터 마운트
+  - dependencies.py 간소화
+  - alembic env.py에 모델 import 추가
+- **Next Steps**:
+  - docker compose exec backend alembic revision --autogenerate -m "add n8n_executions table"
+  - docker compose exec backend alembic upgrade head
+  - Render 환경변수 설정: N8N_WEBHOOK_BASE를 n8n Cloud 주소로 변경
+  - n8n Cloud 워크플로우에 HTTP Request 콜백 노드 추가
+  - 프론트에서 트리거 → 콜백 → DB 조회 E2E 테스트
+- **Blockers**: None
+- **Related Files**:
+  - backend/app/shared/models/n8n_execution.py (NEW)
+  - backend/app/shared/routers/n8n_webhook.py (NEW)
+  - backend/app/shared/services/n8n_client.py
+  - backend/app/projects/report_generator/service.py
+  - backend/app/projects/report_generator/router.py
+  - backend/app/projects/data_pipeline/service.py
+  - backend/app/projects/data_pipeline/router.py
+  - backend/app/main.py
+  - backend/app/dependencies.py
+  - backend/alembic/env.py
