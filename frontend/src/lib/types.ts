@@ -215,3 +215,23 @@ export interface PipelineRun {
   logs: string[] | null;
   error_message: string | null;
 }
+
+// --- Dataset Summary ---
+
+export interface DatasetSummaryResult {
+  row_index: number;
+  group_key: string | null;
+  common: Record<string, string>;
+  columns: string[];
+  keywords: string[];
+  description: string;
+  prompt?: string;
+  debug?: Record<string, unknown>;
+  rows?: Record<string, unknown>[];
+}
+
+export interface DatasetSummaryStats {
+  total_generated: number;
+  mock_available: boolean;
+  supported_formats: string[];
+}

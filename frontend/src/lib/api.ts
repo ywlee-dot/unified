@@ -96,6 +96,27 @@ class ApiClient {
     );
   }
 
+  // --- Form Data ---
+
+  async postFormData<T>(path: string, formData: FormData): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const res = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => null);
+      throw new ApiError(
+        errorBody?.detail || errorBody?.error || `Request failed: ${res.status}`,
+        res.status,
+        errorBody
+      );
+    }
+
+    return res.json();
+  }
+
   // --- n8n ---
 
   triggerN8nWorkflow(

@@ -12,6 +12,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   "content-manager": "콘텐츠 관리",
   "report-generator": "리포트 생성기",
   "data-pipeline": "데이터 파이프라인",
+  "dataset-summary": "데이터셋 설명 생성",
   jobs: "수집 작업",
   history: "이력",
   charts: "차트",

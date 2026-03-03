@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     N8N_API_KEY: str | None = None
     N8N_CALLBACK_SECRET: str = "n8n-callback-secret-change-me"
 
+    # LLM (Dataset Summary)
+    GEMINI_API_KEY: str | None = None
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    OPENAI_API_KEY: str | None = None
+    OPENAI_BASE_URL: str | None = None
+    OPENAI_MODEL: str | None = None
+    MOCK_MODE: str = "0"
+
     # Auth
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60

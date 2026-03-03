@@ -11,6 +11,7 @@ import {
   Bell,
   FileText,
   GitBranch,
+  Sparkles,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -43,6 +44,11 @@ const STANDARD_PROJECTS: SidebarItem[] = [
     label: "콘텐츠 관리",
     path: "/projects/content-manager",
     icon: <FileText className="h-5 w-5" />,
+  },
+  {
+    label: "데이터셋 설명 생성",
+    path: "/projects/dataset-summary",
+    icon: <Sparkles className="h-5 w-5" />,
   },
 ];
 

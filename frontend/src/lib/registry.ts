@@ -56,6 +56,13 @@ export const PROJECT_NAV_MAP: Record<string, NavItem[]> = {
       icon: "folder",
     },
   ],
+  "dataset-summary": [
+    {
+      label: "생성 결과",
+      path: "/projects/dataset-summary/results",
+      icon: "file-check",
+    },
+  ],
   "report-generator": [
     {
       label: "생성 결과",

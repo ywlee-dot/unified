@@ -5,6 +5,7 @@ import {
   Bell,
   FileText,
   GitBranch,
+  Sparkles,
 } from "lucide-react";
 import { clsx } from "clsx";
 import type { Project } from "@/lib/types";
@@ -15,6 +16,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   bell: <Bell className="h-6 w-6" />,
   "file-text": <FileText className="h-6 w-6" />,
   "git-branch": <GitBranch className="h-6 w-6" />,
+  sparkles: <Sparkles className="h-6 w-6" />,
 };
 
 interface ProjectCardProps {

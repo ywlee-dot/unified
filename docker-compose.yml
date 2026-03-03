@@ -42,6 +42,13 @@ services:
       N8N_BASE_URL: http://n8n:5678
       N8N_WEBHOOK_BASE: http://n8n:5678/webhook
       SECRET_KEY: dev-secret-key-change-in-production
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      MOCK_MODE: ${MOCK_MODE:-0}
     depends_on:
       db:
         condition: service_healthy
