@@ -1,31 +1,28 @@
 # HANDOFF
 
-## Current [1772528560]
-- **Task**: n8n 콜백 패턴 구현 (폴링 → 콜백 방식 전환)
+## Current [1772596860]
+- **Task**: n8n 콜백 패턴 E2E 완성 + summarize 프로젝트 + 가이드 작성
 - **Completed**:
-  - N8nExecutionModel DB 모델 생성 (n8n_executions 테이블)
-  - POST /api/webhooks/n8n/callback 콜백 수신 엔드포인트 생성
-  - n8n_client.py 간소화 (REST API 폴링 제거, DB 헬퍼 함수 추가)
-  - report_generator service/router DB 기반으로 전환
-  - data_pipeline service/router DB 기반으로 전환
-  - main.py에 콜백 라우터 마운트
-  - dependencies.py 간소화
-  - alembic env.py에 모델 import 추가
+  - Alembic 마이그레이션 생성/적용 (n8n_executions 테이블)
+  - summarize 프로젝트 생성 (backend/app/projects/summarize/)
+  - Render 배포 및 환경변수 설정 (N8N_WEBHOOK_BASE, N8N_CALLBACK_SECRET)
+  - Dockerfile에 alembic upgrade head 추가 (배포 시 자동 마이그레이션)
+  - n8n Cloud 워크플로우 연결 및 E2E 테스트 성공 (trigger → callback → DB)
+  - tracking_id 생성 로직 추가 (n8n Immediately 모드 대응)
+  - n8n 워크플로우 연동 가이드 HTML 작성
 - **Next Steps**:
-  - docker compose exec backend alembic revision --autogenerate -m "add n8n_executions table"
-  - docker compose exec backend alembic upgrade head
-  - Render 환경변수 설정: N8N_WEBHOOK_BASE를 n8n Cloud 주소로 변경
-  - n8n Cloud 워크플로우에 HTTP Request 콜백 노드 추가
-  - 프론트에서 트리거 → 콜백 → DB 조회 E2E 테스트
+  - 프론트엔드에서 summarize 프로젝트 페이지 구현
+  - report_generator, data_pipeline도 동일하게 tracking_id 방식 적용
+  - 프로젝트별 다른 n8n 인스턴스 지원 (N8N_WEBHOOK_BASE 분리)
 - **Blockers**: None
 - **Related Files**:
-  - backend/app/shared/models/n8n_execution.py (NEW)
-  - backend/app/shared/routers/n8n_webhook.py (NEW)
-  - backend/app/shared/services/n8n_client.py
-  - backend/app/projects/report_generator/service.py
-  - backend/app/projects/report_generator/router.py
-  - backend/app/projects/data_pipeline/service.py
-  - backend/app/projects/data_pipeline/router.py
-  - backend/app/main.py
-  - backend/app/dependencies.py
-  - backend/alembic/env.py
+  - backend/app/projects/summarize/ (NEW)
+  - backend/Dockerfile
+  - backend/alembic/script.py.mako (NEW)
+  - backend/alembic/versions/f997e804f4eb_add_n8n_executions_table.py (NEW)
+  - docs/n8n-setup-guide.html (NEW)
+
+## Past 1 [1772528560]
+- **Task**: n8n 콜백 패턴 구현 (폴링 → 콜백 방식 전환)
+- **Completed**: N8nExecutionModel, 콜백 엔드포인트, n8n_client 간소화, report_generator/data_pipeline DB 기반 전환
+- **Note**: commit d0e602e, 1fd4f24

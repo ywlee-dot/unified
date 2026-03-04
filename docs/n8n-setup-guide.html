@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>n8n 워크플로우 연동 가이드</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; background: #f8f9fa; color: #1a1a2e; line-height: 1.7; }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 40px 24px; }
+
+    h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { color: #6b7280; font-size: 15px; margin-bottom: 48px; }
+
+    .step { background: #fff; border-radius: 16px; padding: 32px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    .step-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .step-number { background: #4f46e5; color: #fff; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }
+    .step-title { font-size: 20px; font-weight: 700; }
+
+    .setting-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .setting-table th { text-align: left; padding: 10px 16px; background: #f1f5f9; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .setting-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    .setting-table tr:last-child td { border-bottom: none; }
+
+    .label { font-weight: 600; color: #334155; white-space: nowrap; }
+    .value { font-family: 'SF Mono', 'Fira Code', monospace; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 13px; color: #4f46e5; }
+
+    .code-block { background: #1e293b; color: #e2e8f0; border-radius: 12px; padding: 20px 24px; margin: 16px 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; line-height: 1.8; overflow-x: auto; position: relative; }
+    .code-label { position: absolute; top: 8px; right: 12px; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+    .code-block .comment { color: #64748b; }
+    .code-block .string { color: #a5d6ff; }
+    .code-block .key { color: #7dd3fc; }
+
+    .tip { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14px; }
+    .tip-title { font-weight: 700; color: #1d4ed8; margin-bottom: 4px; }
+
+    .warn { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14px; }
+    .warn-title { font-weight: 700; color: #b45309; margin-bottom: 4px; }
+
+    .flow-diagram { background: #fff; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 24px; margin: 16px 0; text-align: center; }
+    .flow-nodes { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+    .flow-node { padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+    .flow-webhook { background: #dbeafe; color: #1e40af; border: 2px solid #93c5fd; }
+    .flow-work { background: #f0fdf4; color: #166534; border: 2px solid #86efac; }
+    .flow-callback { background: #fae8ff; color: #86198f; border: 2px solid #d8b4fe; }
+    .flow-arrow { color: #9ca3af; font-size: 20px; font-weight: 700; }
+
+    .toggle-section { margin: 16px 0; }
+    .toggle-btn { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; width: 100%; text-align: left; cursor: pointer; font-size: 14px; font-weight: 600; color: #475569; display: flex; justify-content: space-between; align-items: center; }
+    .toggle-btn:hover { background: #f1f5f9; }
+    .toggle-content { display: none; padding: 16px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px; background: #fff; }
+    .toggle-content.active { display: block; }
+
+    .checklist { list-style: none; margin: 16px 0; }
+    .checklist li { padding: 8px 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .checklist li::before { content: ''; width: 20px; height: 20px; border: 2px solid #d1d5db; border-radius: 4px; flex-shrink: 0; }
+
+    .divider { border: none; border-top: 2px solid #f1f5f9; margin: 40px 0; }
+
+    .screenshot-placeholder { background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 40px; text-align: center; color: #94a3b8; font-size: 14px; margin: 16px 0; }
+
+    .copy-btn { background: #4f46e5; color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer; position: absolute; top: 8px; right: 12px; }
+    .copy-btn:hover { background: #4338ca; }
+    .copy-btn.copied { background: #16a34a; }
+
+    @media (max-width: 640px) {
+      .container { padding: 24px 16px; }
+      .step { padding: 24px 20px; }
+      .flow-nodes { flex-direction: column; }
+      .flow-arrow { transform: rotate(90deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <h1>n8n 워크플로우 연동 가이드</h1>
+    <p class="subtitle">Unified Workspace와 n8n Cloud를 연결하는 방법을 안내합니다.</p>
+
+    <!-- 전체 구조 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">!</div>
+        <div class="step-title">전체 구조 이해</div>
+      </div>
+      <p style="margin-bottom: 16px;">어떤 n8n 워크플로우든 <strong>앞뒤에 두 개 노드만 붙이면</strong> 연동됩니다.</p>
+      <div class="flow-diagram">
+        <div class="flow-nodes">
+          <div class="flow-node flow-webhook">Webhook<br><small>입구</small></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-node flow-work">작업 노드들<br><small>자유롭게 구성</small></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-node flow-callback">HTTP Request<br><small>콜백 (출구)</small></div>
+        </div>
+      </div>
+      <div class="tip">
+        <div class="tip-title">흐름 요약</div>
+        프론트에서 버튼 클릭 &rarr; 백엔드가 Webhook 호출 &rarr; n8n이 작업 실행 &rarr; 완료 후 콜백으로 결과 전달 &rarr; 프론트에 표시
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Step 1: Webhook 노드 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">1</div>
+        <div class="step-title">Webhook 노드 설정 (입구)</div>
+      </div>
+
+      <p style="margin-bottom: 12px;">n8n 워크플로우의 <strong>맨 처음</strong>에 추가합니다.</p>
+
+      <p style="margin-bottom: 8px; font-weight: 600;">노드 추가 방법:</p>
+      <p style="margin-bottom: 16px; font-size: 14px; color: #6b7280;">캔버스에서 <span class="value">+</span> 클릭 &rarr; <span class="value">Webhook</span> 검색 &rarr; 추가</p>
+
+      <table class="setting-table">
+        <tr>
+          <th colspan="2">Parameters 탭</th>
+        </tr>
+        <tr>
+          <td class="label">HTTP Method</td>
+          <td><span class="value">POST</span></td>
+        </tr>
+        <tr>
+          <td class="label">Path</td>
+          <td><span class="value">프로젝트에 맞게 설정</span> (예: <span class="value">summarize</span>)</td>
+        </tr>
+        <tr>
+          <td class="label">Authentication</td>
+          <td><span class="value">None</span></td>
+        </tr>
+        <tr>
+          <td class="label">Respond</td>
+          <td><span class="value">Immediately</span></td>
+        </tr>
+      </table>
+
+      <div class="warn">
+        <div class="warn-title">Respond 설정 주의</div>
+        반드시 <strong>Immediately</strong>로 설정해야 합니다. 다른 옵션을 선택하면 에러가 발생합니다.
+      </div>
+    </div>
+
+    <!-- Step 2: 작업 노드 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">2</div>
+        <div class="step-title">작업 노드 구성 (중간)</div>
+      </div>
+
+      <p style="margin-bottom: 16px;">Webhook과 콜백 사이에 원하는 작업을 자유롭게 연결합니다.</p>
+
+      <p style="margin-bottom: 8px; font-weight: 600;">주의사항:</p>
+      <p style="margin-bottom: 16px; font-size: 14px;">마지막 작업 노드의 출력에 <span class="value">tracking_id</span>가 포함되어야 합니다. 콜백에서 이 값으로 실행 기록을 매칭합니다.</p>
+
+      <div class="toggle-section">
+        <button class="toggle-btn" onclick="toggle(this)">
+          간단한 Code 노드 예시 보기
+          <span>&#9660;</span>
+        </button>
+        <div class="toggle-content">
+          <p style="margin-bottom: 8px; font-size: 14px;"><span class="value">+</span> 클릭 &rarr; <span class="value">Code</span> 검색 &rarr; 추가<br>Language: JavaScript / Mode: Run Once for All Items</p>
+          <div class="code-block">
+<span class="comment">// Webhook에서 받은 데이터 꺼내기</span>
+<span class="key">const</span> webhook = $(<span class="string">'Webhook 노드 이름'</span>).first().json;
+<span class="key">const</span> body = webhook.body || webhook;
+
+<span class="comment">// === 여기에 실제 작업 로직 작성 ===</span>
+<span class="key">const</span> result = {
+  message: <span class="string">"작업 완료"</span>
+};
+<span class="comment">// =================================</span>
+
+<span class="comment">// tracking_id를 반드시 포함해서 반환</span>
+<span class="key">return</span> [{
+  json: {
+    ...result,
+    tracking_id: body.tracking_id || <span class="string">""</span>
+  }
+}];
+          </div>
+          <div class="tip">
+            <div class="tip-title">노드 이름 확인</div>
+            <code>$('Webhook 노드 이름')</code>에서 이름은 n8n 캔버스에 표시된 노드 이름과 <strong>정확히 일치</strong>해야 합니다.
+          </div>
+        </div>
+      </div>
+
+      <div class="toggle-section">
+        <button class="toggle-btn" onclick="toggle(this)">
+          노드가 여러 개일 때 tracking_id 전달 방법
+          <span>&#9660;</span>
+        </button>
+        <div class="toggle-content">
+          <p style="margin-bottom: 12px; font-size: 14px;">중간 노드가 많아도 <strong>마지막 노드</strong>에서 Webhook의 tracking_id를 가져오면 됩니다.</p>
+          <div class="code-block">
+<span class="comment">// 마지막 작업 노드에서</span>
+<span class="key">const</span> tracking_id = $(<span class="string">'Webhook 노드 이름'</span>).first().json.body.tracking_id;
+
+<span class="key">return</span> [{
+  json: {
+    ...기존결과,
+    tracking_id
+  }
+}];
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: HTTP Request 콜백 노드 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">3</div>
+        <div class="step-title">HTTP Request 콜백 노드 설정 (출구)</div>
+      </div>
+
+      <p style="margin-bottom: 12px;">워크플로우의 <strong>맨 마지막</strong>에 추가합니다. 작업 결과를 백엔드에 전달하는 역할입니다.</p>
+
+      <p style="margin-bottom: 8px; font-weight: 600;">노드 추가 방법:</p>
+      <p style="margin-bottom: 16px; font-size: 14px; color: #6b7280;"><span class="value">+</span> 클릭 &rarr; <span class="value">HTTP Request</span> 검색 &rarr; 추가</p>
+
+      <!-- 기본 설정 -->
+      <table class="setting-table">
+        <tr>
+          <th colspan="2">기본 설정</th>
+        </tr>
+        <tr>
+          <td class="label">Method</td>
+          <td><span class="value">POST</span></td>
+        </tr>
+        <tr>
+          <td class="label">URL</td>
+          <td><span class="value" style="font-size: 12px;">https://unified-backend-7nja.onrender.com/api/webhooks/n8n/callback</span></td>
+        </tr>
+      </table>
+
+      <!-- Headers 설정 -->
+      <table class="setting-table" style="margin-top: 16px;">
+        <tr>
+          <th colspan="2">Headers 설정</th>
+        </tr>
+        <tr>
+          <td class="label">Send Headers</td>
+          <td><span class="value">ON</span></td>
+        </tr>
+        <tr>
+          <td class="label">Specify Headers</td>
+          <td><span class="value">Using Fields Below</span></td>
+        </tr>
+      </table>
+      <table class="setting-table" style="margin-top: 4px;">
+        <tr>
+          <th>Name</th>
+          <th>Value</th>
+        </tr>
+        <tr>
+          <td class="label">X-N8N-Callback-Secret</td>
+          <td><span class="value">tucon-n8n</span></td>
+        </tr>
+      </table>
+
+      <!-- Body 설정 -->
+      <table class="setting-table" style="margin-top: 16px;">
+        <tr>
+          <th colspan="2">Body 설정</th>
+        </tr>
+        <tr>
+          <td class="label">Send Body</td>
+          <td><span class="value">ON</span></td>
+        </tr>
+        <tr>
+          <td class="label">Body Content Type</td>
+          <td><span class="value">JSON</span></td>
+        </tr>
+        <tr>
+          <td class="label">Specify Body</td>
+          <td><span class="value">Using JSON</span></td>
+        </tr>
+      </table>
+
+      <p style="margin-top: 16px; margin-bottom: 8px; font-weight: 600;">JSON Body 내용:</p>
+      <div class="code-block" style="position: relative;">
+        <button class="copy-btn" onclick="copyCode(this)">복사</button>
+{
+  <span class="key">"execution_id"</span>: <span class="string">"{{ $json.tracking_id }}"</span>,
+  <span class="key">"status"</span>: <span class="string">"completed"</span>,
+  <span class="key">"result_data"</span>: {{ JSON.stringify($json) }},
+  <span class="key">"error_message"</span>: null,
+  <span class="key">"finished_at"</span>: <span class="string">"{{ new Date().toISOString() }}"</span>
+}
+      </div>
+
+      <div class="warn">
+        <div class="warn-title">Secret 값 확인</div>
+        <code>X-N8N-Callback-Secret</code> 값은 백엔드 환경변수 <code>N8N_CALLBACK_SECRET</code>과 <strong>정확히 동일</strong>해야 합니다.
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Step 4: Publish -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">4</div>
+        <div class="step-title">저장 및 Publish</div>
+      </div>
+      <p>모든 노드를 연결한 후:</p>
+      <ol style="margin: 12px 0; padding-left: 20px; font-size: 14px; line-height: 2;">
+        <li><strong>Ctrl + S</strong> 또는 메뉴에서 저장</li>
+        <li>우측 상단 <strong>Publish</strong> 버튼 클릭</li>
+      </ol>
+      <div class="warn">
+        <div class="warn-title">Publish 필수</div>
+        Publish하지 않으면 프로덕션 webhook URL이 동작하지 않습니다. 수정할 때마다 다시 Publish 해야 합니다.
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- 최종 체크리스트 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">&check;</div>
+        <div class="step-title">최종 체크리스트</div>
+      </div>
+      <ul class="checklist">
+        <li>Webhook 노드의 Respond가 <strong>Immediately</strong>로 설정되어 있다</li>
+        <li>콜백 URL이 <strong>https://unified-backend-7nja.onrender.com/api/webhooks/n8n/callback</strong> 이다</li>
+        <li>헤더 <strong>X-N8N-Callback-Secret</strong> 값이 백엔드와 동일하다</li>
+        <li>JSON Body에 <strong>tracking_id</strong>가 포함되어 있다</li>
+        <li>워크플로우가 <strong>Publish</strong> 되어 있다</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <script>
+    function toggle(btn) {
+      const content = btn.nextElementSibling;
+      content.classList.toggle('active');
+      const arrow = btn.querySelector('span');
+      arrow.textContent = content.classList.contains('active') ? '\u25B2' : '\u25BC';
+    }
+
+    function copyCode(btn) {
+      const codeBlock = btn.parentElement;
+      const text = codeBlock.innerText.replace('복사', '').trim();
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = '복사됨!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = '복사';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>
