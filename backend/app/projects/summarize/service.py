@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.projects.summarize.schemas import SummarizeRun, SummarizeTriggerResponse
@@ -22,7 +24,8 @@ class SummarizeService:
         self.db = db
 
     async def trigger(self, text: str = "", parameters: dict | None = None) -> SummarizeTriggerResponse:
-        payload = {"text": text, **(parameters or {})}
+        tracking_id = str(uuid.uuid4())[:8]
+        payload = {"text": text, "tracking_id": tracking_id, **(parameters or {})}
         result = await self.n8n_client.trigger_webhook(
             "/summarize",
             payload=payload,
@@ -31,15 +34,16 @@ class SummarizeService:
             return SummarizeTriggerResponse(
                 run_id="", status="failed", message=result.message,
             )
+        execution_id = result.run_id or tracking_id
         await create_execution_record(
             self.db,
-            execution_id=result.run_id,
+            execution_id=execution_id,
             project_slug="summarize",
             workflow_id="summarize",
             workflow_name="텍스트 요약",
         )
         return SummarizeTriggerResponse(
-            run_id=result.run_id,
+            run_id=execution_id,
             status=result.status,
             message="요약 워크플로우가 실행되었습니다",
         )
