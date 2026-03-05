@@ -16,46 +16,6 @@ export interface NavItem {
 }
 
 export const PROJECT_NAV_MAP: Record<string, NavItem[]> = {
-  "data-collector": [
-    { label: "수집 작업", path: "/projects/data-collector/jobs", icon: "list" },
-    {
-      label: "수집 이력",
-      path: "/projects/data-collector/history",
-      icon: "clock",
-    },
-  ],
-  analytics: [
-    { label: "차트", path: "/projects/analytics/charts", icon: "bar-chart-2" },
-    {
-      label: "리포트",
-      path: "/projects/analytics/reports",
-      icon: "file-text",
-    },
-  ],
-  notifications: [
-    {
-      label: "템플릿",
-      path: "/projects/notifications/templates",
-      icon: "layout-template",
-    },
-    {
-      label: "발송 이력",
-      path: "/projects/notifications/history",
-      icon: "clock",
-    },
-  ],
-  "content-manager": [
-    {
-      label: "콘텐츠 편집",
-      path: "/projects/content-manager/editor",
-      icon: "edit",
-    },
-    {
-      label: "카테고리",
-      path: "/projects/content-manager/categories",
-      icon: "folder",
-    },
-  ],
   "dataset-summary": [
     {
       label: "생성 결과",
@@ -77,6 +37,21 @@ export const PROJECT_NAV_MAP: Record<string, NavItem[]> = {
       icon: "history",
     },
   ],
+  "gov-news-crawler": [
+    {
+      label: "키워드",
+      path: "/projects/gov-news-crawler/keywords",
+      icon: "tag",
+    },
+    {
+      label: "검색",
+      path: "/projects/gov-news-crawler/search",
+      icon: "search",
+    },
+  ],
+  "open-data-analyzer": [],
+  "evaluation-rag": [],
+  summarize: [],
 };
 
 export function getProjectNavItems(slug: string): NavItem[] {

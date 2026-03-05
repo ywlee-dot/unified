@@ -1,5 +1,8 @@
 import asyncio
+import importlib
+import logging
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import pool
@@ -9,6 +12,19 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.config import settings
 from app.shared.models.base import Base
 from app.shared.models.n8n_execution import N8nExecutionModel  # noqa: F401
+
+logger = logging.getLogger("alembic.env")
+
+# Auto-discover project models
+projects_dir = Path(__file__).resolve().parent.parent / "app" / "projects"
+if projects_dir.is_dir():
+    for project_path in sorted(projects_dir.iterdir()):
+        if project_path.is_dir() and (project_path / "models.py").exists():
+            module_name = f"app.projects.{project_path.name}.models"
+            try:
+                importlib.import_module(module_name)
+            except Exception as e:
+                logger.warning("Failed to import %s: %s", module_name, e)
 
 # Alembic Config object
 config = context.config

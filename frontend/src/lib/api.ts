@@ -9,7 +9,7 @@ import type {
 const API_BASE =
   typeof window === "undefined"
     ? process.env.INTERNAL_API_URL || "http://backend:8000/api"
-    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+    : "/api";
 
 class ApiClient {
   private baseUrl: string;

@@ -126,3 +126,17 @@ On startup, `ProjectRegistry.auto_discover_and_register()` scans `backend/app/pr
 - Korean language is used for UI strings, error messages, and documentation.
 - Pydantic v2 for all backend schemas. SQLAlchemy 2.0 mapped_column style for models.
 - Tests use `pytest` + `pytest-asyncio` with `asyncio_mode = "auto"` (see `pyproject.toml`).
+
+### Frontend-Backend Type Synchronization
+
+When adding or modifying API schemas:
+
+1. Update backend Pydantic schemas in `backend/app/projects/<slug>/schemas.py`
+2. Mirror changes to `frontend/src/lib/types.ts` (keep field names identical)
+3. Verify `ApiResponse<T>` wrapper is used consistently in both backend responses and frontend API client
+4. Optional: use `openapi-typescript` to auto-generate types from `http://localhost:8000/api/openapi.json`
+
+```bash
+# Auto-generate TypeScript types from OpenAPI schema (optional)
+npx openapi-typescript http://localhost:8000/api/openapi.json -o frontend/src/lib/api-types.ts
+```

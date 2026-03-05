@@ -2,14 +2,17 @@ services:
   # --- PostgreSQL ---
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: workspace
-      POSTGRES_USER: workspace_user
-      POSTGRES_PASSWORD: workspace_pass
+      POSTGRES_DB: ${POSTGRES_DB:-workspace}
+      POSTGRES_USER: ${POSTGRES_USER:-workspace_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-workspace_pass}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U workspace_user -d workspace"]
       interval: 10s
@@ -17,12 +20,16 @@ services:
       retries: 5
 
   # --- Redis ---
+  # TODO: 캐싱/세션/작업큐 등 향후 활용 예정
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - backend-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -34,15 +41,19 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://workspace_user:workspace_pass@db:5432/workspace
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-workspace_user}:${POSTGRES_PASSWORD:-workspace_pass}@db:5432/${POSTGRES_DB:-workspace}
       REDIS_URL: redis://redis:6379/0
       N8N_BASE_URL: http://n8n:5678
-      N8N_WEBHOOK_BASE: http://n8n:5678/webhook
+      N8N_WEBHOOK_BASE_1: ${N8N_WEBHOOK_BASE_1:-https://ywlee.app.n8n.cloud/webhook}
+      N8N_WEBHOOK_BASE_2: ${N8N_WEBHOOK_BASE_2:-}
+      N8N_WEBHOOK_BASE_3: ${N8N_WEBHOOK_BASE_3:-}
       N8N_API_KEY: ${N8N_API_KEY:-}
-      SECRET_KEY: dev-secret-key-change-in-production
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
@@ -52,6 +63,7 @@ services:
       MOCK_MODE: ${MOCK_MODE:-0}
       PINECONE_API_KEY: ${PINECONE_API_KEY:-}
       PINECONE_INDEX_NAME: ${PINECONE_INDEX_NAME:-evaluation-guidelines}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     depends_on:
       db:
         condition: service_healthy
@@ -59,9 +71,12 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+    networks:
+      - frontend-net
+      - backend-net
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,6 +87,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: dev
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -84,27 +100,42 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+    networks:
+      - frontend-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # --- n8n Workflow Engine ---
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n:1.76.1
+    restart: unless-stopped
     ports:
       - "5678:5678"
     environment:
       N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: admin
-      N8N_BASIC_AUTH_PASSWORD: admin
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-admin}
       WEBHOOK_URL: http://n8n:5678
       GENERIC_TIMEZONE: Asia/Seoul
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    networks:
+      - backend-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5678/healthz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+networks:
+  frontend-net:
+  backend-net:
 
 volumes:
   postgres_data:

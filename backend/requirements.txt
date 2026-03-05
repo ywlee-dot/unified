@@ -12,5 +12,11 @@ redis==5.2.*
 python-multipart==0.0.*
 openpyxl==3.1.*
 requests==2.32.*
+feedparser==6.0.*
+beautifulsoup4==4.12.*
+pinecone>=5.0.0
+google-genai>=1.0.0
+pypdf>=5.1.0
+tenacity>=8.2.0
 pytest==8.*
 pytest-asyncio==0.*

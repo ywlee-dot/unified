@@ -122,6 +122,73 @@
       ]
     }
   },
-  "hotPaths": [],
+  "hotPaths": [
+    {
+      "path": "src/components/layout/Sidebar.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1772672429535,
+      "type": "file"
+    },
+    {
+      "path": "src/app/projects/open-data-analyzer/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772515541906,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/types.ts",
+      "accessCount": 5,
+      "lastAccessed": 1772673118590,
+      "type": "file"
+    },
+    {
+      "path": ".env.local",
+      "accessCount": 4,
+      "lastAccessed": 1772672714723,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout/BreadcrumbNav.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772672460510,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/registry.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772672461645,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout",
+      "accessCount": 1,
+      "lastAccessed": 1772515754365,
+      "type": "directory"
+    },
+    {
+      "path": "src",
+      "accessCount": 1,
+      "lastAccessed": 1772672449524,
+      "type": "directory"
+    },
+    {
+      "path": "src/app/projects/gov-news-crawler",
+      "accessCount": 1,
+      "lastAccessed": 1772672699747,
+      "type": "directory"
+    },
+    {
+      "path": "",
+      "accessCount": 1,
+      "lastAccessed": 1772672705248,
+      "type": "directory"
+    },
+    {
+      "path": "src/lib/api.ts",
+      "accessCount": 1,
+      "lastAccessed": 1772673118579,
+      "type": "file"
+    }
+  ],
   "userDirectives": []
 }

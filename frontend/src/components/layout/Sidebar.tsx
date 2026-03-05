@@ -6,17 +6,33 @@ import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import {
   LayoutDashboard,
-  Database,
-  BarChart3,
-  Bell,
   FileText,
   GitBranch,
+  GitMerge,
   Sparkles,
+  ShieldCheck,
+  Newspaper,
   Settings,
   ChevronLeft,
   ChevronRight,
   Workflow,
+  ClipboardCheck,
+  Database,
 } from "lucide-react";
+import { useProjects } from "@/hooks/useProjects";
+import type { Project } from "@/lib/types";
+
+const ICON_MAP: Record<string, React.ReactNode> = {
+  sparkles: <Sparkles className="h-5 w-5" />,
+  "shield-check": <ShieldCheck className="h-5 w-5" />,
+  newspaper: <Newspaper className="h-5 w-5" />,
+  "clipboard-check": <ClipboardCheck className="h-5 w-5" />,
+  "file-text": <FileText className="h-5 w-5" />,
+  "git-branch": <GitBranch className="h-5 w-5" />,
+  "git-merge": <GitMerge className="h-5 w-5" />,
+  workflow: <Workflow className="h-5 w-5" />,
+  database: <Database className="h-5 w-5" />,
+};
 
 interface SidebarItem {
   label: string;
@@ -24,50 +40,39 @@ interface SidebarItem {
   icon: React.ReactNode;
 }
 
-const STANDARD_PROJECTS: SidebarItem[] = [
-  {
-    label: "데이터 수집기",
-    path: "/projects/data-collector",
-    icon: <Database className="h-5 w-5" />,
-  },
-  {
-    label: "분석 대시보드",
-    path: "/projects/analytics",
-    icon: <BarChart3 className="h-5 w-5" />,
-  },
-  {
-    label: "알림 서비스",
-    path: "/projects/notifications",
-    icon: <Bell className="h-5 w-5" />,
-  },
-  {
-    label: "콘텐츠 관리",
-    path: "/projects/content-manager",
-    icon: <FileText className="h-5 w-5" />,
-  },
-  {
-    label: "데이터셋 설명 생성",
-    path: "/projects/dataset-summary",
-    icon: <Sparkles className="h-5 w-5" />,
-  },
+const FALLBACK_STANDARD: SidebarItem[] = [
+  { label: "데이터셋 설명 생성", path: "/projects/dataset-summary", icon: <Sparkles className="h-5 w-5" /> },
+  { label: "개방 가능 여부 판단", path: "/projects/open-data-analyzer", icon: <ShieldCheck className="h-5 w-5" /> },
+  { label: "정부 뉴스 크롤링", path: "/projects/gov-news-crawler", icon: <Newspaper className="h-5 w-5" /> },
+  { label: "평가편람", path: "/projects/evaluation-rag", icon: <ClipboardCheck className="h-5 w-5" /> },
 ];
 
-const N8N_PROJECTS: SidebarItem[] = [
-  {
-    label: "리포트 생성기",
-    path: "/projects/report-generator",
-    icon: <FileText className="h-5 w-5" />,
-  },
-  {
-    label: "데이터 파이프라인",
-    path: "/projects/data-pipeline",
-    icon: <GitBranch className="h-5 w-5" />,
-  },
+const FALLBACK_N8N: SidebarItem[] = [
+  { label: "리포트 생성기", path: "/projects/report-generator", icon: <FileText className="h-5 w-5" /> },
+  { label: "데이터 파이프라인", path: "/projects/data-pipeline", icon: <GitMerge className="h-5 w-5" /> },
+  { label: "텍스트 요약", path: "/projects/summarize", icon: <FileText className="h-5 w-5" /> },
 ];
+
+function projectToSidebarItem(project: Project): SidebarItem {
+  return {
+    label: project.name,
+    path: `/projects/${project.slug}`,
+    icon: ICON_MAP[project.icon] || <Database className="h-5 w-5" />,
+  };
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { projects } = useProjects();
+
+  const standardProjects = projects.length > 0
+    ? projects.filter((p) => p.project_type === "standard").map(projectToSidebarItem)
+    : FALLBACK_STANDARD;
+
+  const n8nProjects = projects.length > 0
+    ? projects.filter((p) => p.project_type === "n8n").map(projectToSidebarItem)
+    : FALLBACK_N8N;
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + "/");
@@ -128,7 +133,7 @@ export default function Sidebar() {
           </p>
         )}
         <div className="mt-1 space-y-1">
-          {STANDARD_PROJECTS.map(renderItem)}
+          {standardProjects.map(renderItem)}
         </div>
 
         {/* n8n Projects */}
@@ -137,7 +142,7 @@ export default function Sidebar() {
             n8n 파이프라인
           </p>
         )}
-        <div className="mt-1 space-y-1">{N8N_PROJECTS.map(renderItem)}</div>
+        <div className="mt-1 space-y-1">{n8nProjects.map(renderItem)}</div>
       </nav>
 
       {/* Footer */}

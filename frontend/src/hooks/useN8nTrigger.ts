@@ -69,12 +69,15 @@ export function useN8nTrigger(slug: string) {
     },
   });
 
+  const mutateRef = useRef(mutation.mutate);
+  mutateRef.current = mutation.mutate;
+
   const trigger = useCallback(
     (workflowId: string, params?: Record<string, string>) => {
       setRunStatus(null);
-      mutation.mutate({ workflowId, params });
+      mutateRef.current({ workflowId, params });
     },
-    [mutation]
+    []
   );
 
   return {

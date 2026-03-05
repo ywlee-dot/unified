@@ -11,6 +11,7 @@ manifest = ProjectManifest(
     enabled=True,
     router_module="app.projects.summarize.router",
     n8n_config={
+        "n8n_account": 2,
         "webhook_path": "/webhook/summarize",
         "workflows": [
             {"id": "summarize", "name": "텍스트 요약", "trigger_type": "manual"},

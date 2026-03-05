@@ -15,6 +15,21 @@ from app.shared.models.n8n_execution import N8nExecutionModel
 logger = logging.getLogger(__name__)
 
 
+def get_webhook_base(n8n_account: int = 1) -> str:
+    """Return the webhook base URL for a given n8n account number (1-3)."""
+    from app.config import settings
+
+    mapping = {
+        1: settings.N8N_WEBHOOK_BASE_1,
+        2: settings.N8N_WEBHOOK_BASE_2,
+        3: settings.N8N_WEBHOOK_BASE_3,
+    }
+    base = mapping.get(n8n_account, "")
+    if not base:
+        raise ValueError(f"n8n account {n8n_account}에 대한 webhook URL이 설정되지 않았습니다.")
+    return base.rstrip("/")
+
+
 class N8nTriggerResponse:
     """Response from triggering an n8n webhook."""
 

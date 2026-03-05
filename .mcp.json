@@ -3,6 +3,10 @@
     "github": {
       "command": "gh",
       "args": ["mcp"]
+    },
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--access-token", "sbp_485d9d84715b7000369ad90614002c2bdcacd14b"]
     }
   }
 }

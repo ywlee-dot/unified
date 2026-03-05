@@ -11,6 +11,7 @@ manifest = ProjectManifest(
     enabled=True,
     router_module="app.projects.report_generator.router",
     n8n_config={
+        "n8n_account": 2,
         "webhook_path": "/webhook/report-generator",
         "workflows": [
             {"id": "generate-daily", "name": "일간 리포트 생성", "trigger_type": "manual"},

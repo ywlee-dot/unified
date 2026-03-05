@@ -20,6 +20,8 @@ export default function PipelineStatus({
   const [run, setRun] = useState<N8nRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     if (!runId) return;
@@ -34,8 +36,8 @@ export default function PipelineStatus({
             clearInterval(intervalRef.current);
             intervalRef.current = null;
           }
-          if (status.status === "completed" && onComplete) {
-            onComplete(status);
+          if (status.status === "completed" && onCompleteRef.current) {
+            onCompleteRef.current(status);
           }
         }
       } catch {
@@ -55,7 +57,7 @@ export default function PipelineStatus({
         clearInterval(intervalRef.current);
       }
     };
-  }, [slug, runId, onComplete]);
+  }, [slug, runId]);
 
   if (error) {
     return <span className="text-sm text-red-500">{error}</span>;

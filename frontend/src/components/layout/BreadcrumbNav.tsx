@@ -6,13 +6,13 @@ import { ChevronRight, Home } from "lucide-react";
 
 const SEGMENT_LABELS: Record<string, string> = {
   projects: "프로젝트",
-  "data-collector": "데이터 수집기",
-  analytics: "분석 대시보드",
-  notifications: "알림 서비스",
-  "content-manager": "콘텐츠 관리",
   "report-generator": "리포트 생성기",
   "data-pipeline": "데이터 파이프라인",
   "dataset-summary": "데이터셋 설명 생성",
+  "open-data-analyzer": "개방 가능 여부 판단",
+  "gov-news-crawler": "정부 뉴스 크롤링",
+  "evaluation-rag": "평가편람",
+  summarize: "텍스트 요약",
   jobs: "수집 작업",
   history: "이력",
   charts: "차트",
@@ -22,6 +22,8 @@ const SEGMENT_LABELS: Record<string, string> = {
   categories: "카테고리",
   results: "생성 결과",
   runs: "실행 이력",
+  keywords: "키워드",
+  search: "검색",
 };
 
 export default function BreadcrumbNav() {

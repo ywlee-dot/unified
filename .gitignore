@@ -23,6 +23,23 @@ postgres_data/
 redis_data/
 n8n_data/
 
+# Data
+backend/data/
+
 # OS
 .DS_Store
 Thumbs.db
+.mcp.json
+
+# OMC agent state
+.omc/
+
+# Local databases
+*.db
+
+# Build artifacts
+tsconfig.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
+# Infrastructure analysis
+INFRASTRUCTURE_ANALYSIS.md

@@ -2,7 +2,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 
-engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG)
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=settings.DEBUG,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -10,3 +16,8 @@ async def get_db() -> AsyncSession:  # type: ignore[misc]
     """Yield a database session for dependency injection."""
     async with async_session_factory() as session:
         yield session
+
+
+async def dispose_engine() -> None:
+    """Dispose the async engine (call on shutdown)."""
+    await engine.dispose()

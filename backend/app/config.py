@@ -11,14 +11,24 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://workspace_user:workspace_pass@db:5432/workspace"
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_RECYCLE: int = 3600
+
+    # Logging
+    LOG_LEVEL: str = "INFO"
 
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # n8n
+    # n8n (계정별 webhook base)
     N8N_BASE_URL: str = "http://n8n:5678"
-    N8N_WEBHOOK_BASE: str = "http://n8n:5678/webhook"
+    N8N_WEBHOOK_BASE_1: str = "https://ywlee.app.n8n.cloud/webhook"
+    N8N_WEBHOOK_BASE_2: str = "https://n8n-1-76-1-a5ze.onrender.com/webhook"
+    N8N_WEBHOOK_BASE_3: str = ""
     N8N_API_KEY: str | None = None
+    N8N_BASIC_AUTH_USER: str | None = None
+    N8N_BASIC_AUTH_PASSWORD: str | None = None
     N8N_CALLBACK_SECRET: str = "n8n-callback-secret-change-me"
 
     # LLM (Dataset Summary)
@@ -29,6 +39,13 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_MODEL: str | None = None
     MOCK_MODE: str = "0"
+
+    # Pinecone (Evaluation RAG)
+    PINECONE_API_KEY: str | None = None
+    PINECONE_INDEX_NAME: str = "evaluation-guidelines"
+
+    # CORS (comma-separated origins)
+    CORS_ORIGINS: str = "http://localhost:3000"
 
     # Auth
     SECRET_KEY: str = "change-me-in-production"

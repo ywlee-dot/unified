@@ -5,7 +5,12 @@ import {
   Bell,
   FileText,
   GitBranch,
+  GitMerge,
   Sparkles,
+  ShieldCheck,
+  Newspaper,
+  ClipboardCheck,
+  Workflow,
 } from "lucide-react";
 import { clsx } from "clsx";
 import type { Project } from "@/lib/types";
@@ -16,7 +21,12 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   bell: <Bell className="h-6 w-6" />,
   "file-text": <FileText className="h-6 w-6" />,
   "git-branch": <GitBranch className="h-6 w-6" />,
+  "git-merge": <GitMerge className="h-6 w-6" />,
   sparkles: <Sparkles className="h-6 w-6" />,
+  "shield-check": <ShieldCheck className="h-6 w-6" />,
+  newspaper: <Newspaper className="h-6 w-6" />,
+  "clipboard-check": <ClipboardCheck className="h-6 w-6" />,
+  workflow: <Workflow className="h-6 w-6" />,
 };
 
 interface ProjectCardProps {
