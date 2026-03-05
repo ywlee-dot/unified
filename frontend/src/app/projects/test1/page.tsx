@@ -128,9 +128,9 @@ export default function Test1Page() {
             <CheckCircle className="h-5 w-5 text-green-600" />
             <span className="font-medium text-green-800">완료</span>
           </div>
-          {result?.download_url && (
+          {typeof result?.download_url === 'string' && (
             <a
-              href={result.download_url}
+              href={result.download_url as string}
               download
               className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition-colors"
             >
