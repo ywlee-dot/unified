@@ -71,6 +71,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - uploads_data:/app/uploads
     networks:
       - frontend-net
       - backend-net
@@ -141,3 +142,4 @@ volumes:
   postgres_data:
   redis_data:
   n8n_data:
+  uploads_data:

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Upload, Play, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Upload, Play, Loader2, CheckCircle, XCircle, Download } from 'lucide-react';
 
 type Status = 'idle' | 'uploading' | 'running' | 'completed' | 'failed';
 
@@ -128,6 +128,16 @@ export default function Test1Page() {
             <CheckCircle className="h-5 w-5 text-green-600" />
             <span className="font-medium text-green-800">완료</span>
           </div>
+          {result?.download_url && (
+            <a
+              href={result.download_url}
+              download
+              className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              결과 파일 다운로드
+            </a>
+          )}
           {result && (
             <pre className="text-sm text-gray-700 bg-white rounded p-3 mt-2 overflow-auto max-h-64">
               {JSON.stringify(result, null, 2)}
