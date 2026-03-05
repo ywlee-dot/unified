@@ -41,6 +41,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       N8N_BASE_URL: http://n8n:5678
       N8N_WEBHOOK_BASE: http://n8n:5678/webhook
+      N8N_API_KEY: ${N8N_API_KEY:-}
       SECRET_KEY: dev-secret-key-change-in-production
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
@@ -49,6 +50,8 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       MOCK_MODE: ${MOCK_MODE:-0}
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+      PINECONE_INDEX_NAME: ${PINECONE_INDEX_NAME:-evaluation-guidelines}
     depends_on:
       db:
         condition: service_healthy
@@ -68,6 +71,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: dev
     ports:
       - "3000:3000"
     environment:
@@ -80,7 +84,6 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
-    command: npm run dev
 
   # --- n8n Workflow Engine ---
   n8n:

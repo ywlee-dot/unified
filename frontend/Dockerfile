@@ -6,13 +6,16 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 
-# Copy source
-COPY . .
+# --- Dev target (used by docker-compose) ---
+FROM base AS dev
+WORKDIR /app
+CMD ["npm", "run", "dev"]
 
-# Build
+# --- Production build ---
+FROM base AS build
+COPY . .
 RUN npm run build
 
-# Production
 FROM node:20-alpine AS runner
 WORKDIR /app
 
