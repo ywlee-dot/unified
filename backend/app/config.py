@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     PINECONE_INDEX_NAME: str = "evaluation-guidelines"
 
     # File uploads
-    UPLOAD_DIR: str = "/app/uploads"
+    UPLOAD_DIR: str = "/tmp/uploads"
 
     # CORS (comma-separated origins)
     CORS_ORIGINS: str = "http://localhost:3000"
