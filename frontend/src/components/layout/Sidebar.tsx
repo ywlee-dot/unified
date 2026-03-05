@@ -51,7 +51,7 @@ const FALLBACK_N8N: SidebarItem[] = [
   { label: "리포트 생성기", path: "/projects/report-generator", icon: <FileText className="h-5 w-5" /> },
   { label: "데이터 파이프라인", path: "/projects/data-pipeline", icon: <GitMerge className="h-5 w-5" /> },
   { label: "텍스트 요약", path: "/projects/summarize", icon: <FileText className="h-5 w-5" /> },
-  { label: "테스트1", path: "/projects/test1", icon: <Workflow className="h-5 w-5" /> },
+  { label: "값진단 사전예외처리", path: "/projects/test1", icon: <Workflow className="h-5 w-5" /> },
   { label: "공유데이터 제공 노력", path: "/projects/effort-public-data", icon: <Database className="h-5 w-5" /> },
 ];
 

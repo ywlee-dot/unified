@@ -2,8 +2,8 @@ from app.registry.project_registry import ProjectManifest
 
 manifest = ProjectManifest(
     slug="test1",
-    name="테스트1",
-    description="테스트1 프로젝트 - n8n 워크플로우 연동",
+    name="값진단 사전예외처리",
+    description="값진단 사전예외처리 - n8n 워크플로우 연동",
     version="1.0.0",
     project_type="n8n",
     icon="workflow",

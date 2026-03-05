@@ -79,7 +79,7 @@ export default function Test1Page() {
 
   return (
     <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">테스트1</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">값진단 사전예외처리</h1>
 
       {/* 파일 업로드 */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">
