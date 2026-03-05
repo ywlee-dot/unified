@@ -52,6 +52,8 @@ export const PROJECT_NAV_MAP: Record<string, NavItem[]> = {
   "open-data-analyzer": [],
   "evaluation-rag": [],
   summarize: [],
+  "effort-public-data": [],
+  test1: [],
 };
 
 export function getProjectNavItems(slug: string): NavItem[] {
