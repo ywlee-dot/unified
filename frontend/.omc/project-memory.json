@@ -125,8 +125,20 @@
   "hotPaths": [
     {
       "path": "src/components/layout/Sidebar.tsx",
-      "accessCount": 7,
-      "lastAccessed": 1772672429535,
+      "accessCount": 15,
+      "lastAccessed": 1772780315471,
+      "type": "file"
+    },
+    {
+      "path": "src",
+      "accessCount": 9,
+      "lastAccessed": 1772780343806,
+      "type": "directory"
+    },
+    {
+      "path": "src/app/projects/evaluation-rag/page.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1772780375752,
       "type": "file"
     },
     {
@@ -142,15 +154,27 @@
       "type": "file"
     },
     {
+      "path": "src/components/layout/BreadcrumbNav.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772780316550,
+      "type": "file"
+    },
+    {
       "path": ".env.local",
       "accessCount": 4,
       "lastAccessed": 1772672714723,
       "type": "file"
     },
     {
-      "path": "src/components/layout/BreadcrumbNav.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1772672460510,
+      "path": "src/lib/pipeline-data.ts",
+      "accessCount": 3,
+      "lastAccessed": 1772780335103,
+      "type": "file"
+    },
+    {
+      "path": "src/components/architecture/PipelineFlow.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1772780347612,
       "type": "file"
     },
     {
@@ -160,15 +184,33 @@
       "type": "file"
     },
     {
-      "path": "src/components/layout",
-      "accessCount": 1,
-      "lastAccessed": 1772515754365,
+      "path": "src/components/architecture/PipelineNodeCard.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772780313465,
+      "type": "file"
+    },
+    {
+      "path": "src/components/architecture/ProjectTabNav.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772780314423,
+      "type": "file"
+    },
+    {
+      "path": "src/app/architecture/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772780314978,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 2,
+      "lastAccessed": 1772780337131,
       "type": "directory"
     },
     {
-      "path": "src",
+      "path": "src/components/layout",
       "accessCount": 1,
-      "lastAccessed": 1772672449524,
+      "lastAccessed": 1772515754365,
       "type": "directory"
     },
     {
@@ -178,16 +220,34 @@
       "type": "directory"
     },
     {
-      "path": "",
-      "accessCount": 1,
-      "lastAccessed": 1772672705248,
-      "type": "directory"
-    },
-    {
       "path": "src/lib/api.ts",
       "accessCount": 1,
       "lastAccessed": 1772673118579,
       "type": "file"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772779187127,
+      "type": "file"
+    },
+    {
+      "path": "next.config.ts",
+      "accessCount": 1,
+      "lastAccessed": 1772780316463,
+      "type": "file"
+    },
+    {
+      "path": "src/app/architecture/layout.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772780330840,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1772780344329,
+      "type": "directory"
     }
   ],
   "userDirectives": []
