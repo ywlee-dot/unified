@@ -42,11 +42,20 @@ class ItemScore(BaseModel):
 
     item_id: str = Field(..., description="Evaluation item ID")
     item_name: str = Field(..., description="Evaluation item name")
-    score: int = Field(..., ge=0, le=10, description="Item score (0-10)")
+    score: int = Field(..., ge=0, description="Item score (0 to max_score)")
     max_score: int = Field(default=10, description="Maximum possible score for this item")
     reasoning: str = Field(default="", description="Scoring rationale")
     issues: list[str] = Field(default_factory=list, description="Issues found")
     improvements: list[str] = Field(default_factory=list, description="Improvement suggestions")
+
+    @field_validator("score")
+    @classmethod
+    def validate_score_range(cls, v: int, info) -> int:
+        max_s = info.data.get("max_score", 10)
+        if v > max_s:
+            logger.warning(f"Score {v} exceeds max_score {max_s}, clamping")
+            return max_s
+        return v
 
 
 class MultiItemEvaluationResult(BaseModel):
@@ -121,11 +130,16 @@ class ResultParser:
 
         for item in data["item_scores"]:
             raw_score = item.get("score")
-            if isinstance(raw_score, int) and not (0 <= raw_score <= 10):
-                clamped = max(0, min(10, raw_score))
+            max_s = item.get("max_score", 10)
+            # Convert float scores to int (Gemini sometimes returns 7.5 etc.)
+            if isinstance(raw_score, float):
+                item["score"] = round(raw_score)
+                raw_score = item["score"]
+            if isinstance(raw_score, int) and not (0 <= raw_score <= max_s):
+                clamped = max(0, min(max_s, raw_score))
                 logger.warning(
-                    f"Item '{item.get('item_id', '?')}' score {raw_score} out of range, "
-                    f"clamping to {clamped}"
+                    f"Item '{item.get('item_id', '?')}' score {raw_score} out of range "
+                    f"(max={max_s}), clamping to {clamped}"
                 )
                 item["score"] = clamped
 

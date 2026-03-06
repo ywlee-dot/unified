@@ -31,6 +31,8 @@ async def evaluate(
             input_data=request.input_data,
             query=request.query,
             category=request.category,
+            evaluation_type=request.evaluation_type,
+            item_id=request.item_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -43,6 +45,8 @@ async def evaluate_file(
     file: UploadFile = File(...),
     query: str = Form(...),
     category: str | None = Form(default=None),
+    evaluation_type: str | None = Form(default=None),
+    item_id: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db_session),
 ):
     """파일 업로드 기반 RAG 평가 실행."""
@@ -54,6 +58,8 @@ async def evaluate_file(
             filename=file.filename or "upload",
             query=query,
             category=category,
+            evaluation_type=evaluation_type,
+            item_id=item_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

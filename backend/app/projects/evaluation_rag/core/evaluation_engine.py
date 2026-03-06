@@ -108,7 +108,7 @@ class EvaluationEngine:
             response_text = self.gemini_client.generate_content(
                 prompt=prompt,
                 temperature=0.1,
-                max_tokens=8192,
+                max_tokens=16384,
                 response_mime_type="application/json",
             )
         except Exception as e:

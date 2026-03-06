@@ -1,30 +1,38 @@
 # HANDOFF
 
-## Current [1772770565]
-- **Task**: 평가편람 HWPX 파싱 → RAG 인제스트 파이프라인 구축
+## Current [1772775588]
+- **Task**: 평가편람 RAG 평가 엔진 및 프론트엔드 - 새 JSON 구조(evaluation_type, area_score) 반영
 - **Completed**:
-  - HWPX(한글) 파일 파싱 스크립트 작성 (`parse_hwpx.py`) — ZIP/XML 구조 분석, 평가항목 자동 추출
-  - 평가편람 구조를 2개 평가 체계로 정확히 분리 (공공데이터 100점 + 데이터기반행정 100점)
-  - 관리체계 영역을 공공데이터(7점)와 데이터기반행정(5점)으로 분리
-  - 21개 평가항목 JSON 생성 → Gemini 임베딩 → Pinecone v2 네임스페이스에 인제스트
-  - 고아 벡터(구 management_01~03) 삭제, 최종 21개 벡터 확인
+  - 평가 엔진에서 evaluation_type(public_data/data_admin) 필터링 지원
+  - management 카테고리를 management_pub(7점) + management_dba(5점)로 분리
+  - 항목별 실제 max_score 지원 (10점 고정 → 항목별 가변 배점)
+  - 배치 처리 (8개 초과 시 자동 분할) 및 결과 병합
+  - 프론트엔드: 평가 유형 선택 UI (전체/공공데이터/데이터기반행정)
+  - 프론트엔드: AreaSubtotals 컴포넌트 (영역별 소계 표시)
+  - 프론트엔드: ItemScoreBar (항목별 점수 바 + 상세 접기/펼치기)
+  - 프론트엔드: 평가 기준표 탭에서 evaluation_type별 그룹핑 표시
+  - stats API categories를 새 구조(management_pub/management_dba)로 업데이트
 - **Next Steps**:
-  - RAG 평가 엔진(evaluation_engine.py)에서 새 JSON 구조(evaluation_type, area_score) 반영
-  - 프론트엔드 평가 페이지에서 평가 유형 선택(공공데이터/데이터기반행정) UI 추가
-  - 평가 결과에 영역별 소계 표시 (개방·활용 48점, 품질 45점 등)
+  - 변경사항 커밋 및 배포
+  - 실제 평가 실행 테스트 (공공데이터/데이터기반행정 각각)
+  - 평가 이력 상세 보기 기능 (히스토리 테이블 행 클릭 시 상세 결과 표시)
 - **Blockers**: None
 - **Related Files**:
-  - backend/app/projects/evaluation_rag/scripts/parse_hwpx.py (HWPX 파싱)
-  - backend/app/projects/evaluation_rag/scripts/ingest_evaluation_items.py (Pinecone 인제스트)
-  - backend/app/projects/evaluation_rag/data/evaluation_items.json (생성된 마스터 데이터)
-  - backend/app/projects/evaluation_rag/data/1. 2025년 공공데이터 제공 및 데이터기반행정 평가편람(수정본).hwpx (원본)
+  - backend/app/projects/evaluation_rag/core/evaluation_engine.py
+  - backend/app/projects/evaluation_rag/core/prompt_builder.py
+  - backend/app/projects/evaluation_rag/core/query_processor.py
+  - backend/app/projects/evaluation_rag/core/result_parser.py
+  - backend/app/projects/evaluation_rag/router.py
+  - backend/app/projects/evaluation_rag/schemas.py
+  - backend/app/projects/evaluation_rag/service.py
+  - frontend/src/app/projects/evaluation-rag/page.tsx
 
-## Past 1 [1772674813]
+## Past 1 [1772770565]
+- **Task**: 평가편람 HWPX 파싱 → RAG 인제스트 파이프라인 구축
+- **Completed**: HWPX 파싱 스크립트, 평가항목 21개 JSON 생성, Gemini 임베딩 → Pinecone v2 인제스트, 고아 벡터 삭제
+- **Note**: commit 9d03c2f
+
+## Past 2 [1772674813]
 - **Task**: 정부뉴스 크롤링 프로젝트 디버깅 + 프론트엔드 컨테이너 수정
 - **Completed**: API URL 중복 버그 수정, Dockerfile dev 타겟 추가, gov-news-crawler 시드 데이터 투입
 - **Note**: frontend Dockerfile dev target, docker-compose frontend target: dev
-
-## Past 2 [1772596860]
-- **Task**: n8n 콜백 패턴 E2E 완성 + summarize 프로젝트 + 가이드 작성
-- **Completed**: Alembic 마이그레이션, summarize 프로젝트 생성, Dockerfile에 자동 마이그레이션 추가, n8n E2E 테스트 성공
-- **Note**: commit fcd19a2, fd8eaea

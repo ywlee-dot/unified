@@ -18,7 +18,8 @@ class QueryProcessor:
         "openness": ["개방", "공공데이터", "오류신고", "제공신청"],
         "analysis": ["분석", "데이터분석", "정책활용", "정책", "활용사례", "분석 활용"],
         "sharing": ["공유", "공유데이터", "로드맵", "데이터공유"],
-        "management": ["관리체계", "추진기반", "교육", "관리", "체계"],
+        "management_pub": ["관리체계", "추진기반 공공", "교육 참여"],
+        "management_dba": ["관리체계", "추진기반 데이터", "기관장"],
     }
 
     def __init__(self, embedding_service) -> None:

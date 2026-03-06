@@ -74,25 +74,83 @@ class EvaluationRagService:
             model_name=settings.GEMINI_MODEL,
         )
 
+    def _load_items_from_json(
+        self,
+        evaluation_type: str | None = None,
+        category: str | None = None,
+        item_id: str | None = None,
+    ) -> tuple[list[dict], str | None, str | None]:
+        """Load evaluation items directly from master JSON data.
+
+        Returns (items, final_category, category_ko).
+        """
+        data_path = Path(__file__).parent / "data" / "evaluation_items.json"
+        with data_path.open(encoding="utf-8") as f:
+            data = json.load(f)
+
+        categories = data.get("categories", [])
+
+        # Filter by evaluation_type
+        if evaluation_type:
+            categories = [c for c in categories if c.get("evaluation_type") == evaluation_type]
+
+        # Filter by specific category
+        if category:
+            categories = [c for c in categories if c.get("category_en") == category]
+
+        items = []
+        final_category = category
+        category_ko = None
+        for cat in categories:
+            cat_ko = cat.get("category_ko", "")
+            if not category_ko and cat_ko:
+                category_ko = cat_ko
+            for item in cat.get("items", []):
+                # Filter by specific item_id if provided
+                if item_id and item["item_id"] != item_id:
+                    continue
+                items.append({
+                    "item_id": item["item_id"],
+                    "item_name": item["item_name"],
+                    "category": cat.get("category_en", ""),
+                    "category_ko": cat_ko,
+                    "scoring_criteria": item.get("scoring_criteria", ""),
+                    "max_score": item.get("max_score", 10),
+                    "description": item.get("description", ""),
+                })
+
+        if evaluation_type and not category:
+            eval_names = {"public_data": "공공데이터 제공", "data_admin": "데이터기반행정"}
+            category_ko = eval_names.get(evaluation_type, category_ko)
+
+        return items, final_category, category_ko
+
     async def evaluate(
         self,
         db: AsyncSession,
         input_data: str,
         query: str,
         category: str | None = None,
+        evaluation_type: str | None = None,
+        item_id: str | None = None,
     ) -> EvaluationResponse:
         """Run RAG-based evaluation."""
-        rag_chain = self._build_rag_chain()
         engine = self._build_evaluation_engine()
 
-        # Use new item-level RAG pipeline
-        rag_result = await asyncio.to_thread(
-            rag_chain.run_items, query=query, category=category
-        )
-
-        items = rag_result.get("items", [])
-        final_category = rag_result.get("category")
-        category_ko = rag_result.get("category_ko")
+        # If item_id, evaluation_type, or category is specified, load items directly from JSON
+        if item_id or evaluation_type or category:
+            items, final_category, category_ko = self._load_items_from_json(
+                evaluation_type=evaluation_type, category=category, item_id=item_id
+            )
+        else:
+            # Use RAG pipeline for auto-detection
+            rag_chain = self._build_rag_chain()
+            rag_result = await asyncio.to_thread(
+                rag_chain.run_items, query=query, category=category
+            )
+            items = rag_result.get("items", [])
+            final_category = rag_result.get("category")
+            category_ko = rag_result.get("category_ko")
 
         if not items:
             # Fallback to simple evaluation if no items found
@@ -106,10 +164,22 @@ class EvaluationRagService:
             category_ko=category_ko,
         )
 
-        # Calculate scores
-        item_scores_data = [s.model_dump() for s in eval_result.item_scores]
-        total_score = sum(s.score for s in eval_result.item_scores)
-        max_possible = sum(s.max_score for s in eval_result.item_scores)
+        # Enrich item_scores with category from input items
+        item_category_map = {item["item_id"]: item["category"] for item in items}
+        item_max_map = {item["item_id"]: item["max_score"] for item in items}
+        item_scores_data = []
+        for s in eval_result.item_scores:
+            d = s.model_dump()
+            d["category"] = item_category_map.get(s.item_id, "")
+            # Use actual max_score from master data (not Gemini's response)
+            d["max_score"] = item_max_map.get(s.item_id, s.max_score)
+            # Clamp score to actual max
+            if d["score"] > d["max_score"]:
+                d["score"] = d["max_score"]
+            item_scores_data.append(d)
+
+        total_score = sum(d["score"] for d in item_scores_data)
+        max_possible = sum(d["max_score"] for d in item_scores_data)
         # Compute legacy score (0-100 scale)
         legacy_score = round((total_score / max_possible) * 100) if max_possible > 0 else 0
 
@@ -141,6 +211,8 @@ class EvaluationRagService:
         filename: str,
         query: str,
         category: str | None = None,
+        evaluation_type: str | None = None,
+        item_id: str | None = None,
     ) -> EvaluationResponse:
         """Run RAG-based evaluation on an uploaded file."""
         input_data = await asyncio.to_thread(
@@ -152,6 +224,8 @@ class EvaluationRagService:
             input_data=input_data,
             query=query,
             category=category,
+            evaluation_type=evaluation_type,
+            item_id=item_id,
         )
 
     async def evaluate_simple(
@@ -282,6 +356,8 @@ class EvaluationRagService:
                 {
                     "category_en": cat.get("category_en"),
                     "category_ko": cat.get("category_ko"),
+                    "evaluation_type": cat.get("evaluation_type"),
+                    "area_score": cat.get("area_score"),
                     "description": cat.get("description"),
                     "items": items,
                 }

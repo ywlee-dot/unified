@@ -19,7 +19,7 @@ class EvaluationItemScore(BaseModel):
     item_id: str = Field(..., description="Evaluation item ID (e.g. quality_01)")
     item_name: str = Field(..., description="Evaluation item name")
     category: str = Field(..., description="Category (quality/openness/analysis/sharing/management)")
-    score: int = Field(..., ge=0, le=10, description="Item score (0-10)")
+    score: int = Field(..., ge=0, description="Item score (0 to max_score)")
     max_score: int = Field(default=10, description="Maximum possible score")
     reasoning: str = Field(default="", description="Scoring rationale")
     issues: list[str] = Field(default_factory=list, description="Issues found for this item")
@@ -53,7 +53,15 @@ class EvaluationRequest(BaseModel):
     query: str = Field(..., description="Search query for criteria", min_length=1)
     category: str | None = Field(
         None,
-        description="Optional category filter (quality, openness, analysis, sharing, management)",
+        description="Optional category filter (quality, openness, analysis, sharing, management_pub, management_dba)",
+    )
+    evaluation_type: str | None = Field(
+        None,
+        description="Optional evaluation type filter (public_data, data_admin)",
+    )
+    item_id: str | None = Field(
+        None,
+        description="Optional specific item ID to evaluate (e.g. openness_01, quality_02)",
     )
 
 
@@ -102,7 +110,7 @@ class EvaluationStatsResponse(BaseModel):
     total_evaluations: int = Field(default=0, description="Total evaluations performed")
     average_score: float | None = Field(None, description="Average evaluation score")
     categories: list[str] = Field(
-        default_factory=lambda: ["quality", "openness", "analysis", "sharing", "management"]
+        default_factory=lambda: ["openness", "quality", "management_pub", "analysis", "sharing", "management_dba"]
     )
     pinecone_connected: bool = Field(default=False, description="Whether Pinecone is connected")
     supported_formats: list[str] = Field(
