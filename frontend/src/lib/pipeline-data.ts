@@ -8,6 +8,8 @@ import type { Node, Edge } from "@xyflow/react";
 export type PipelineNodeType = "input" | "process" | "service" | "storage" | "output";
 export type RuntimeService = "nextjs" | "fastapi" | "n8n" | "postgres" | "redis" | "external";
 
+export type ArchitectureLayerType = "frontend" | "backend" | "external" | "data";
+
 export interface PipelineNodeData {
   label: string;
   sublabel?: string;
@@ -15,6 +17,7 @@ export interface PipelineNodeData {
   runtime: RuntimeService;
   runtimeLabel?: string;
   icon?: string;
+  techStack?: string[];
   [key: string]: unknown;
 }
 
@@ -23,7 +26,7 @@ export interface ProjectPipeline {
   name: string;
   description: string;
   projectType: "standard" | "n8n";
-  nodes: Node<PipelineNodeData>[];
+  nodes: Node[];
   edges: Edge[];
   infraServices: string[];
 }
@@ -79,7 +82,7 @@ function makeNode(
 function makeEdge(
   source: string,
   target: string,
-  opts?: { label?: string; animated?: boolean; dashed?: boolean }
+  opts?: { label?: string; animated?: boolean; dashed?: boolean; sourceHandle?: string; targetHandle?: string }
 ): Edge {
   return {
     id: `${source}-${target}`,
@@ -90,6 +93,58 @@ function makeEdge(
     animated: opts?.animated,
     style: opts?.dashed ? { strokeDasharray: "6 4" } : undefined,
     markerEnd: { type: "arrowclosed" as const },
+    ...(opts?.sourceHandle && { sourceHandle: opts.sourceHandle }),
+    ...(opts?.targetHandle && { targetHandle: opts.targetHandle }),
+  };
+}
+
+function makeLayerGroup(
+  id: string,
+  label: string,
+  sublabel: string,
+  layerType: ArchitectureLayerType,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): Node {
+  return {
+    id,
+    type: "layerGroup",
+    position: { x, y },
+    data: { label, sublabel, layerType },
+    style: { width, height },
+    selectable: false,
+    draggable: false,
+    connectable: false,
+    focusable: false,
+  } as Node;
+}
+
+function makeLayerNode(
+  id: string,
+  label: string,
+  nodeType: PipelineNodeType,
+  runtime: RuntimeService,
+  parentId: string,
+  x: number,
+  y: number,
+  opts?: { sublabel?: string; runtimeLabel?: string; icon?: string; techStack?: string[] }
+): Node<PipelineNodeData> {
+  return {
+    id,
+    type: "pipelineNode",
+    parentId,
+    position: { x, y },
+    data: {
+      label,
+      sublabel: opts?.sublabel,
+      nodeType,
+      runtime,
+      runtimeLabel: opts?.runtimeLabel,
+      icon: opts?.icon,
+      techStack: opts?.techStack,
+    },
   };
 }
 
@@ -98,22 +153,32 @@ function makeEdge(
 const datasetSummary: ProjectPipeline = {
   slug: "dataset-summary",
   name: "데이터셋 설명 생성",
-  description: "Excel/CSV 파일에서 키워드 8개 + 설명을 자동 생성",
+  description: "Excel/CSV 파일에서 키워드 8개 + 설명을 자동 생성하는 E2E 파이프라인",
   projectType: "standard",
   nodes: [
-    makeNode("ds-upload", "Excel/CSV 업로드", "input", "nextjs", 0, 0, { sublabel: "POST /summarize", icon: "upload" }),
-    makeNode("ds-parse", "행 파싱", "process", "fastapi", 1, 0, { sublabel: "openpyxl / pandas" }),
-    makeNode("ds-llm", "Gemini LLM 분석", "process", "external", 2, 0, { runtimeLabel: "Gemini API", icon: "sparkles" }),
-    makeNode("ds-gen", "키워드 + 설명 생성", "process", "fastapi", 3, 0),
-    makeNode("ds-output", "JSON 응답 반환", "output", "fastapi", 4, 0, { icon: "check-circle" }),
+    // Architecture layer groups
+    makeLayerGroup("ds-l-fe", "Frontend", "Next.js :3000 · Docker: frontend", "frontend", 0, 0, 950, 150),
+    makeLayerGroup("ds-l-be", "Backend", "FastAPI :8000 · Docker: backend", "backend", 0, 190, 950, 150),
+    makeLayerGroup("ds-l-ext", "External", "Third-party APIs", "external", 0, 380, 950, 150),
+    // Pipeline nodes within layers
+    makeLayerNode("ds-upload", "Excel/CSV 업로드", "input", "nextjs", "ds-l-fe", 80, 40,
+      { sublabel: "POST /summarize", icon: "upload", techStack: ["React", "Dropzone"] }),
+    makeLayerNode("ds-parse", "행 파싱", "process", "fastapi", "ds-l-be", 80, 40,
+      { sublabel: "openpyxl · pandas", techStack: ["openpyxl", "pandas"] }),
+    makeLayerNode("ds-llm", "Gemini LLM 분석", "process", "external", "ds-l-ext", 380, 40,
+      { runtimeLabel: "Gemini API", icon: "sparkles", techStack: ["google-generativeai"] }),
+    makeLayerNode("ds-gen", "키워드 + 설명 생성", "process", "fastapi", "ds-l-be", 380, 40,
+      { sublabel: "8 keywords + summary", techStack: ["Pydantic"] }),
+    makeLayerNode("ds-output", "JSON 응답 반환", "output", "fastapi", "ds-l-be", 680, 40,
+      { sublabel: "ApiResponse<T>", icon: "check-circle" }),
   ],
   edges: [
-    makeEdge("ds-upload", "ds-parse", { label: "파일 전송" }),
-    makeEdge("ds-parse", "ds-llm", { label: "행 데이터" }),
-    makeEdge("ds-llm", "ds-gen", { label: "LLM 결과" }),
-    makeEdge("ds-gen", "ds-output", { label: "결과 반환" }),
+    makeEdge("ds-upload", "ds-parse", { label: "HTTP POST multipart", sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ds-parse", "ds-llm", { label: "Gemini SDK 호출" }),
+    makeEdge("ds-llm", "ds-gen", { label: "LLM 결과", sourceHandle: "source-top", targetHandle: "target-bottom", dashed: true }),
+    makeEdge("ds-gen", "ds-output", { label: "내부 호출" }),
   ],
-  infraServices: ["FastAPI :8000", "Gemini API"],
+  infraServices: [],
 };
 
 // ─── 2. open-data-analyzer (standard) — 5-stage sequential ───

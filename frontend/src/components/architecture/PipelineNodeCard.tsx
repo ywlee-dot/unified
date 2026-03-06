@@ -46,12 +46,27 @@ function PipelineNodeCard({ data }: NodeProps) {
   const iconKey = nodeData.icon || styles.iconName;
   const icon = ICON_MAP[iconKey];
 
+  const techStack = (nodeData as PipelineNodeData & { techStack?: string[] }).techStack;
+
   return (
     <>
+      {/* Target handles */}
       <Handle
         type="target"
         position={Position.Left}
         className="!h-3 !w-3 !border-2 !border-slate-300 !bg-white"
+      />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="target-top"
+        className="!h-2 !w-2 !border !border-slate-300 !bg-white"
+      />
+      <Handle
+        type="target"
+        position={Position.Bottom}
+        id="target-bottom"
+        className="!h-2 !w-2 !border !border-slate-300 !bg-white"
       />
       <div
         className={clsx(
@@ -88,11 +103,37 @@ function PipelineNodeCard({ data }: NodeProps) {
             {nodeData.runtimeLabel || runtime.label}
           </span>
         </div>
+        {/* Tech stack tags */}
+        {techStack && techStack.length > 0 && (
+          <div className="flex flex-wrap gap-1 border-t border-slate-100 px-3 py-1.5">
+            {techStack.map((tech: string) => (
+              <span
+                key={tech}
+                className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-500"
+              >
+                {tech}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
+      {/* Source handles */}
       <Handle
         type="source"
         position={Position.Right}
         className="!h-3 !w-3 !border-2 !border-slate-300 !bg-white"
+      />
+      <Handle
+        type="source"
+        position={Position.Top}
+        id="source-top"
+        className="!h-2 !w-2 !border !border-slate-300 !bg-white"
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="source-bottom"
+        className="!h-2 !w-2 !border !border-slate-300 !bg-white"
       />
     </>
   );
