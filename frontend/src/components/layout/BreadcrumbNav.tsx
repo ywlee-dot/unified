@@ -1,8 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
+import { PROJECT_PIPELINES } from "@/lib/pipeline-data";
 
 const SEGMENT_LABELS: Record<string, string> = {
   projects: "프로젝트",
@@ -27,9 +29,14 @@ const SEGMENT_LABELS: Record<string, string> = {
   search: "검색",
 };
 
-export default function BreadcrumbNav() {
+function BreadcrumbContent() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const segments = pathname.split("/").filter(Boolean);
+
+  // Check for architecture project query param
+  const projectSlug = pathname === "/architecture" ? searchParams.get("project") : null;
+  const projectPipeline = projectSlug ? PROJECT_PIPELINES[projectSlug] : null;
 
   return (
     <nav className="flex items-center gap-1 px-6 py-3 text-sm text-gray-500">
@@ -44,7 +51,7 @@ export default function BreadcrumbNav() {
         return (
           <span key={path} className="flex items-center gap-1">
             <ChevronRight className="h-3 w-3 text-gray-400" />
-            {isLast ? (
+            {isLast && !projectPipeline ? (
               <span className="font-medium text-gray-900">{label}</span>
             ) : (
               <Link href={path} className="hover:text-gray-700">
@@ -54,6 +61,20 @@ export default function BreadcrumbNav() {
           </span>
         );
       })}
+      {projectPipeline && (
+        <span className="flex items-center gap-1">
+          <ChevronRight className="h-3 w-3 text-gray-400" />
+          <span className="font-medium text-gray-900">{projectPipeline.name}</span>
+        </span>
+      )}
     </nav>
+  );
+}
+
+export default function BreadcrumbNav() {
+  return (
+    <Suspense fallback={<nav className="px-6 py-3 text-sm text-gray-500"><Home className="h-4 w-4" /></nav>}>
+      <BreadcrumbContent />
+    </Suspense>
   );
 }

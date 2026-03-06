@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  async redirects() {
+    return [
+      {
+        source: "/architecture/:slug",
+        destination: "/architecture?project=:slug",
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

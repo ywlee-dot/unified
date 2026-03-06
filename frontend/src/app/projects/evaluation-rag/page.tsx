@@ -91,7 +91,7 @@ const EVALUATION_TYPES = [
 
 const CATEGORIES: Record<string, { value: string; label: string; evalType: string }[]> = {
   "": [
-    { value: "", label: "자동 감지" },
+    { value: "", label: "자동 감지", evalType: "" },
     { value: "openness", label: "개방·활용 (48점)", evalType: "public_data" },
     { value: "quality", label: "품질 (45점)", evalType: "public_data" },
     { value: "management_pub", label: "관리체계-공공데이터 (7점)", evalType: "public_data" },
@@ -100,13 +100,13 @@ const CATEGORIES: Record<string, { value: string; label: string; evalType: strin
     { value: "management_dba", label: "관리체계-데이터기반행정 (5점)", evalType: "data_admin" },
   ],
   public_data: [
-    { value: "", label: "자동 감지" },
+    { value: "", label: "자동 감지", evalType: "" },
     { value: "openness", label: "개방·활용 (48점)", evalType: "public_data" },
     { value: "quality", label: "품질 (45점)", evalType: "public_data" },
     { value: "management_pub", label: "관리체계 (7점)", evalType: "public_data" },
   ],
   data_admin: [
-    { value: "", label: "자동 감지" },
+    { value: "", label: "자동 감지", evalType: "" },
     { value: "analysis", label: "분석·활용 (50점)", evalType: "data_admin" },
     { value: "sharing", label: "공유 (45점)", evalType: "data_admin" },
     { value: "management_dba", label: "관리체계 (5점)", evalType: "data_admin" },

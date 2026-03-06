@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
 import {
   LayoutDashboard,
@@ -65,8 +65,9 @@ function projectToSidebarItem(project: Project): SidebarItem {
   };
 }
 
-export default function Sidebar() {
+function SidebarContent() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = useState(false);
   const [archExpanded, setArchExpanded] = useState(false);
   const { projects } = useProjects();
@@ -79,8 +80,14 @@ export default function Sidebar() {
     ? projects.filter((p) => p.project_type === "n8n").map(projectToSidebarItem)
     : FALLBACK_N8N;
 
-  const isActive = (path: string) =>
-    pathname === path || pathname.startsWith(path + "/");
+  const isActive = (path: string) => {
+    // Handle architecture query param tabs
+    if (path.startsWith("/architecture?project=")) {
+      const slug = path.split("=")[1];
+      return pathname === "/architecture" && searchParams.get("project") === slug;
+    }
+    return pathname === path || pathname.startsWith(path + "/");
+  };
 
   const renderItem = (item: SidebarItem) => (
     <Link
@@ -181,18 +188,14 @@ export default function Sidebar() {
         )}
         {archExpanded && !collapsed && (
           <div className="mt-1 space-y-1">
-            {renderItem({
-              label: "Unified 전체",
-              path: "/architecture",
-              icon: <Blocks className="h-5 w-5" />,
-            })}
-            {[...standardProjects, ...n8nProjects].map((item) =>
-              renderItem({
+            {[...standardProjects, ...n8nProjects].map((item) => {
+              const slug = item.path.replace("/projects/", "");
+              return renderItem({
                 label: item.label,
-                path: `/architecture/${item.path.replace("/projects/", "")}`,
+                path: `/architecture?project=${slug}`,
                 icon: item.icon,
-              })
-            )}
+              });
+            })}
           </div>
         )}
       </nav>
@@ -218,5 +221,13 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+  );
+}
+
+export default function Sidebar() {
+  return (
+    <Suspense>
+      <SidebarContent />
+    </Suspense>
   );
 }
