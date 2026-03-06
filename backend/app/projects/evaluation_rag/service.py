@@ -1,7 +1,9 @@
 """Service layer for evaluation-rag project."""
 
 import asyncio
+import json
 import logging
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +21,8 @@ from .core.rag_chain import RAGChain
 from .core.retrieval_service import RetrievalService
 from .models import EvaluationRagModel
 from .schemas import (
+    EvaluationCriteriaResponse,
+    EvaluationItemScore,
     EvaluationListResponse,
     EvaluationResponse,
     EvaluationStatsResponse,
@@ -81,19 +85,36 @@ class EvaluationRagService:
         rag_chain = self._build_rag_chain()
         engine = self._build_evaluation_engine()
 
+        # Use new item-level RAG pipeline
         rag_result = await asyncio.to_thread(
-            rag_chain.run, query=query, top_k=5, category=category
+            rag_chain.run_items, query=query, category=category
         )
 
-        context = rag_result["context"]
+        items = rag_result.get("items", [])
         final_category = rag_result.get("category")
+        category_ko = rag_result.get("category_ko")
 
+        if not items:
+            # Fallback to simple evaluation if no items found
+            return await self.evaluate_simple(db=db, input_data=input_data, query=query, category=category)
+
+        # Run item-level evaluation
         eval_result = await asyncio.to_thread(
-            engine.evaluate,
+            engine.evaluate_items,
             input_data=input_data,
-            context=context,
-            category=final_category,
+            items=items,
+            category_ko=category_ko,
         )
+
+        # Calculate scores
+        item_scores_data = [s.model_dump() for s in eval_result.item_scores]
+        total_score = sum(s.score for s in eval_result.item_scores)
+        max_possible = sum(s.max_score for s in eval_result.item_scores)
+        # Compute legacy score (0-100 scale)
+        legacy_score = round((total_score / max_possible) * 100) if max_possible > 0 else 0
+
+        # Build context string for storage
+        context = "\n".join(f"[{item['item_id']}] {item['item_name']}: {item.get('scoring_criteria', '')[:200]}" for item in items)
 
         row = EvaluationRagModel(
             input_data=input_data,
@@ -101,9 +122,11 @@ class EvaluationRagService:
             context=context,
             category=final_category,
             summary=eval_result.summary,
-            score=eval_result.score,
-            issues=eval_result.issues,
-            improvements=[imp.model_dump() for imp in eval_result.improvements],
+            score=legacy_score,
+            issues=[issue for s in eval_result.item_scores for issue in s.issues],
+            improvements=[],  # Legacy field, now in item_scores
+            item_scores=item_scores_data,
+            max_possible_score=float(max_possible),
         )
         db.add(row)
         await db.commit()
@@ -240,18 +263,64 @@ class EvaluationRagService:
             pinecone_connected=pinecone_connected,
         )
 
+    async def get_criteria(self, category: str | None = None) -> EvaluationCriteriaResponse:
+        """Get evaluation criteria from master data."""
+        data_path = Path(__file__).parent / "data" / "evaluation_items.json"
+        with data_path.open(encoding="utf-8") as f:
+            data = json.load(f)
+
+        raw_categories = data.get("categories", [])
+        if category is not None:
+            raw_categories = [c for c in raw_categories if c.get("category_en") == category]
+
+        categories = []
+        total_items = 0
+        for cat in raw_categories:
+            items = cat.get("items", [])
+            total_items += len(items)
+            categories.append(
+                {
+                    "category_en": cat.get("category_en"),
+                    "category_ko": cat.get("category_ko"),
+                    "description": cat.get("description"),
+                    "items": items,
+                }
+            )
+
+        return EvaluationCriteriaResponse(
+            categories=categories,
+            total_items=total_items,
+        )
+
     def _to_response(self, row: EvaluationRagModel) -> EvaluationResponse:
+        # Handle legacy issues
         issues = row.issues if isinstance(row.issues, list) else []
+
+        # Handle legacy improvements
         improvements_raw = row.improvements if isinstance(row.improvements, list) else []
         improvements = []
         for imp in improvements_raw:
             if isinstance(imp, dict):
                 improvements.append(ImprovementItemSchema(**imp))
 
+        # Handle new item_scores (may be None for old records)
+        item_scores_raw = row.item_scores if isinstance(row.item_scores, list) else []
+        item_scores = []
+        for item in item_scores_raw:
+            if isinstance(item, dict):
+                item_scores.append(EvaluationItemScore(**item))
+
+        # Calculate total_score and max_possible from item_scores if available
+        total_score = None
+        max_possible_score = None
+        if item_scores:
+            total_score = float(sum(s.score for s in item_scores))
+            max_possible_score = row.max_possible_score or float(len(item_scores) * 10)
+
         return EvaluationResponse(
             id=row.id,
             summary=row.summary,
-            score=row.score,
+            score=row.score,  # Always use DB value (legacy 0-100 or computed)
             issues=issues,
             improvements=improvements,
             input_data=row.input_data,
@@ -259,4 +328,7 @@ class EvaluationRagService:
             context=row.context,
             category=row.category,
             created_at=row.created_at,
+            total_score=total_score,
+            max_possible_score=max_possible_score,
+            item_scores=item_scores,
         )

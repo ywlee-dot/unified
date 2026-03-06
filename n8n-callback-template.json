@@ -24,8 +24,16 @@
           ]
         },
         "sendBody": true,
-        "contentType": "binaryData",
-        "inputDataFieldName": "data",
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db_session
 
 from .schemas import (
+    EvaluationCriteriaResponse,
     EvaluationListResponse,
     EvaluationRequest,
     EvaluationResponse,
@@ -107,3 +108,11 @@ async def get_stats(
 ):
     """서비스 통계 조회."""
     return await _service.get_stats(db=db)
+
+
+@router.get("/criteria", response_model=EvaluationCriteriaResponse)
+async def get_criteria(
+    category: str | None = None,
+):
+    """RAG 기반 평가 기준표 조회."""
+    return await _service.get_criteria(category=category)

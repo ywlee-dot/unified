@@ -37,6 +37,25 @@ class EvaluationResult(BaseModel):
     score: int = Field(..., ge=0, le=100, description="Evaluation score (0-100)")
 
 
+class ItemScore(BaseModel):
+    """Individual item evaluation score."""
+
+    item_id: str = Field(..., description="Evaluation item ID")
+    item_name: str = Field(..., description="Evaluation item name")
+    score: int = Field(..., ge=0, le=10, description="Item score (0-10)")
+    max_score: int = Field(default=10, description="Maximum possible score for this item")
+    reasoning: str = Field(default="", description="Scoring rationale")
+    issues: list[str] = Field(default_factory=list, description="Issues found")
+    improvements: list[str] = Field(default_factory=list, description="Improvement suggestions")
+
+
+class MultiItemEvaluationResult(BaseModel):
+    """Structured result from multi-item evaluation."""
+
+    summary: str = Field(..., description="Overall evaluation summary")
+    item_scores: list[ItemScore] = Field(..., description="Per-item scores")
+
+
 class ResultParser:
     """Parse and validate Gemini evaluation results."""
 
@@ -75,6 +94,50 @@ class ResultParser:
         except Exception as e:
             logger.error(f"Failed to parse into Pydantic model: {e}", exc_info=True)
             raise ValueError(f"Failed to parse evaluation result: {e}") from e
+
+    def parse_multi_item(self, gemini_response: str) -> MultiItemEvaluationResult:
+        logger.info("Starting to parse multi-item Gemini response")
+
+        try:
+            json_str = self._extract_json(gemini_response)
+        except ValueError as e:
+            logger.error(f"Failed to extract JSON: {e}")
+            raise
+
+        try:
+            data = json.loads(json_str)
+            logger.info(f"Successfully parsed JSON. Keys: {list(data.keys())}")
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            raise ValueError(f"Invalid JSON in response: {e}") from e
+
+        required_fields = ["summary", "item_scores"]
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            raise ValueError(f"Missing required fields in response: {', '.join(missing_fields)}")
+
+        if not data["item_scores"]:
+            raise ValueError("item_scores must not be empty")
+
+        for item in data["item_scores"]:
+            raw_score = item.get("score")
+            if isinstance(raw_score, int) and not (0 <= raw_score <= 10):
+                clamped = max(0, min(10, raw_score))
+                logger.warning(
+                    f"Item '{item.get('item_id', '?')}' score {raw_score} out of range, "
+                    f"clamping to {clamped}"
+                )
+                item["score"] = clamped
+
+        try:
+            result = MultiItemEvaluationResult(**data)
+            logger.info(
+                f"Parsed multi-item evaluation result. Items: {len(result.item_scores)}"
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Failed to parse into MultiItemEvaluationResult: {e}", exc_info=True)
+            raise ValueError(f"Failed to parse multi-item evaluation result: {e}") from e
 
     def _extract_json(self, text: str) -> str:
         if not text or not text.strip():

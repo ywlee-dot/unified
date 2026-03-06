@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  BookOpen,
 } from "lucide-react";
 
 const API_BASE =
@@ -20,6 +23,17 @@ interface ImprovementItem {
   issue: string;
   recommendation: string;
   priority: string;
+}
+
+interface EvaluationItemScore {
+  item_id: string;
+  item_name: string;
+  category: string;
+  score: number;
+  max_score: number;
+  reasoning: string;
+  issues: string[];
+  improvements: string[];
 }
 
 interface EvaluationResult {
@@ -33,6 +47,9 @@ interface EvaluationResult {
   context: string;
   category: string | null;
   created_at: string;
+  total_score: number | null;
+  max_possible_score: number | null;
+  item_scores: EvaluationItemScore[];
 }
 
 interface EvaluationListResponse {
@@ -40,6 +57,25 @@ interface EvaluationListResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+interface CriteriaCategory {
+  category_en: string;
+  category_ko: string;
+  description: string;
+  items: {
+    item_id: string;
+    item_name: string;
+    description: string;
+    scoring_criteria: string;
+    max_score: number;
+  }[];
+}
+
+interface CriteriaResponse {
+  categories: CriteriaCategory[];
+  total_items: number;
+  pinecone_namespace: string;
 }
 
 const CATEGORIES = [
@@ -120,7 +156,118 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
+function ItemScoreBar({ item }: { item: EvaluationItemScore }) {
+  const percentage = (item.score / item.max_score) * 100;
+  const color = item.score >= 8 ? "#22c55e" : item.score >= 5 ? "#eab308" : "#ef4444";
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-slate-700">{item.item_name}</span>
+            <span className="text-xs text-slate-400">{item.item_id}</span>
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <div className="h-2 flex-1 rounded-full bg-slate-100">
+              <div
+                className="h-2 rounded-full transition-all duration-500"
+                style={{ width: `${percentage}%`, backgroundColor: color }}
+              />
+            </div>
+            <span className="text-sm font-bold" style={{ color }}>
+              {item.score}/{item.max_score}
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="ml-3 text-slate-400 hover:text-slate-600"
+        >
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+      </div>
+      {expanded && (
+        <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+          {item.reasoning && (
+            <p className="text-sm text-slate-600">
+              <span className="font-medium">채점 근거:</span> {item.reasoning}
+            </p>
+          )}
+          {item.issues.length > 0 && (
+            <div>
+              <span className="text-xs font-medium text-amber-600">문제점:</span>
+              <ul className="mt-1 space-y-1">
+                {item.issues.map((issue, i) => (
+                  <li key={i} className="text-xs text-slate-500">• {issue}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {item.improvements.length > 0 && (
+            <div>
+              <span className="text-xs font-medium text-emerald-600">개선사항:</span>
+              <ul className="mt-1 space-y-1">
+                {item.improvements.map((imp, i) => (
+                  <li key={i} className="text-xs text-slate-500">• {imp}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ResultView({ result }: { result: EvaluationResult }) {
+  const hasItemScores = result.item_scores && result.item_scores.length > 0;
+
+  if (hasItemScores) {
+    const totalScore = result.total_score!;
+    const maxPossible = result.max_possible_score!;
+    const avgPer10 = totalScore / result.item_scores.length;
+    const color =
+      avgPer10 >= 8 ? "#22c55e" : avgPer10 >= 5 ? "#eab308" : "#ef4444";
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-6 rounded-lg border border-slate-200 bg-white p-6">
+          <div className="flex flex-col items-center">
+            <span className="text-3xl font-bold" style={{ color }}>
+              {totalScore}
+            </span>
+            <span className="text-sm text-slate-400">/ {maxPossible}</span>
+            <span className="mt-1 text-xs text-slate-400">
+              (평균 {avgPer10.toFixed(1)}/10)
+            </span>
+          </div>
+          <div className="flex-1">
+            <h3 className="mb-2 text-lg font-semibold text-slate-800">
+              평가 요약
+            </h3>
+            <p className="text-slate-600">{result.summary}</p>
+            {result.category && (
+              <span className="mt-2 inline-block rounded-full bg-violet-100 px-3 py-1 text-xs font-medium text-violet-700">
+                {result.category}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-base font-semibold text-slate-800">
+            항목별 평가 결과 ({result.item_scores.length}개 항목)
+          </h3>
+          {result.item_scores.map((item) => (
+            <ItemScoreBar key={item.item_id} item={item} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-6 rounded-lg border border-slate-200 bg-white p-6">
@@ -196,7 +343,7 @@ function ResultView({ result }: { result: EvaluationResult }) {
 }
 
 export default function EvaluationRagPage() {
-  const [activeTab, setActiveTab] = useState<"text" | "file" | "history">(
+  const [activeTab, setActiveTab] = useState<"text" | "file" | "history" | "criteria">(
     "text"
   );
 
@@ -222,6 +369,13 @@ export default function EvaluationRagPage() {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
   const pageSize = 10;
+
+  // Criteria state
+  const [criteria, setCriteria] = useState<CriteriaCategory[]>([]);
+  const [criteriaTotal, setCriteriaTotal] = useState(0);
+  const [criteriaLoading, setCriteriaLoading] = useState(false);
+  const [criteriaFilter, setCriteriaFilter] = useState("");
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const handleTextEvaluate = async () => {
     if (!inputData.trim() || !query.trim()) return;
@@ -298,10 +452,29 @@ export default function EvaluationRagPage() {
     }
   };
 
+  const loadCriteria = async (category?: string) => {
+    setCriteriaLoading(true);
+    try {
+      const url = category
+        ? `${API_BASE}/projects/evaluation-rag/criteria?category=${category}`
+        : `${API_BASE}/projects/evaluation-rag/criteria`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("기준표 로딩 실패");
+      const data: CriteriaResponse = await res.json();
+      setCriteria(data.categories);
+      setCriteriaTotal(data.total_items);
+    } catch {
+      setCriteria([]);
+    } finally {
+      setCriteriaLoading(false);
+    }
+  };
+
   const tabs = [
     { key: "text" as const, label: "텍스트 평가", icon: ClipboardCheck },
     { key: "file" as const, label: "파일 평가", icon: FileUp },
     { key: "history" as const, label: "평가 이력", icon: History },
+    { key: "criteria" as const, label: "평가 기준표", icon: BookOpen },
   ];
 
   return (
@@ -321,6 +494,7 @@ export default function EvaluationRagPage() {
             onClick={() => {
               setActiveTab(tab.key);
               if (tab.key === "history" && history.length === 0) loadHistory(1);
+              if (tab.key === "criteria" && criteria.length === 0) loadCriteria();
             }}
             className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
@@ -493,6 +667,86 @@ export default function EvaluationRagPage() {
         </div>
       )}
 
+      {/* Criteria */}
+      {activeTab === "criteria" && (
+        <div className="space-y-4">
+          {/* Header with total count and category filter */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-700">총 {criteriaTotal}개 평가항목</span>
+              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-600">v2</span>
+            </div>
+            <select
+              value={criteriaFilter}
+              onChange={(e) => { setCriteriaFilter(e.target.value); loadCriteria(e.target.value || undefined); }}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+            >
+              <option value="">전체 카테고리</option>
+              {CATEGORIES.filter(c => c.value).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </div>
+
+          {criteriaLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-violet-500" /></div>
+          ) : criteria.length === 0 ? (
+            <div className="rounded-lg border bg-white p-12 text-center text-slate-500">평가 기준표가 없습니다.</div>
+          ) : (
+            <div className="space-y-4">
+              {criteria.map((cat) => (
+                <div key={cat.category_en} className="rounded-lg border border-slate-200 bg-white">
+                  {/* Category header */}
+                  <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-800">{cat.category_ko}</h3>
+                      <p className="text-sm text-slate-500">{cat.description}</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+                      {cat.items.length}개 항목
+                    </span>
+                  </div>
+                  {/* Items */}
+                  <div className="divide-y divide-slate-100">
+                    {cat.items.map((item) => {
+                      const isExpanded = expandedItems.has(item.item_id);
+                      return (
+                        <div key={item.item_id} className="px-6 py-4">
+                          <div
+                            className="flex cursor-pointer items-center justify-between"
+                            onClick={() => {
+                              const next = new Set(expandedItems);
+                              isExpanded ? next.delete(item.item_id) : next.add(item.item_id);
+                              setExpandedItems(next);
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="rounded bg-violet-50 px-2 py-0.5 text-xs font-mono text-violet-600">{item.item_id}</span>
+                              <span className="font-medium text-slate-700">{item.item_name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-slate-400">{item.max_score}점 만점</span>
+                              {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                            </div>
+                          </div>
+                          {isExpanded && (
+                            <div className="mt-3 space-y-2 rounded-lg bg-slate-50 p-4">
+                              <p className="text-sm text-slate-600">{item.description}</p>
+                              <div>
+                                <span className="text-xs font-semibold text-slate-500">채점 기준:</span>
+                                <pre className="mt-1 whitespace-pre-wrap text-xs text-slate-600">{item.scoring_criteria}</pre>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* History */}
       {activeTab === "history" && (
         <div className="space-y-4">
@@ -539,17 +793,23 @@ export default function EvaluationRagPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 font-semibold">
-                          <span
-                            className={
-                              item.score >= 80
-                                ? "text-green-600"
-                                : item.score >= 60
-                                  ? "text-yellow-600"
-                                  : "text-red-600"
-                            }
-                          >
-                            {item.score}
-                          </span>
+                          {item.item_scores?.length > 0 ? (
+                            <span className="text-slate-700">
+                              {item.total_score}/{item.max_possible_score}
+                            </span>
+                          ) : (
+                            <span
+                              className={
+                                item.score >= 80
+                                  ? "text-green-600"
+                                  : item.score >= 60
+                                    ? "text-yellow-600"
+                                    : "text-red-600"
+                              }
+                            >
+                              {item.score}
+                            </span>
+                          )}
                         </td>
                         <td className="max-w-[300px] truncate px-4 py-3 text-slate-600">
                           {item.summary}

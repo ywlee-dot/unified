@@ -64,3 +64,44 @@ class RetrievalService:
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
             raise RetrievalError(f"Failed to retrieve documents: {e}") from e
+
+    def retrieve_items(
+        self,
+        query: str,
+        category: str | None = None,
+        top_k: int = 20,
+        threshold: float = 0.5,
+    ) -> list[dict]:
+        """Retrieve evaluation items from v2 namespace."""
+        try:
+            query_embedding = self.embedding_service.embed_query(query)
+
+            metadata_filter: dict = {}
+            if category:
+                metadata_filter["category_en"] = category
+                logger.info(f"Filtering items by category: {category}")
+
+            results = self.pinecone_service.query(
+                query_vector=query_embedding,
+                top_k=top_k,
+                filter=metadata_filter if metadata_filter else None,
+                namespace="v2",
+            )
+
+            filtered_results = [r for r in results if r["score"] >= threshold]
+
+            if not filtered_results and results:
+                logger.warning(
+                    f"No item results above threshold {threshold}. "
+                    f"Returning all {len(results)} matches."
+                )
+                filtered_results = results
+
+            logger.info(
+                f"Retrieved {len(filtered_results)}/{len(results)} items "
+                f"from v2 namespace (threshold: {threshold})"
+            )
+            return filtered_results
+        except Exception as e:
+            logger.error(f"Item retrieval failed: {e}")
+            raise RetrievalError(f"Failed to retrieve items: {e}") from e

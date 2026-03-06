@@ -6,6 +6,7 @@ import { ChevronRight, Home } from "lucide-react";
 
 const SEGMENT_LABELS: Record<string, string> = {
   projects: "프로젝트",
+  architecture: "아키텍처",
   "report-generator": "리포트 생성기",
   "data-pipeline": "데이터 파이프라인",
   "dataset-summary": "데이터셋 설명 생성",

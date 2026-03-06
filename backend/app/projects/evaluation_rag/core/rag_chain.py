@@ -91,3 +91,53 @@ class RAGChain:
             )
 
         return "\n\n".join(context_parts)
+
+    def run_items(self, query: str, category: str | None = None) -> dict:
+        """Run RAG pipeline for item-level evaluation."""
+        processed = self.query_processor.process_query_for_items(query, category)
+        final_category = processed["category"]
+        processed_query = processed["query"]
+
+        results = self.retrieval_service.retrieve_items(
+            query=processed_query,
+            category=final_category,
+        )
+
+        seen_ids: set[str] = set()
+        items: list[dict] = []
+        category_ko = ""
+
+        for result in results:
+            metadata = result.get("metadata", {})
+            item_id = metadata.get("item_id", result.get("id", ""))
+            if item_id in seen_ids:
+                continue
+            seen_ids.add(item_id)
+
+            cat_ko = metadata.get("category_ko", "")
+            if cat_ko and not category_ko:
+                category_ko = cat_ko
+
+            items.append(
+                {
+                    "item_id": item_id,
+                    "item_name": metadata.get("item_name", ""),
+                    "category": metadata.get("category_en", ""),
+                    "category_ko": cat_ko,
+                    "scoring_criteria": metadata.get("scoring_criteria", ""),
+                    "max_score": metadata.get("max_score"),
+                    "description": metadata.get("description", ""),
+                }
+            )
+
+        logger.info(
+            f"run_items: query='{processed_query}' category={final_category} "
+            f"items={len(items)}"
+        )
+
+        return {
+            "query": processed_query,
+            "category": final_category,
+            "items": items,
+            "category_ko": category_ko,
+        }

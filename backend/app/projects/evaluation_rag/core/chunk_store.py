@@ -93,3 +93,62 @@ class ChunkStore:
             logger.info("Cleared all chunks")
         except Exception as e:
             logger.error(f"Failed to clear chunks: {e}")
+
+    def store_evaluation_items(self, items: list[dict]) -> None:
+        """Store evaluation items to evaluation_items.json and update index."""
+        eval_file = self.storage_path / "evaluation_items.json"
+        try:
+            with open(eval_file, "w", encoding="utf-8") as f:
+                json.dump(items, f, ensure_ascii=False, indent=2)
+            for item in items:
+                item_id = item["item_id"]
+                self.index[item_id] = {
+                    "item_id": item_id,
+                    "eval_items_file": str(eval_file),
+                }
+            self._save_index()
+            logger.info(f"Stored {len(items)} evaluation items")
+        except Exception as e:
+            logger.error(f"Failed to store evaluation items: {e}")
+            raise
+
+    def get_evaluation_item(self, item_id: str) -> dict | None:
+        """Return the evaluation item matching item_id, or None."""
+        eval_file = self.storage_path / "evaluation_items.json"
+        if not eval_file.exists():
+            return None
+        try:
+            with open(eval_file, "r", encoding="utf-8") as f:
+                items = json.load(f)
+            for item in items:
+                if item.get("item_id") == item_id:
+                    return item
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get evaluation item: {e}")
+            return None
+
+    def get_evaluation_items_by_category(self, category: str) -> list[dict]:
+        """Return evaluation items matching the given category."""
+        eval_file = self.storage_path / "evaluation_items.json"
+        if not eval_file.exists():
+            return []
+        try:
+            with open(eval_file, "r", encoding="utf-8") as f:
+                items = json.load(f)
+            return [item for item in items if item.get("category") == category]
+        except Exception as e:
+            logger.error(f"Failed to get evaluation items by category: {e}")
+            return []
+
+    def get_all_evaluation_items(self) -> list[dict]:
+        """Load and return all evaluation items."""
+        eval_file = self.storage_path / "evaluation_items.json"
+        if not eval_file.exists():
+            return []
+        try:
+            with open(eval_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to get all evaluation items: {e}")
+            return []

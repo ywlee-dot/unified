@@ -15,9 +15,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Workflow,
   ClipboardCheck,
   Database,
+  Blocks,
 } from "lucide-react";
 import { useProjects } from "@/hooks/useProjects";
 import type { Project } from "@/lib/types";
@@ -66,6 +68,7 @@ function projectToSidebarItem(project: Project): SidebarItem {
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [archExpanded, setArchExpanded] = useState(false);
   const { projects } = useProjects();
 
   const standardProjects = projects.length > 0
@@ -145,6 +148,53 @@ export default function Sidebar() {
           </p>
         )}
         <div className="mt-1 space-y-1">{n8nProjects.map(renderItem)}</div>
+
+        {/* Architecture */}
+        {!collapsed && (
+          <button
+            onClick={() => setArchExpanded(!archExpanded)}
+            className="mt-6 flex w-full items-center justify-between px-3"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              아키텍처
+            </p>
+            <ChevronDown
+              className={clsx(
+                "h-3 w-3 text-slate-500 transition-transform duration-200",
+                archExpanded && "rotate-180"
+              )}
+            />
+          </button>
+        )}
+        {collapsed && (
+          <Link
+            href="/architecture"
+            className={clsx(
+              "mt-4 flex items-center justify-center rounded-lg px-3 py-2 text-sm transition-colors",
+              isActive("/architecture")
+                ? "bg-blue-600 text-white"
+                : "text-slate-300 hover:bg-slate-700 hover:text-white"
+            )}
+          >
+            <Blocks className="h-5 w-5" />
+          </Link>
+        )}
+        {archExpanded && !collapsed && (
+          <div className="mt-1 space-y-1">
+            {renderItem({
+              label: "Unified 전체",
+              path: "/architecture",
+              icon: <Blocks className="h-5 w-5" />,
+            })}
+            {[...standardProjects, ...n8nProjects].map((item) =>
+              renderItem({
+                label: item.label,
+                path: `/architecture/${item.path.replace("/projects/", "")}`,
+                icon: item.icon,
+              })
+            )}
+          </div>
+        )}
       </nav>
 
       {/* Footer */}

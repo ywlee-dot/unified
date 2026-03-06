@@ -227,6 +227,17 @@ export interface EvaluationImprovementItem {
   priority: "critical" | "high" | "medium" | "low";
 }
 
+export interface EvaluationRagItemScore {
+  item_id: string;
+  item_name: string;
+  category: string;
+  score: number;
+  max_score: number;
+  reasoning: string;
+  issues: string[];
+  improvements: string[];
+}
+
 export interface EvaluationRagResponse {
   id: string;
   summary: string;
@@ -238,6 +249,9 @@ export interface EvaluationRagResponse {
   context: string;
   category: string | null;
   created_at: string;
+  total_score: number | null;
+  max_possible_score: number | null;
+  item_scores: EvaluationRagItemScore[];
 }
 
 export interface EvaluationRagListResponse {

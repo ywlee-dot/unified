@@ -53,7 +53,7 @@ class PineconeService:
             logger.error(f"Failed to ensure index exists: {e}")
             raise PineconeError(f"Index initialization failed: {e}") from e
 
-    def upsert(self, vectors: list[tuple[str, list[float], dict[str, Any]]] | list[dict[str, Any]]) -> None:
+    def upsert(self, vectors: list[tuple[str, list[float], dict[str, Any]]] | list[dict[str, Any]], namespace: str | None = None) -> None:
         try:
             if vectors and isinstance(vectors[0], dict):
                 formatted_vectors = vectors
@@ -62,19 +62,19 @@ class PineconeService:
                     {"id": vec_id, "values": vector, "metadata": metadata}
                     for vec_id, vector, metadata in vectors
                 ]
-            self.index.upsert(vectors=formatted_vectors)
+            self.index.upsert(vectors=formatted_vectors, namespace=namespace)
             logger.info(f"Upserted {len(vectors)} vectors to Pinecone")
         except Exception as e:
             logger.error(f"Upsert failed: {e}")
             raise PineconeError(f"Failed to upsert vectors: {e}") from e
 
     def upsert_batch(
-        self, vectors: list[tuple[str, list[float], dict[str, Any]]], batch_size: int = 100
+        self, vectors: list[tuple[str, list[float], dict[str, Any]]], batch_size: int = 100, namespace: str | None = None
     ) -> None:
         try:
             for i in range(0, len(vectors), batch_size):
                 batch = vectors[i : i + batch_size]
-                self.upsert(batch)
+                self.upsert(batch, namespace=namespace)
         except Exception as e:
             logger.error(f"Batch upsert failed: {e}")
             raise PineconeError(f"Batch upsert failed: {e}") from e
@@ -85,10 +85,11 @@ class PineconeService:
         top_k: int = 5,
         filter: dict[str, Any] | None = None,
         include_metadata: bool = True,
+        namespace: str | None = None,
     ) -> list[dict[str, Any]]:
         try:
             results = self.index.query(
-                vector=query_vector, top_k=top_k, filter=filter, include_metadata=include_metadata
+                vector=query_vector, top_k=top_k, filter=filter, include_metadata=include_metadata, namespace=namespace
             )
             matches = []
             for match in results.get("matches", []):
@@ -105,17 +106,17 @@ class PineconeService:
             logger.error(f"Query failed: {e}")
             raise PineconeError(f"Query failed: {e}") from e
 
-    def delete(self, ids: list[str]) -> None:
+    def delete(self, ids: list[str], namespace: str | None = None) -> None:
         try:
-            self.index.delete(ids=ids)
+            self.index.delete(ids=ids, namespace=namespace)
             logger.info(f"Deleted {len(ids)} vectors")
         except Exception as e:
             logger.error(f"Delete failed: {e}")
             raise PineconeError(f"Failed to delete vectors: {e}") from e
 
-    def delete_all(self) -> None:
+    def delete_all(self, namespace: str | None = None) -> None:
         try:
-            self.index.delete(delete_all=True)
+            self.index.delete(delete_all=True, namespace=namespace)
             logger.info("Deleted all vectors from index")
         except Exception as e:
             logger.error(f"Delete all failed: {e}")

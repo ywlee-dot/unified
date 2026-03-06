@@ -1,6 +1,6 @@
 """SQLAlchemy models for evaluation-rag project."""
 
-from sqlalchemy import Integer, JSON, String, Text
+from sqlalchemy import Float, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.models.base import BaseEntity
@@ -19,3 +19,5 @@ class EvaluationRagModel(BaseEntity):
     score: Mapped[int] = mapped_column(Integer, nullable=False)
     issues: Mapped[dict | None] = mapped_column(JSON, default=[])
     improvements: Mapped[dict | None] = mapped_column(JSON, default=[])
+    item_scores: Mapped[list | None] = mapped_column(JSON, default=[])
+    max_possible_score: Mapped[float | None] = mapped_column(Float, nullable=True)

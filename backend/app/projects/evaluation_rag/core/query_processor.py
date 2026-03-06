@@ -56,3 +56,21 @@ class QueryProcessor:
         except Exception as e:
             logger.error(f"Query processing failed: {e}")
             raise QueryProcessingError(f"Failed to process query: {e}") from e
+
+    def process_query_for_items(self, query: str, category: str | None = None) -> dict:
+        """Process query for item-level evaluation."""
+        try:
+            processed_query = self.preprocess_query(query)
+            detected_category = self.detect_category(processed_query)
+            final_category = category or detected_category
+            if final_category:
+                logger.info(
+                    f"Item query category: {final_category} "
+                    f"({'explicit' if category else 'auto-detected'})"
+                )
+            return {"query": processed_query, "category": final_category}
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Item query processing failed: {e}")
+            raise QueryProcessingError(f"Failed to process item query: {e}") from e
