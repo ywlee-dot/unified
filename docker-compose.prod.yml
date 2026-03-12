@@ -34,6 +34,7 @@ services:
       PINECONE_API_KEY: ${PINECONE_API_KEY:-}
       PINECONE_INDEX_NAME: ${PINECONE_INDEX_NAME:-evaluation-guidelines}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      N8N_CALLBACK_SECRET: ${N8N_CALLBACK_SECRET:-tucon-n8n}
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"
