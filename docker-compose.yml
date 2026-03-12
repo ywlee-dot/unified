@@ -111,7 +111,7 @@ services:
 
   # --- n8n Workflow Engine ---
   n8n:
-    image: n8nio/n8n:1.76.1
+    image: n8nio/n8n:latest
     restart: unless-stopped
     ports:
       - "5678:5678"

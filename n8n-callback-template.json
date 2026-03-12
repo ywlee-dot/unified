@@ -13,7 +13,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://unified-backend-7nja.onrender.com/api/webhooks/n8n/upload/{{ $json.tracking_id }}",
+        "url": "=http://backend:8000/api/webhooks/n8n/upload/{{ $json.tracking_id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -45,7 +45,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://unified-backend-7nja.onrender.com/api/webhooks/n8n/callback",
+        "url": "http://backend:8000/api/webhooks/n8n/callback",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
