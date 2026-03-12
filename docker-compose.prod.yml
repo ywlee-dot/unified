@@ -58,6 +58,7 @@ services:
       WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost/webhook}  # 외부에서 접근 가능한 webhook URL
       N8N_PATH: /n8n/                # Nginx 서브패스에 맞춤
       N8N_EDITOR_BASE_URL: ${N8N_PUBLIC_URL:-http://localhost}/n8n/
+      N8N_SECURE_COOKIE: "false"
       GENERIC_TIMEZONE: Asia/Seoul
 
   # --- Nginx 리버스 프록시 ---
