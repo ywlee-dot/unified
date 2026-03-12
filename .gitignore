@@ -13,6 +13,10 @@ out/
 # Environment
 .env
 .env.local
+.env.production
+
+# SSL certs
+nginx/certs/
 
 # IDE
 .vscode/
