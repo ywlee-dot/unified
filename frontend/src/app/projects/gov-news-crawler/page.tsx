@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { GovNewsStats, GovCrawlRun, GovKeyword } from "@/lib/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE = "/api";
 
 function StatusBadge({ status }: { status: GovCrawlRun["status"] }) {
   const config = {

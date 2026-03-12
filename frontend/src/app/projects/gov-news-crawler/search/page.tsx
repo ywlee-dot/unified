@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { GovArticle, GovKeyword } from "@/lib/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE = "/api";
 
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) return <span className="text-slate-400 text-xs">—</span>;

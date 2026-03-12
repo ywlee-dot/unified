@@ -6,10 +6,7 @@ import type {
   OpenDataStageResponse,
 } from "@/lib/types";
 
-const API_BASE =
-  typeof window === "undefined"
-    ? process.env.INTERNAL_API_URL || "http://backend:8000/api"
-    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE = "/api";
 
 const STAGES = [
   { num: 1, label: "개방가능 여부", desc: "테이블별 개방 가능 여부 판단" },
