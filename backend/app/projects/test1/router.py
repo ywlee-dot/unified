@@ -25,7 +25,7 @@ async def trigger_workflow(
     import httpx
     file_content = await file.read()
 
-    webhook_base = get_webhook_base(n8n_account=2)
+    webhook_base = get_webhook_base(n8n_account=1)
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             f"{webhook_base}/data_quality_pretest",

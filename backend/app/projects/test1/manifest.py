@@ -11,7 +11,7 @@ manifest = ProjectManifest(
     enabled=True,
     router_module="app.projects.test1.router",
     n8n_config={
-        "n8n_account": 2,
+        "n8n_account": 1,
         "webhook_path": "/webhook/data_quality_pretest",
         "workflows": [
             {"id": "test1-main", "name": "테스트1 실행", "trigger_type": "manual"},

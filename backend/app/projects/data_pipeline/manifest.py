@@ -11,7 +11,7 @@ manifest = ProjectManifest(
     enabled=True,
     router_module="app.projects.data_pipeline.router",
     n8n_config={
-        "n8n_account": 2,
+        "n8n_account": 1,
         "webhook_path": "/webhook/data-pipeline",
         "workflows": [
             {"id": "etl-daily", "name": "일간 ETL 파이프라인", "trigger_type": "scheduled"},

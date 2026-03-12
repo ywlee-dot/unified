@@ -11,7 +11,7 @@ manifest = ProjectManifest(
     enabled=True,
     router_module="app.projects.effort_public_data.router",
     n8n_config={
-        "n8n_account": 2,
+        "n8n_account": 1,
         "webhook_path": "/effort_public-data",
         "workflows": [
             {"id": "effort-public-data-main", "name": "공유데이터 제공 노력 실행", "trigger_type": "manual"},
