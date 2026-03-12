@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.projects.report_generator.dummy_data import get_dummy_workflows
 from app.projects.report_generator.schemas import (
     N8nRunResult,
     N8nTriggerResponse,
@@ -27,11 +26,10 @@ class ReportGeneratorService:
         self.db = db
 
     async def get_workflows(self) -> list[N8nWorkflow]:
-        return get_dummy_workflows()
+        return []
 
     async def trigger_workflow(self, workflow_id: str, parameters: dict | None = None) -> N8nTriggerResponse:
-        workflows = get_dummy_workflows()
-        workflow = next((w for w in workflows if w.id == workflow_id), None)
+        workflow = None
         if not workflow:
             return N8nTriggerResponse(
                 run_id="", status="failed",

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.projects.data_pipeline.dummy_data import get_dummy_pipelines
 from app.projects.data_pipeline.schemas import Pipeline, PipelineRun, PipelineTriggerRequest
 from app.shared.models.n8n_execution import N8nExecutionModel
 from app.shared.services.n8n_client import (
@@ -23,12 +22,9 @@ class DataPipelineService:
         self.db = db
 
     async def get_pipelines(self) -> list[Pipeline]:
-        return get_dummy_pipelines()
+        return []
 
     async def get_pipeline(self, pipeline_id: str) -> Pipeline | None:
-        for p in get_dummy_pipelines():
-            if p.id == pipeline_id:
-                return p
         return None
 
     async def trigger_pipeline(
