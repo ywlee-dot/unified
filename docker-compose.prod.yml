@@ -12,8 +12,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: production
-    ports:
-      - "127.0.0.1:8000:8000"
+    ports: []  # Nginx가 프록시하므로 외부 노출 불필요
     volumes:
       - uploads_data:/app/uploads
     environment:
@@ -44,16 +43,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: runner
-    ports:
-      - "127.0.0.1:3000:3000"
+    ports: []  # Nginx가 프록시
     volumes: []  # 프로덕션에서는 소스 마운트 제거
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       INTERNAL_API_URL: http://backend:8000/api
 
   n8n:
-    ports:
-      - "127.0.0.1:5678:5678"
+    ports: []  # Nginx가 프록시
     environment:
       N8N_BASIC_AUTH_ACTIVE: "true"
       N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
