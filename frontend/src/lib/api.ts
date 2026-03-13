@@ -4,6 +4,7 @@ import type {
   N8nRun,
   PaginatedResponse,
   ApiResponse,
+  LoginResponse,
 } from "./types";
 
 const API_BASE =
@@ -18,23 +19,50 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
+  /**
+   * SSR cookie forwarding: reads access_token cookie from incoming request
+   * and forwards it to the backend. Only active server-side.
+   * RECOMMENDED (future-proofing): All current pages are "use client".
+   */
+  private async getSSRHeaders(): Promise<HeadersInit> {
+    if (typeof window !== "undefined") return {};
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+      const token = cookieStore.get("access_token")?.value;
+      if (token) {
+        return { Cookie: `access_token=${token}` };
+      }
+    } catch {
+      // next/headers not available outside request context
+    }
+    return {};
+  }
+
   private async request<T>(
     path: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    const ssrHeaders = await this.getSSRHeaders();
     const res = await fetch(url, {
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...ssrHeaders,
         ...options.headers,
       },
       ...options,
     });
 
     if (!res.ok) {
+      if (res.status === 401 && typeof window !== "undefined") {
+        window.location.href = "/login";
+        throw new ApiError("인증이 필요합니다", 401);
+      }
       const errorBody = await res.json().catch(() => null);
       throw new ApiError(
-        errorBody?.error || `Request failed: ${res.status}`,
+        errorBody?.detail || errorBody?.error || `Request failed: ${res.status}`,
         res.status,
         errorBody
       );
@@ -69,6 +97,28 @@ class ApiClient {
     return this.request<void>(path, { method: "DELETE" });
   }
 
+  // --- Auth ---
+
+  login(email: string, password: string): Promise<LoginResponse> {
+    return this.post<LoginResponse>("/auth/login", { email, password });
+  }
+
+  async logout(): Promise<void> {
+    return this.request<void>("/auth/logout", { method: "POST" });
+  }
+
+  async getMe(): Promise<LoginResponse> {
+    const url = `${this.baseUrl}/auth/me`;
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      throw new ApiError("Not authenticated", res.status);
+    }
+    return res.json();
+  }
+
   // --- Registry ---
 
   getProjects(): Promise<ApiResponse<Project[]>> {
@@ -100,12 +150,21 @@ class ApiClient {
 
   async postFormData<T>(path: string, formData: FormData): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    const ssrHeaders = await this.getSSRHeaders();
     const res = await fetch(url, {
       method: "POST",
+      credentials: "include",
       body: formData,
+      headers: {
+        ...ssrHeaders,
+      },
     });
 
     if (!res.ok) {
+      if (res.status === 401 && typeof window !== "undefined") {
+        window.location.href = "/login";
+        throw new ApiError("인증이 필요합니다", 401);
+      }
       const errorBody = await res.json().catch(() => null);
       throw new ApiError(
         errorBody?.detail || errorBody?.error || `Request failed: ${res.status}`,

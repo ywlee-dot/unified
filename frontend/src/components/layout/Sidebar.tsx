@@ -20,20 +20,21 @@ import {
   ClipboardCheck,
   Database,
   Blocks,
+  PanelLeft,
 } from "lucide-react";
 import { useProjects } from "@/hooks/useProjects";
 import type { Project } from "@/lib/types";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
-  sparkles: <Sparkles className="h-5 w-5" />,
-  "shield-check": <ShieldCheck className="h-5 w-5" />,
-  newspaper: <Newspaper className="h-5 w-5" />,
-  "clipboard-check": <ClipboardCheck className="h-5 w-5" />,
-  "file-text": <FileText className="h-5 w-5" />,
-  "git-branch": <GitBranch className="h-5 w-5" />,
-  "git-merge": <GitMerge className="h-5 w-5" />,
-  workflow: <Workflow className="h-5 w-5" />,
-  database: <Database className="h-5 w-5" />,
+  sparkles: <Sparkles className="h-[18px] w-[18px]" />,
+  "shield-check": <ShieldCheck className="h-[18px] w-[18px]" />,
+  newspaper: <Newspaper className="h-[18px] w-[18px]" />,
+  "clipboard-check": <ClipboardCheck className="h-[18px] w-[18px]" />,
+  "file-text": <FileText className="h-[18px] w-[18px]" />,
+  "git-branch": <GitBranch className="h-[18px] w-[18px]" />,
+  "git-merge": <GitMerge className="h-[18px] w-[18px]" />,
+  workflow: <Workflow className="h-[18px] w-[18px]" />,
+  database: <Database className="h-[18px] w-[18px]" />,
 };
 
 interface SidebarItem {
@@ -43,25 +44,25 @@ interface SidebarItem {
 }
 
 const FALLBACK_STANDARD: SidebarItem[] = [
-  { label: "데이터셋 설명 생성", path: "/projects/dataset-summary", icon: <Sparkles className="h-5 w-5" /> },
-  { label: "개방 가능 여부 판단", path: "/projects/open-data-analyzer", icon: <ShieldCheck className="h-5 w-5" /> },
-  { label: "정부 뉴스 크롤링", path: "/projects/gov-news-crawler", icon: <Newspaper className="h-5 w-5" /> },
-  { label: "평가편람", path: "/projects/evaluation-rag", icon: <ClipboardCheck className="h-5 w-5" /> },
+  { label: "데이터셋 설명 생성", path: "/projects/dataset-summary", icon: <Sparkles className="h-[18px] w-[18px]" /> },
+  { label: "개방 가능 여부 판단", path: "/projects/open-data-analyzer", icon: <ShieldCheck className="h-[18px] w-[18px]" /> },
+  { label: "정부 뉴스 크롤링", path: "/projects/gov-news-crawler", icon: <Newspaper className="h-[18px] w-[18px]" /> },
+  { label: "평가편람", path: "/projects/evaluation-rag", icon: <ClipboardCheck className="h-[18px] w-[18px]" /> },
 ];
 
 const FALLBACK_N8N: SidebarItem[] = [
-  { label: "리포트 생성기", path: "/projects/report-generator", icon: <FileText className="h-5 w-5" /> },
-  { label: "데이터 파이프라인", path: "/projects/data-pipeline", icon: <GitMerge className="h-5 w-5" /> },
-  { label: "텍스트 요약", path: "/projects/summarize", icon: <FileText className="h-5 w-5" /> },
-  { label: "값진단 사전예외처리", path: "/projects/test1", icon: <Workflow className="h-5 w-5" /> },
-  { label: "공유데이터 제공 노력", path: "/projects/effort-public-data", icon: <Database className="h-5 w-5" /> },
+  { label: "리포트 생성기", path: "/projects/report-generator", icon: <FileText className="h-[18px] w-[18px]" /> },
+  { label: "데이터 파이프라인", path: "/projects/data-pipeline", icon: <GitMerge className="h-[18px] w-[18px]" /> },
+  { label: "텍스트 요약", path: "/projects/summarize", icon: <FileText className="h-[18px] w-[18px]" /> },
+  { label: "값진단 사전예외처리", path: "/projects/test1", icon: <Workflow className="h-[18px] w-[18px]" /> },
+  { label: "공유데이터 제공 노력", path: "/projects/effort-public-data", icon: <Database className="h-[18px] w-[18px]" /> },
 ];
 
 function projectToSidebarItem(project: Project): SidebarItem {
   return {
     label: project.name,
     path: `/projects/${project.slug}`,
-    icon: ICON_MAP[project.icon] || <Database className="h-5 w-5" />,
+    icon: ICON_MAP[project.icon] || <Database className="h-[18px] w-[18px]" />,
   };
 }
 
@@ -81,7 +82,6 @@ function SidebarContent() {
     : FALLBACK_N8N;
 
   const isActive = (path: string) => {
-    // Handle architecture query param tabs
     if (path.startsWith("/architecture?project=")) {
       const slug = path.split("=")[1];
       return pathname === "/architecture" && searchParams.get("project") === slug;
@@ -89,85 +89,130 @@ function SidebarContent() {
     return pathname === path || pathname.startsWith(path + "/");
   };
 
-  const renderItem = (item: SidebarItem) => (
-    <Link
-      key={item.path}
-      href={item.path}
-      className={clsx(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-        isActive(item.path)
-          ? "bg-blue-600 text-white"
-          : "text-slate-300 hover:bg-slate-700 hover:text-white"
-      )}
-    >
-      {item.icon}
-      {!collapsed && <span>{item.label}</span>}
-    </Link>
-  );
+  const renderItem = (item: SidebarItem) => {
+    const active = isActive(item.path);
+    return (
+      <Link
+        key={item.path}
+        href={item.path}
+        className={clsx(
+          "relative flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200",
+          collapsed && "justify-center px-0",
+          active
+            ? "text-sidebar-text-active"
+            : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"
+        )}
+        style={active ? { backgroundColor: "rgba(49, 130, 246, 0.12)" } : undefined}
+        title={collapsed ? item.label : undefined}
+      >
+        {/* Active left accent bar */}
+        {active && (
+          <span
+            className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-sidebar-active"
+            aria-hidden="true"
+          />
+        )}
+        {/* Icon with active color */}
+        <span className={clsx(active ? "text-sidebar-active" : "")}>
+          {item.icon}
+        </span>
+        {!collapsed && (
+          <span className="truncate">{item.label}</span>
+        )}
+      </Link>
+    );
+  };
 
   return (
     <aside
       className={clsx(
-        "flex flex-col bg-slate-800 text-white transition-all duration-200",
-        collapsed ? "w-16" : "w-64"
+        "flex flex-col bg-sidebar-bg transition-all duration-200 ease-[cubic-bezier(0.33,0,0.67,1)]",
+        collapsed ? "w-16" : "w-60"
       )}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-3 border-b border-slate-700 px-4 py-5">
-        <Workflow className="h-7 w-7 shrink-0 text-blue-400" />
+      {/* Logo area */}
+      <div
+        className={clsx(
+          "flex items-center gap-2 px-4 py-5",
+          collapsed && "justify-center px-0"
+        )}
+      >
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sidebar-active">
+          <PanelLeft className="h-4 w-4 text-white" />
+        </div>
         {!collapsed && (
-          <span className="text-lg font-bold tracking-tight">
-            Unified Workspace
+          <span className="text-[15px] font-semibold tracking-tight text-white">
+            Unified
           </span>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 overflow-y-auto px-3 py-2">
         {/* Dashboard */}
-        <Link
-          href="/"
-          className={clsx(
-            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-            pathname === "/"
-              ? "bg-blue-600 text-white"
-              : "text-slate-300 hover:bg-slate-700 hover:text-white"
-          )}
-        >
-          <LayoutDashboard className="h-5 w-5" />
-          {!collapsed && <span>대시보드</span>}
-        </Link>
+        {(() => {
+          const active = pathname === "/";
+          return (
+            <Link
+              href="/"
+              className={clsx(
+                "relative flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200",
+                collapsed && "justify-center px-0",
+                active
+                  ? "text-sidebar-text-active"
+                  : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"
+              )}
+              style={active ? { backgroundColor: "rgba(49, 130, 246, 0.12)" } : undefined}
+              title={collapsed ? "대시보드" : undefined}
+            >
+              {active && (
+                <span
+                  className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-sidebar-active"
+                  aria-hidden="true"
+                />
+              )}
+              <span className={clsx(active ? "text-sidebar-active" : "")}>
+                <LayoutDashboard className="h-[18px] w-[18px]" />
+              </span>
+              {!collapsed && <span>대시보드</span>}
+            </Link>
+          );
+        })()}
 
-        {/* Standard Projects */}
+        {/* Standard Projects section */}
         {!collapsed && (
-          <p className="mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <p className="mt-6 mb-1 px-3 text-overline font-semibold uppercase tracking-widest text-sidebar-text">
             프로젝트
           </p>
         )}
-        <div className="mt-1 space-y-1">
+        {collapsed && <div className="mt-4" />}
+        <div className="space-y-0.5">
           {standardProjects.map(renderItem)}
         </div>
 
-        {/* n8n Projects */}
+        {/* n8n Projects section */}
         {!collapsed && (
-          <p className="mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <p className="mt-6 mb-1 px-3 text-overline font-semibold uppercase tracking-widest text-sidebar-text">
             n8n 파이프라인
           </p>
         )}
-        <div className="mt-1 space-y-1">{n8nProjects.map(renderItem)}</div>
+        {collapsed && <div className="mt-4" />}
+        <div className="space-y-0.5">
+          {n8nProjects.map(renderItem)}
+        </div>
 
-        {/* Architecture */}
+        {/* Architecture section */}
         {!collapsed && (
           <button
             onClick={() => setArchExpanded(!archExpanded)}
-            className="mt-6 flex w-full items-center justify-between px-3"
+            className="mt-6 mb-1 flex w-full items-center justify-between px-3 transition-colors hover:text-white"
           >
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <p className="text-overline font-semibold uppercase tracking-widest text-sidebar-text">
               아키텍처
             </p>
             <ChevronDown
               className={clsx(
-                "h-3 w-3 text-slate-500 transition-transform duration-200",
+                "h-3 w-3 text-sidebar-text transition-transform duration-200",
                 archExpanded && "rotate-180"
               )}
             />
@@ -177,17 +222,18 @@ function SidebarContent() {
           <Link
             href="/architecture"
             className={clsx(
-              "mt-4 flex items-center justify-center rounded-lg px-3 py-2 text-sm transition-colors",
+              "mt-4 flex items-center justify-center rounded-md py-2 text-sm transition-all duration-200",
               isActive("/architecture")
-                ? "bg-blue-600 text-white"
-                : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                ? "text-sidebar-active"
+                : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"
             )}
+            title="아키텍처"
           >
-            <Blocks className="h-5 w-5" />
+            <Blocks className="h-[18px] w-[18px]" />
           </Link>
         )}
         {archExpanded && !collapsed && (
-          <div className="mt-1 space-y-1">
+          <div className="space-y-0.5">
             {[...standardProjects, ...n8nProjects].map((item) => {
               const slug = item.path.replace("/projects/", "");
               return renderItem({
@@ -201,22 +247,39 @@ function SidebarContent() {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-slate-700 px-3 py-3">
+      <div className="px-3 pb-4 pt-2">
+        {/* Divider */}
+        <div className="mb-2 h-px bg-white/5" />
+
+        {/* Settings */}
         <Link
           href="/settings"
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+          className={clsx(
+            "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-sidebar-text transition-all duration-200 hover:bg-sidebar-hover hover:text-sidebar-text-active",
+            collapsed && "justify-center px-0"
+          )}
+          title={collapsed ? "설정" : undefined}
         >
-          <Settings className="h-5 w-5" />
+          <Settings className="h-[18px] w-[18px] shrink-0" />
           {!collapsed && <span>설정</span>}
         </Link>
+
+        {/* Collapse toggle */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="mt-2 flex w-full items-center justify-center rounded-lg py-2 text-slate-400 hover:bg-slate-700 hover:text-white"
+          className={clsx(
+            "mt-0.5 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-sidebar-text transition-all duration-200 hover:bg-sidebar-hover hover:text-sidebar-text-active",
+            collapsed && "justify-center px-0"
+          )}
+          aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
         >
           {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4 shrink-0" />
           ) : (
-            <ChevronLeft className="h-4 w-4" />
+            <>
+              <ChevronLeft className="h-4 w-4 shrink-0" />
+              <span>접기</span>
+            </>
           )}
         </button>
       </div>

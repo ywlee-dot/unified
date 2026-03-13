@@ -13,8 +13,13 @@ interface Props {
 
 export default function ProjectTabNav({ activeSlug, onTabChange }: Props) {
   return (
-    <div className="border-b border-slate-200">
-      <nav className="-mb-px flex gap-1 overflow-x-auto px-1">
+    <div
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderBottom: '1px solid #F0F1F4',
+      }}
+    >
+      <nav className="-mb-px flex gap-0 overflow-x-auto">
         {PIPELINE_ORDER.map((slug) => {
           const pipeline = PROJECT_PIPELINES[slug];
           if (!pipeline) return null;
@@ -24,20 +29,37 @@ export default function ProjectTabNav({ activeSlug, onTabChange }: Props) {
               key={slug}
               onClick={() => onTabChange(slug)}
               className={clsx(
-                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors duration-200",
+                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm transition-colors duration-150",
                 isActive
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                  ? "border-[#0064FF] font-semibold"
+                  : "border-transparent font-medium hover:border-transparent"
               )}
+              style={
+                isActive
+                  ? { color: '#0064FF' }
+                  : undefined
+              }
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  (e.currentTarget as HTMLButtonElement).style.color = '#4E5968';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  (e.currentTarget as HTMLButtonElement).style.color = '';
+                }
+              }}
             >
-              <span>{pipeline.name}</span>
+              <span style={!isActive ? { color: '#8B95A1' } : undefined}>
+                {pipeline.name}
+              </span>
               <span
-                className={clsx(
-                  "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                className="rounded-[6px] px-1.5 py-0.5 text-[10px] font-semibold"
+                style={
                   pipeline.projectType === "standard"
-                    ? "bg-blue-100 text-blue-600"
-                    : "bg-orange-100 text-orange-600"
-                )}
+                    ? { backgroundColor: '#E8F1FF', color: '#0064FF' }
+                    : { backgroundColor: '#FFF5E6', color: '#FF8800' }
+                }
               >
                 {pipeline.projectType}
               </span>

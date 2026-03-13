@@ -23,12 +23,12 @@ export default function EmptyState({
         className
       )}
     >
-      <div className="mb-4 text-gray-400">
+      <div className="mb-4 text-text-disabled">
         {icon || <Inbox className="h-12 w-12" />}
       </div>
-      <h3 className="text-sm font-medium text-gray-900">{title}</h3>
+      <h3 className="text-title-3 text-text-secondary">{title}</h3>
       {description && (
-        <p className="mt-1 text-sm text-gray-500">{description}</p>
+        <p className="mt-1 text-body-2 text-text-tertiary">{description}</p>
       )}
       {children && <div className="mt-4">{children}</div>}
     </div>

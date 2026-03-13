@@ -39,9 +39,12 @@ function BreadcrumbContent() {
   const projectPipeline = projectSlug ? PROJECT_PIPELINES[projectSlug] : null;
 
   return (
-    <nav className="flex items-center gap-1 px-6 py-3 text-sm text-gray-500">
-      <Link href="/" className="hover:text-gray-700">
-        <Home className="h-4 w-4" />
+    <nav className="flex items-center gap-1 px-6 py-3 text-caption-1 text-text-tertiary">
+      <Link
+        href="/"
+        className="flex items-center text-text-tertiary transition-colors duration-150 hover:text-text-secondary"
+      >
+        <Home className="h-3.5 w-3.5" />
       </Link>
       {segments.map((segment, index) => {
         const path = "/" + segments.slice(0, index + 1).join("/");
@@ -50,11 +53,14 @@ function BreadcrumbContent() {
 
         return (
           <span key={path} className="flex items-center gap-1">
-            <ChevronRight className="h-3 w-3 text-gray-400" />
+            <ChevronRight className="h-3 w-3 text-text-disabled" />
             {isLast && !projectPipeline ? (
-              <span className="font-medium text-gray-900">{label}</span>
+              <span className="font-medium text-text-primary">{label}</span>
             ) : (
-              <Link href={path} className="hover:text-gray-700">
+              <Link
+                href={path}
+                className="transition-colors duration-150 hover:text-text-secondary"
+              >
                 {label}
               </Link>
             )}
@@ -63,8 +69,8 @@ function BreadcrumbContent() {
       })}
       {projectPipeline && (
         <span className="flex items-center gap-1">
-          <ChevronRight className="h-3 w-3 text-gray-400" />
-          <span className="font-medium text-gray-900">{projectPipeline.name}</span>
+          <ChevronRight className="h-3 w-3 text-text-disabled" />
+          <span className="font-medium text-text-primary">{projectPipeline.name}</span>
         </span>
       )}
     </nav>
@@ -73,7 +79,13 @@ function BreadcrumbContent() {
 
 export default function BreadcrumbNav() {
   return (
-    <Suspense fallback={<nav className="px-6 py-3 text-sm text-gray-500"><Home className="h-4 w-4" /></nav>}>
+    <Suspense
+      fallback={
+        <nav className="px-6 py-3 text-caption-1 text-text-tertiary">
+          <Home className="h-3.5 w-3.5" />
+        </nav>
+      }
+    >
       <BreadcrumbContent />
     </Suspense>
   );

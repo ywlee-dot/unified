@@ -1,3 +1,21 @@
+// --- Auth ---
+
+export interface AuthUser {
+  user_id: string;
+  email: string;
+  name: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  user: AuthUser;
+}
+
 // --- Common ---
 
 export type ProjectType = "standard" | "n8n";

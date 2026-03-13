@@ -17,3 +17,8 @@ class UserInfo(BaseModel):
     user_id: str
     email: str
     name: str
+
+
+class UserResponse(BaseModel):
+    success: bool
+    user: UserInfo

@@ -6,10 +6,16 @@ import importlib
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 
+from app.config import settings
+from app.dependencies import get_current_user, get_optional_user
+
 logger = logging.getLogger(__name__)
+
+# Evaluated at module load time. Changing AUTH_REQUIRED requires a backend restart.
+auth_dep = Depends(get_current_user if settings.AUTH_REQUIRED else get_optional_user)
 
 
 class ProjectManifest(BaseModel):
@@ -57,6 +63,7 @@ class ProjectRegistry:
                     router,
                     prefix=f"{prefix}/{manifest.slug}",
                     tags=[manifest.name],
+                    dependencies=[auth_dep],
                 )
                 logger.info("Registered project: %s (%s)", manifest.slug, manifest.name)
             except Exception:

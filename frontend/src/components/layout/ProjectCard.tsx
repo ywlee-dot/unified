@@ -16,17 +16,17 @@ import { clsx } from "clsx";
 import type { Project } from "@/lib/types";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
-  database: <Database className="h-6 w-6" />,
-  "bar-chart": <BarChart3 className="h-6 w-6" />,
-  bell: <Bell className="h-6 w-6" />,
-  "file-text": <FileText className="h-6 w-6" />,
-  "git-branch": <GitBranch className="h-6 w-6" />,
-  "git-merge": <GitMerge className="h-6 w-6" />,
-  sparkles: <Sparkles className="h-6 w-6" />,
-  "shield-check": <ShieldCheck className="h-6 w-6" />,
-  newspaper: <Newspaper className="h-6 w-6" />,
-  "clipboard-check": <ClipboardCheck className="h-6 w-6" />,
-  workflow: <Workflow className="h-6 w-6" />,
+  database: <Database className="h-5 w-5" />,
+  "bar-chart": <BarChart3 className="h-5 w-5" />,
+  bell: <Bell className="h-5 w-5" />,
+  "file-text": <FileText className="h-5 w-5" />,
+  "git-branch": <GitBranch className="h-5 w-5" />,
+  "git-merge": <GitMerge className="h-5 w-5" />,
+  sparkles: <Sparkles className="h-5 w-5" />,
+  "shield-check": <ShieldCheck className="h-5 w-5" />,
+  newspaper: <Newspaper className="h-5 w-5" />,
+  "clipboard-check": <ClipboardCheck className="h-5 w-5" />,
+  workflow: <Workflow className="h-5 w-5" />,
 };
 
 interface ProjectCardProps {
@@ -38,47 +38,47 @@ export default function ProjectCard({ project, metrics }: ProjectCardProps) {
   return (
     <Link
       href={`/projects/${project.slug}`}
-      className="group block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+      className={clsx(
+        "group relative block overflow-hidden rounded-xl bg-surface-elevated",
+        "border border-border-secondary",
+        "transition-all duration-200 ease-toss",
+        "hover:shadow-lg hover:border-border-primary"
+      )}
     >
-      {/* Color accent bar */}
-      <div className="h-1" style={{ backgroundColor: project.color }} />
-
-      <div className="p-5">
+      <div className="p-6">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div
-            className={clsx(
-              "flex h-10 w-10 items-center justify-center rounded-lg"
-            )}
+            className="flex h-9 w-9 items-center justify-center rounded-lg"
             style={{
-              backgroundColor: `${project.color}15`,
+              backgroundColor: `${project.color}12`,
               color: project.color,
             }}
           >
-            {ICON_MAP[project.icon] || <Database className="h-6 w-6" />}
+            {ICON_MAP[project.icon] || <Database className="h-5 w-5" />}
           </div>
           {project.project_type === "n8n" && (
-            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+            <span className="rounded-sm bg-positive-bg px-2 py-0.5 text-caption-2 font-medium text-positive">
               n8n
             </span>
           )}
         </div>
 
         {/* Title and description */}
-        <h3 className="mt-3 text-base font-semibold text-gray-900 group-hover:text-primary-600">
+        <h3 className="mt-3 text-title-3 text-text-primary transition-colors duration-150 group-hover:text-brand">
           {project.name}
         </h3>
-        <p className="mt-1 line-clamp-2 text-sm text-gray-500">
+        <p className="mt-1 line-clamp-2 text-body-2 text-text-secondary">
           {project.description}
         </p>
 
         {/* Metrics */}
         {metrics && Object.keys(metrics).length > 0 && (
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border-secondary pt-4">
             {Object.entries(metrics).map(([label, value]) => (
               <div key={label}>
-                <p className="text-xs text-gray-500">{label}</p>
-                <p className="text-sm font-semibold text-gray-900">{value}</p>
+                <p className="text-caption-1 text-text-tertiary">{label}</p>
+                <p className="mt-0.5 text-body-1 font-semibold text-text-primary">{value}</p>
               </div>
             ))}
           </div>

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.config import settings
 from app.shared.models.base import Base
 from app.shared.models.n8n_execution import N8nExecutionModel  # noqa: F401
+from app.shared.models.user import User  # noqa: F401
 
 logger = logging.getLogger("alembic.env")
 

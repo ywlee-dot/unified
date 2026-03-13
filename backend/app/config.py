@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     # Auth
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    AUTH_REQUIRED: bool = False
+    COOKIE_SECURE: bool = False
 
     model_config = SettingsConfigDict(env_file=".env")
 

@@ -35,16 +35,16 @@ export default function DataTable<T>({
   }
 
   return (
-    <div className={clsx("overflow-hidden rounded-lg border border-gray-200 bg-white", className)}>
+    <div className={clsx("overflow-hidden", className)}>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
+        <table className="min-w-full">
+          <thead>
+            <tr className="border-b border-border-secondary">
               {columns.map((col) => (
                 <th
                   key={col.key}
                   className={clsx(
-                    "px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500",
+                    "px-6 py-3 text-left text-[12px] font-semibold text-text-tertiary",
                     col.className
                   )}
                 >
@@ -53,14 +53,17 @@ export default function DataTable<T>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 bg-white">
+          <tbody>
             {data.map((item) => (
-              <tr key={keyExtractor(item)} className="hover:bg-gray-50">
+              <tr
+                key={keyExtractor(item)}
+                className="border-b border-border-secondary transition-colors duration-150 last:border-0 hover:bg-surface-secondary/60"
+              >
                 {columns.map((col) => (
                   <td
                     key={col.key}
                     className={clsx(
-                      "whitespace-nowrap px-4 py-3 text-sm text-gray-700",
+                      "whitespace-nowrap px-6 py-4 text-[14px] text-text-primary",
                       col.className
                     )}
                   >
@@ -76,26 +79,26 @@ export default function DataTable<T>({
       </div>
 
       {page !== undefined && totalPages !== undefined && totalPages > 1 && onPageChange && (
-        <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3">
-          <span className="text-sm text-gray-700">
+        <div className="flex items-center justify-between border-t border-border-secondary px-6 py-3">
+          <span className="text-[12px] text-text-tertiary">
             {page} / {totalPages} 페이지
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1}
-              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-md bg-surface-secondary px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors duration-150 hover:bg-surface-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3.5 w-3.5" />
               이전
             </button>
             <button
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages}
-              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-md bg-surface-secondary px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors duration-150 hover:bg-surface-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
               다음
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>

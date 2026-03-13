@@ -12,7 +12,7 @@ export default function LoadingSpinner({
   return (
     <div
       className={clsx(
-        "inline-block animate-spin rounded-full border-2 border-current border-t-transparent text-primary-500",
+        "inline-block animate-spin rounded-full border-2 border-brand-light border-t-brand",
         {
           "h-4 w-4": size === "sm",
           "h-8 w-8": size === "md",

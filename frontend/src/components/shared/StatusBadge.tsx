@@ -20,23 +20,23 @@ type StatusType =
   | "inactive";
 
 const STATUS_STYLES: Record<string, string> = {
-  active: "bg-green-100 text-green-800",
-  success: "bg-green-100 text-green-800",
-  completed: "bg-blue-100 text-blue-800",
-  delivered: "bg-blue-100 text-blue-800",
-  published: "bg-blue-100 text-blue-800",
-  running: "bg-yellow-100 text-yellow-800",
-  pending: "bg-yellow-100 text-yellow-800",
-  queued: "bg-yellow-100 text-yellow-800",
-  triggered: "bg-yellow-100 text-yellow-800",
-  paused: "bg-gray-100 text-gray-800",
-  inactive: "bg-gray-100 text-gray-800",
-  draft: "bg-gray-100 text-gray-800",
-  archived: "bg-gray-100 text-gray-800",
-  error: "bg-red-100 text-red-800",
-  failed: "bg-red-100 text-red-800",
-  sent: "bg-indigo-100 text-indigo-800",
-  review: "bg-purple-100 text-purple-800",
+  active: "bg-positive-bg text-positive",
+  success: "bg-positive-bg text-positive",
+  completed: "bg-positive-bg text-positive",
+  delivered: "bg-positive-bg text-positive",
+  published: "bg-positive-bg text-positive",
+  running: "bg-warning-bg text-warning",
+  pending: "bg-warning-bg text-warning",
+  triggered: "bg-brand-light text-brand",
+  queued: "bg-brand-light text-brand",
+  sent: "bg-brand-light text-brand",
+  paused: "bg-surface-secondary text-text-tertiary",
+  inactive: "bg-surface-secondary text-text-tertiary",
+  draft: "bg-surface-secondary text-text-tertiary",
+  archived: "bg-surface-secondary text-text-tertiary",
+  error: "bg-negative-bg text-negative",
+  failed: "bg-negative-bg text-negative",
+  review: "bg-brand-light text-brand",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -65,13 +65,13 @@ interface StatusBadgeProps {
 }
 
 export default function StatusBadge({ status, className }: StatusBadgeProps) {
-  const style = STATUS_STYLES[status] || "bg-gray-100 text-gray-800";
+  const style = STATUS_STYLES[status] || "bg-surface-secondary text-text-tertiary";
   const label = STATUS_LABELS[status] || status;
 
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-sm px-2 py-0.5 text-caption-2 font-medium",
         style,
         className
       )}
