@@ -48,7 +48,7 @@ services:
       dockerfile: Dockerfile
       target: runner
     ports: []  # Nginx가 프록시
-    volumes: []  # 프로덕션에서는 소스 마운트 제거
+    volumes: !override []  # 프로덕션에서는 소스 마운트 완전 제거
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       INTERNAL_API_URL: http://backend:8000/api
