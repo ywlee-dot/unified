@@ -7,8 +7,6 @@ import { clsx } from "clsx";
 import {
   LayoutDashboard,
   FileText,
-  GitBranch,
-  GitMerge,
   Sparkles,
   ShieldCheck,
   Newspaper,
@@ -21,21 +19,10 @@ import {
   Database,
   Blocks,
   PanelLeft,
+  Search,
+  BookOpen,
+  BrainCircuit,
 } from "lucide-react";
-import { useProjects } from "@/hooks/useProjects";
-import type { Project } from "@/lib/types";
-
-const ICON_MAP: Record<string, React.ReactNode> = {
-  sparkles: <Sparkles className="h-[18px] w-[18px]" />,
-  "shield-check": <ShieldCheck className="h-[18px] w-[18px]" />,
-  newspaper: <Newspaper className="h-[18px] w-[18px]" />,
-  "clipboard-check": <ClipboardCheck className="h-[18px] w-[18px]" />,
-  "file-text": <FileText className="h-[18px] w-[18px]" />,
-  "git-branch": <GitBranch className="h-[18px] w-[18px]" />,
-  "git-merge": <GitMerge className="h-[18px] w-[18px]" />,
-  workflow: <Workflow className="h-[18px] w-[18px]" />,
-  database: <Database className="h-[18px] w-[18px]" />,
-};
 
 interface SidebarItem {
   label: string;
@@ -43,43 +30,45 @@ interface SidebarItem {
   icon: React.ReactNode;
 }
 
-const FALLBACK_STANDARD: SidebarItem[] = [
-  { label: "데이터셋 설명 생성", path: "/projects/dataset-summary", icon: <Sparkles className="h-[18px] w-[18px]" /> },
-  { label: "개방 가능 여부 판단", path: "/projects/open-data-analyzer", icon: <ShieldCheck className="h-[18px] w-[18px]" /> },
-  { label: "정부 뉴스 크롤링", path: "/projects/gov-news-crawler", icon: <Newspaper className="h-[18px] w-[18px]" /> },
-  { label: "평가편람", path: "/projects/evaluation-rag", icon: <ClipboardCheck className="h-[18px] w-[18px]" /> },
-];
-
-const FALLBACK_N8N: SidebarItem[] = [
-  { label: "리포트 생성기", path: "/projects/report-generator", icon: <FileText className="h-[18px] w-[18px]" /> },
-  { label: "데이터 파이프라인", path: "/projects/data-pipeline", icon: <GitMerge className="h-[18px] w-[18px]" /> },
-  { label: "텍스트 요약", path: "/projects/summarize", icon: <FileText className="h-[18px] w-[18px]" /> },
-  { label: "값진단 사전예외처리", path: "/projects/test1", icon: <Workflow className="h-[18px] w-[18px]" /> },
-  { label: "공유데이터 제공 노력", path: "/projects/effort-public-data", icon: <Database className="h-[18px] w-[18px]" /> },
-];
-
-function projectToSidebarItem(project: Project): SidebarItem {
-  return {
-    label: project.name,
-    path: `/projects/${project.slug}`,
-    icon: ICON_MAP[project.icon] || <Database className="h-[18px] w-[18px]" />,
-  };
+interface SidebarSection {
+  title: string;
+  items: SidebarItem[];
 }
+
+const SECTIONS: SidebarSection[] = [
+  {
+    title: "개방",
+    items: [
+      { label: "개방 가능 여부 판단", path: "/projects/open-data-analyzer", icon: <ShieldCheck className="h-[18px] w-[18px]" /> },
+      { label: "개방데이터 설명/키워드", path: "/projects/dataset-summary", icon: <Sparkles className="h-[18px] w-[18px]" /> },
+      { label: "민간 우수사례 검색", path: "/projects/best-practice-search", icon: <Search className="h-[18px] w-[18px]" /> },
+    ],
+  },
+  {
+    title: "품질",
+    items: [
+      { label: "값진단 제외 대상", path: "/projects/test1", icon: <Workflow className="h-[18px] w-[18px]" /> },
+      { label: "업무 규칙 생성", path: "/projects/business-rule-gen", icon: <ClipboardCheck className="h-[18px] w-[18px]" /> },
+      { label: "평가편람", path: "/projects/evaluation-rag", icon: <BookOpen className="h-[18px] w-[18px]" /> },
+    ],
+  },
+  {
+    title: "데이터기반행정",
+    items: [
+      { label: "AI 도입 활용 사례 보고서", path: "/projects/ai-case-report", icon: <BrainCircuit className="h-[18px] w-[18px]" /> },
+      { label: "공유데이터 제공 노력", path: "/projects/effort-public-data", icon: <Database className="h-[18px] w-[18px]" /> },
+      { label: "정부 뉴스 크롤링", path: "/projects/gov-news-crawler", icon: <Newspaper className="h-[18px] w-[18px]" /> },
+    ],
+  },
+];
+
+const ALL_ITEMS = SECTIONS.flatMap((s) => s.items);
 
 function SidebarContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = useState(false);
   const [archExpanded, setArchExpanded] = useState(false);
-  const { projects } = useProjects();
-
-  const standardProjects = projects.length > 0
-    ? projects.filter((p) => p.project_type === "standard").map(projectToSidebarItem)
-    : FALLBACK_STANDARD;
-
-  const n8nProjects = projects.length > 0
-    ? projects.filter((p) => p.project_type === "n8n").map(projectToSidebarItem)
-    : FALLBACK_N8N;
 
   const isActive = (path: string) => {
     if (path.startsWith("/architecture?project=")) {
@@ -105,14 +94,12 @@ function SidebarContent() {
         style={active ? { backgroundColor: "rgba(49, 130, 246, 0.12)" } : undefined}
         title={collapsed ? item.label : undefined}
       >
-        {/* Active left accent bar */}
         {active && (
           <span
             className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-sidebar-active"
             aria-hidden="true"
           />
         )}
-        {/* Icon with active color */}
         <span className={clsx(active ? "text-sidebar-active" : "")}>
           {item.icon}
         </span>
@@ -130,7 +117,7 @@ function SidebarContent() {
         collapsed ? "w-16" : "w-60"
       )}
     >
-      {/* Logo area */}
+      {/* Logo */}
       <div
         className={clsx(
           "flex items-center gap-2 px-4 py-5",
@@ -179,29 +166,22 @@ function SidebarContent() {
           );
         })()}
 
-        {/* Standard Projects section */}
-        {!collapsed && (
-          <p className="mt-6 mb-1 px-3 text-overline font-semibold uppercase tracking-widest text-sidebar-text">
-            프로젝트
-          </p>
-        )}
-        {collapsed && <div className="mt-4" />}
-        <div className="space-y-0.5">
-          {standardProjects.map(renderItem)}
-        </div>
+        {/* Sections */}
+        {SECTIONS.map((section) => (
+          <div key={section.title}>
+            {!collapsed && (
+              <p className="mt-6 mb-1 px-3 text-overline font-semibold uppercase tracking-widest text-sidebar-text">
+                {section.title}
+              </p>
+            )}
+            {collapsed && <div className="mt-4" />}
+            <div className="space-y-0.5">
+              {section.items.map(renderItem)}
+            </div>
+          </div>
+        ))}
 
-        {/* n8n Projects section */}
-        {!collapsed && (
-          <p className="mt-6 mb-1 px-3 text-overline font-semibold uppercase tracking-widest text-sidebar-text">
-            n8n 파이프라인
-          </p>
-        )}
-        {collapsed && <div className="mt-4" />}
-        <div className="space-y-0.5">
-          {n8nProjects.map(renderItem)}
-        </div>
-
-        {/* Architecture section */}
+        {/* Architecture */}
         {!collapsed && (
           <button
             onClick={() => setArchExpanded(!archExpanded)}
@@ -234,7 +214,7 @@ function SidebarContent() {
         )}
         {archExpanded && !collapsed && (
           <div className="space-y-0.5">
-            {[...standardProjects, ...n8nProjects].map((item) => {
+            {ALL_ITEMS.map((item) => {
               const slug = item.path.replace("/projects/", "");
               return renderItem({
                 label: item.label,
@@ -248,10 +228,7 @@ function SidebarContent() {
 
       {/* Footer */}
       <div className="px-3 pb-4 pt-2">
-        {/* Divider */}
         <div className="mb-2 h-px bg-white/5" />
-
-        {/* Settings */}
         <Link
           href="/settings"
           className={clsx(
@@ -263,8 +240,6 @@ function SidebarContent() {
           <Settings className="h-[18px] w-[18px] shrink-0" />
           {!collapsed && <span>설정</span>}
         </Link>
-
-        {/* Collapse toggle */}
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={clsx(
