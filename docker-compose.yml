@@ -65,6 +65,7 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       MOCK_MODE: ${MOCK_MODE:-0}
       PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+      DATA_GO_KR_API_KEY: ${DATA_GO_KR_API_KEY:-}
       PINECONE_INDEX_NAME: ${PINECONE_INDEX_NAME:-evaluation-guidelines}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     depends_on:

@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # CORS (comma-separated origins)
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    # Bid Monitor (나라장터)
+    DATA_GO_KR_API_KEY: str | None = None
+
     # Auth
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60

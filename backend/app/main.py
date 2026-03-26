@@ -42,8 +42,22 @@ async def lifespan(app: FastAPI):
             "Set a strong, random SECRET_KEY environment variable."
         )
     logger.info("Starting Unified Workspace API")
+
+    # Bid Monitor 스케줄러 시작
+    try:
+        from app.projects.bid_monitor.core.scheduler import start_scheduler, stop_scheduler
+        await start_scheduler()
+    except Exception:
+        logger.warning("입찰공고 모니터링 스케줄러 시작 실패 (무시)", exc_info=True)
+
     yield
+
     # Shutdown
+    try:
+        from app.projects.bid_monitor.core.scheduler import stop_scheduler
+        await stop_scheduler()
+    except Exception:
+        pass
     logger.info("Shutting down — disposing DB engine")
     await dispose_engine()
 

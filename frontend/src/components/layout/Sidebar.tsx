@@ -22,6 +22,7 @@ import {
   Search,
   BookOpen,
   BrainCircuit,
+  Bell,
 } from "lucide-react";
 
 interface SidebarItem {
@@ -58,6 +59,12 @@ const SECTIONS: SidebarSection[] = [
       { label: "AI 도입 활용 사례 보고서", path: "/projects/ai-case-report", icon: <BrainCircuit className="h-[18px] w-[18px]" /> },
       { label: "공유데이터 제공 노력", path: "/projects/effort-public-data", icon: <Database className="h-[18px] w-[18px]" /> },
       { label: "정부 뉴스 크롤링", path: "/projects/gov-news-crawler", icon: <Newspaper className="h-[18px] w-[18px]" /> },
+    ],
+  },
+  {
+    title: "유틸",
+    items: [
+      { label: "입찰공고 모니터링", path: "/projects/bid-monitor", icon: <Bell className="h-[18px] w-[18px]" /> },
     ],
   },
 ];

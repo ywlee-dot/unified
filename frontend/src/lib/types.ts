@@ -286,3 +286,73 @@ export interface EvaluationRagStats {
   pinecone_connected: boolean;
   supported_formats: string[];
 }
+
+// --- Bid Monitor ---
+
+export interface BidKeyword {
+  id: string;
+  keyword: string;
+  bid_types: string[];
+  is_active: boolean;
+  last_checked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BidNotice {
+  id: string;
+  bid_ntce_no: string;
+  bid_ntce_ord: string;
+  bid_ntce_nm: string;
+  ntce_instt_nm: string | null;
+  dminstt_nm: string | null;
+  bid_ntce_dt: string | null;
+  bid_clse_dt: string | null;
+  openg_dt: string | null;
+  presmpt_prce: number | null;
+  asign_bdgt_amt: number | null;
+  cntrct_cncls_mthd_nm: string | null;
+  bid_type: string;
+  ntce_kind_nm: string | null;
+  bid_ntce_url: string | null;
+  bid_ntce_dtl_url: string | null;
+  created_at: string;
+}
+
+export interface BidAlert {
+  id: string;
+  keyword_id: string;
+  notice_id: string;
+  channel: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+  keyword_text: string | null;
+  notice_title: string | null;
+}
+
+export interface BidCheckRun {
+  id: string;
+  status: "running" | "completed" | "failed";
+  trigger_type: string;
+  statistics: Record<string, number>;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface BidMonitorConfig {
+  discord_webhook_url: string | null;
+  check_interval_minutes: number;
+  data_go_kr_api_key_set: boolean;
+}
+
+export interface BidMonitorStats {
+  total_keywords: number;
+  active_keywords: number;
+  total_notices: number;
+  total_alerts: number;
+  recent_runs: BidCheckRun[];
+  scheduler_running: boolean;
+}
