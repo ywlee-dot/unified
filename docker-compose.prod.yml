@@ -8,10 +8,7 @@ services:
     ports: []  # 외부 노출 차단
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
+    image: ghcr.io/ywlee-dot/unified-backend:production
     ports: []  # Nginx가 프록시하므로 외부 노출 불필요
     volumes:
       - uploads_data:/app/uploads
@@ -43,10 +40,7 @@ services:
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: runner
+    image: ghcr.io/ywlee-dot/unified-frontend:production
     ports: []  # Nginx가 프록시
     volumes: !override []  # 프로덕션에서는 소스 마운트 완전 제거
     environment:
