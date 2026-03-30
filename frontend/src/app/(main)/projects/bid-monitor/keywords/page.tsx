@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { BidKeyword } from "@/lib/types";
+import { useState, useEffect, useRef } from "react";
+import { BidKeyword, FilterConditions } from "@/lib/types";
 
 const API_BASE = "/api";
 
@@ -10,6 +10,27 @@ const BID_TYPE_OPTIONS = [
   { value: "services", label: "용역", color: "#8B5CF6", bg: "bg-purple-50", text: "text-purple-600" },
   { value: "construction", label: "공사", color: "#F59E0B", bg: "bg-amber-50", text: "text-amber-600" },
 ];
+
+const LRG_CLSFC_SUGGESTIONS = [
+  "ICT 서비스", "연구조사서비스", "기술용역", "교육 및 전문직종/기술서비스",
+  "매체제작", "디자인", "홍보/마케팅 서비스", "시설물관리 및 청소서비스",
+  "여행*숙박*음식*운송 및 보험서비스", "임대*위탁 및 수리서비스",
+  "폐기물 처리 및 재활용서비스", "행사관리 및 기타 사업 지원서비스",
+];
+const CLSFC_SUGGESTIONS = [
+  "데이터서비스", "정보시스템개발서비스", "소프트웨어개발서비스", "정보보안서비스",
+  "클라우드서비스", "정보화전략계획서비스", "정보시스템유지관리서비스",
+  "정보인프라구축서비스", "정보시스템감리서비스",
+];
+const MID_CLSFC_SUGGESTIONS = ["DB구축 및 자료입력", "학술연구서비스"];
+const PRODUCT_CLSFC_SUGGESTIONS = ["교육용소프트웨어", "그래픽소프트웨어", "AI서버"];
+const BID_METHOD_SUGGESTIONS = ["전자입찰", "전자시담", "전자시담(2인 이상)", "직찰", "직찰/우편"];
+const SUCCESS_BID_SUGGESTIONS = ["협상에의한계약", "수의시담", "규격가격동시입찰", "최저가낙찰제", "소액수의견적"];
+const REGION_SUGGESTIONS = [
+  "서울특별시", "경기도", "부산광역시", "대전광역시",
+  "세종특별자치시", "대구광역시", "인천광역시", "광주광역시",
+];
+const RGST_TYPE_SUGGESTIONS = ["조달청 또는 나라장터 자체 공고건"];
 
 function BidTypeTag({ type }: { type: string }) {
   const opt = BID_TYPE_OPTIONS.find((o) => o.value === type);
@@ -21,6 +42,260 @@ function BidTypeTag({ type }: { type: string }) {
   );
 }
 
+// Tag input component used in the filter modal
+function TagInput({
+  tags,
+  onAdd,
+  onRemove,
+  placeholder,
+  suggestions,
+}: {
+  tags: string[];
+  onAdd: (tag: string) => void;
+  onRemove: (tag: string) => void;
+  placeholder: string;
+  suggestions?: string[];
+}) {
+  const [inputVal, setInputVal] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleAdd() {
+    const trimmed = inputVal.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      onAdd(trimmed);
+    }
+    setInputVal("");
+    inputRef.current?.focus();
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAdd();
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className="flex-1 rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+        <button
+          type="button"
+          onClick={handleAdd}
+          disabled={!inputVal.trim()}
+          className="h-9 rounded-md bg-brand px-4 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:opacity-40"
+        >
+          추가
+        </button>
+      </div>
+
+      {/* Suggestion chips */}
+      {suggestions && suggestions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => { if (!tags.includes(s)) onAdd(s); }}
+              disabled={tags.includes(s)}
+              className={`rounded-sm px-2 py-0.5 text-xs font-medium transition-colors ${
+                tags.includes(s)
+                  ? "bg-brand/10 text-brand cursor-default"
+                  : "bg-surface-secondary text-text-secondary hover:bg-brand/10 hover:text-brand"
+              }`}
+            >
+              {tags.includes(s) ? "✓ " : "+ "}{s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tag list */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 rounded-sm bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand"
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={() => onRemove(tag)}
+                className="ml-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-brand/60 transition-colors hover:bg-brand/20 hover:text-brand"
+                aria-label={`${tag} 제거`}
+              >
+                <svg viewBox="0 0 12 12" fill="currentColor" className="h-2.5 w-2.5">
+                  <path d="M2.22 2.22a.75.75 0 011.06 0L6 4.94l2.72-2.72a.75.75 0 111.06 1.06L7.06 6l2.72 2.72a.75.75 0 11-1.06 1.06L6 7.06l-2.72 2.72a.75.75 0 01-1.06-1.06L4.94 6 2.22 3.28a.75.75 0 010-1.06z" />
+                </svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Filter state shape used by the modal form ----
+interface FilterFormState {
+  title_keywords: string[];
+  title_exclude: string[];
+  institutions: string[];
+  lrg_clsfc: string[];
+  clsfc: string[];
+  mid_clsfc: string[];
+  product_clsfc: string[];
+  success_bid_method: string[];
+  bid_method: string[];
+  region: string[];
+  rgst_type: string[];
+  info_biz_yn: "전체" | "Y" | "N";
+  re_ntce_yn: "전체" | "Y" | "N";
+  indstryty_lmt_yn: "전체" | "Y" | "N";
+  prdct_clsfc_lmt_yn: "전체" | "Y" | "N";
+  dsgnt_cmpt_yn: "전체" | "Y" | "N";
+  arslt_cmpt_yn: "전체" | "Y" | "N";
+  ppsw_gnrl_srvce_yn: "전체" | "Y" | "N";
+  price_min: string;
+  price_max: string;
+  match_mode: "any" | "all";
+}
+
+const defaultFilterForm: FilterFormState = {
+  title_keywords: [],
+  title_exclude: [],
+  institutions: [],
+  lrg_clsfc: [],
+  clsfc: [],
+  mid_clsfc: [],
+  product_clsfc: [],
+  success_bid_method: [],
+  bid_method: [],
+  region: [],
+  rgst_type: [],
+  info_biz_yn: "전체",
+  re_ntce_yn: "전체",
+  indstryty_lmt_yn: "전체",
+  prdct_clsfc_lmt_yn: "전체",
+  dsgnt_cmpt_yn: "전체",
+  arslt_cmpt_yn: "전체",
+  ppsw_gnrl_srvce_yn: "전체",
+  price_min: "",
+  price_max: "",
+  match_mode: "any",
+};
+
+function filterConditionsToForm(fc: FilterConditions | null | undefined): FilterFormState {
+  if (!fc) return defaultFilterForm;
+  return {
+    title_keywords: fc.title_keywords ?? [],
+    title_exclude: fc.title_exclude ?? [],
+    institutions: fc.institutions ?? [],
+    lrg_clsfc: fc.categories?.pubPrcrmntLrgClsfcNm ?? [],
+    clsfc: fc.categories?.pubPrcrmntClsfcNm ?? [],
+    mid_clsfc: fc.categories?.pubPrcrmntMidClsfcNm ?? [],
+    product_clsfc: fc.categories?.dtilPrdctClsfcNoNm ?? [],
+    success_bid_method: fc.categories?.sucsfbidMthdNm ?? [],
+    bid_method: fc.categories?.bidMethdNm ?? [],
+    region: fc.categories?.cnstrtsiteRgnNm ?? [],
+    rgst_type: fc.categories?.rgstTyNm ?? [],
+    info_biz_yn: (fc.flags?.infoBizYn as "전체" | "Y" | "N") ?? "전체",
+    re_ntce_yn: (fc.flags?.reNtceYn as "전체" | "Y" | "N") ?? "전체",
+    indstryty_lmt_yn: (fc.flags?.indstrytyLmtYn as "전체" | "Y" | "N") ?? "전체",
+    prdct_clsfc_lmt_yn: (fc.flags?.prdctClsfcLmtYn as "전체" | "Y" | "N") ?? "전체",
+    dsgnt_cmpt_yn: (fc.flags?.dsgntCmptYn as "전체" | "Y" | "N") ?? "전체",
+    arslt_cmpt_yn: (fc.flags?.arsltCmptYn as "전체" | "Y" | "N") ?? "전체",
+    ppsw_gnrl_srvce_yn: (fc.flags?.ppswGnrlSrvceYn as "전체" | "Y" | "N") ?? "전체",
+    price_min: fc.price_range?.min != null ? String(fc.price_range.min) : "",
+    price_max: fc.price_range?.max != null ? String(fc.price_range.max) : "",
+    match_mode: fc.match_mode ?? "any",
+  };
+}
+
+function formToFilterConditions(form: FilterFormState): FilterConditions {
+  const minVal = form.price_min.replace(/,/g, "");
+  const maxVal = form.price_max.replace(/,/g, "");
+
+  const flags: Record<string, string> = {};
+  if (form.info_biz_yn !== "전체") flags.infoBizYn = form.info_biz_yn;
+  if (form.re_ntce_yn !== "전체") flags.reNtceYn = form.re_ntce_yn;
+  if (form.indstryty_lmt_yn !== "전체") flags.indstrytyLmtYn = form.indstryty_lmt_yn;
+  if (form.prdct_clsfc_lmt_yn !== "전체") flags.prdctClsfcLmtYn = form.prdct_clsfc_lmt_yn;
+  if (form.dsgnt_cmpt_yn !== "전체") flags.dsgntCmptYn = form.dsgnt_cmpt_yn;
+  if (form.arslt_cmpt_yn !== "전체") flags.arsltCmptYn = form.arslt_cmpt_yn;
+  if (form.ppsw_gnrl_srvce_yn !== "전체") flags.ppswGnrlSrvceYn = form.ppsw_gnrl_srvce_yn;
+
+  return {
+    title_keywords: form.title_keywords,
+    title_exclude: form.title_exclude,
+    institutions: form.institutions,
+    categories: {
+      pubPrcrmntLrgClsfcNm: form.lrg_clsfc,
+      pubPrcrmntClsfcNm: form.clsfc,
+      pubPrcrmntMidClsfcNm: form.mid_clsfc,
+      dtilPrdctClsfcNoNm: form.product_clsfc,
+      sucsfbidMthdNm: form.success_bid_method,
+      bidMethdNm: form.bid_method,
+      cnstrtsiteRgnNm: form.region,
+      rgstTyNm: form.rgst_type,
+    },
+    flags,
+    price_range: {
+      min: minVal !== "" ? Number(minVal) : null,
+      max: maxVal !== "" ? Number(maxVal) : null,
+    },
+    match_mode: form.match_mode,
+  };
+}
+
+function hasFilterSet(fc: FilterConditions | null | undefined): boolean {
+  if (!fc) return false;
+  if ((fc.title_keywords ?? []).length > 0) return true;
+  if ((fc.title_exclude ?? []).length > 0) return true;
+  if ((fc.institutions ?? []).length > 0) return true;
+  if ((fc.categories?.pubPrcrmntLrgClsfcNm ?? []).length > 0) return true;
+  if ((fc.categories?.pubPrcrmntClsfcNm ?? []).length > 0) return true;
+  if ((fc.categories?.pubPrcrmntMidClsfcNm ?? []).length > 0) return true;
+  if ((fc.categories?.dtilPrdctClsfcNoNm ?? []).length > 0) return true;
+  if ((fc.categories?.sucsfbidMthdNm ?? []).length > 0) return true;
+  if ((fc.categories?.bidMethdNm ?? []).length > 0) return true;
+  if ((fc.categories?.cnstrtsiteRgnNm ?? []).length > 0) return true;
+  if ((fc.categories?.rgstTyNm ?? []).length > 0) return true;
+  if (fc.flags && Object.keys(fc.flags).length > 0) return true;
+  if (fc.price_range?.min != null || fc.price_range?.max != null) return true;
+  return false;
+}
+
+function formatPrice(raw: string): string {
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  return Number(digits).toLocaleString("ko-KR");
+}
+
+function priceHint(raw: string): string {
+  const n = Number(raw.replace(/,/g, ""));
+  if (!n) return "";
+  if (n >= 100_000_000) {
+    const uk = (n / 100_000_000).toFixed(2).replace(/\.?0+$/, "");
+    return `≈ ${uk}억원`;
+  }
+  if (n >= 10_000) {
+    const man = (n / 10_000).toFixed(1).replace(/\.?0+$/, "");
+    return `≈ ${man}만원`;
+  }
+  return `${n.toLocaleString("ko-KR")}원`;
+}
+
+// ---- Add keyword form ----
 interface AddKeywordForm {
   keyword: string;
   bid_types: string[];
@@ -33,10 +308,18 @@ export default function BidKeywordsPage() {
   const [keywords, setKeywords] = useState<BidKeyword[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Add keyword modal
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<AddKeywordForm>(defaultForm);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Filter modal
+  const [filterTarget, setFilterTarget] = useState<BidKeyword | null>(null);
+  const [filterForm, setFilterForm] = useState<FilterFormState>(defaultFilterForm);
+  const [filterSubmitting, setFilterSubmitting] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
 
   async function fetchKeywords() {
     try {
@@ -130,8 +413,77 @@ export default function BidKeywordsPage() {
 
   function formatDate(dt: string | null) {
     if (!dt) return "—";
-    const d = new Date(dt);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return new Date(dt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+
+  function openFilterModal(kw: BidKeyword) {
+    setFilterTarget(kw);
+    setFilterForm(filterConditionsToForm(kw.filter_conditions));
+    setFilterError(null);
+  }
+
+  function closeFilterModal() {
+    setFilterTarget(null);
+    setFilterForm(defaultFilterForm);
+    setFilterError(null);
+  }
+
+  async function handleSaveFilter() {
+    if (!filterTarget) return;
+    setFilterSubmitting(true);
+    setFilterError(null);
+    try {
+      const conditions = formToFilterConditions(filterForm);
+      const res = await fetch(`${API_BASE}/projects/bid-monitor/keywords/${filterTarget.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filter_conditions: conditions }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail ?? "필터 저장에 실패했습니다.");
+      }
+      closeFilterModal();
+      await fetchKeywords();
+    } catch (e) {
+      setFilterError(e instanceof Error ? e.message : "오류가 발생했습니다.");
+    } finally {
+      setFilterSubmitting(false);
+    }
+  }
+
+  async function handleClearFilter() {
+    if (!filterTarget) return;
+    setFilterSubmitting(true);
+    setFilterError(null);
+    try {
+      const res = await fetch(`${API_BASE}/projects/bid-monitor/keywords/${filterTarget.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filter_conditions: null }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("필터 초기화에 실패했습니다.");
+      setFilterForm(defaultFilterForm);
+      closeFilterModal();
+      await fetchKeywords();
+    } catch (e) {
+      setFilterError(e instanceof Error ? e.message : "오류가 발생했습니다.");
+    } finally {
+      setFilterSubmitting(false);
+    }
+  }
+
+  // ---- Helpers for filter form mutations ----
+  type TagField = "title_keywords" | "title_exclude" | "institutions" | "lrg_clsfc" | "clsfc" | "mid_clsfc" | "product_clsfc" | "success_bid_method" | "bid_method" | "region" | "rgst_type";
+
+  function addTag(field: TagField, tag: string) {
+    setFilterForm((f) => ({ ...f, [field]: [...f[field], tag] }));
+  }
+
+  function removeTag(field: TagField, tag: string) {
+    setFilterForm((f) => ({ ...f, [field]: f[field].filter((t: string) => t !== tag) }));
   }
 
   if (loading) {
@@ -190,6 +542,7 @@ export default function BidKeywordsPage() {
                 <tr className="border-b border-border-secondary bg-surface-primary">
                   <th className="px-6 py-3 text-left text-[12px] font-medium uppercase tracking-wide text-text-tertiary">키워드</th>
                   <th className="px-6 py-3 text-left text-[12px] font-medium uppercase tracking-wide text-text-tertiary">입찰 유형</th>
+                  <th className="px-6 py-3 text-left text-[12px] font-medium uppercase tracking-wide text-text-tertiary">필터</th>
                   <th className="px-6 py-3 text-left text-[12px] font-medium uppercase tracking-wide text-text-tertiary">마지막 점검</th>
                   <th className="px-6 py-3 text-left text-[12px] font-medium uppercase tracking-wide text-text-tertiary">활성</th>
                   <th className="px-6 py-3 text-left text-[12px] font-medium uppercase tracking-wide text-text-tertiary">작업</th>
@@ -208,6 +561,17 @@ export default function BidKeywordsPage() {
                             <BidTypeTag key={t} type={t} />
                           ))}
                         </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-3.5">
+                      {hasFilterSet(kw.filter_conditions) ? (
+                        <span className="rounded-sm bg-positive-bg px-2 py-0.5 text-xs font-medium text-positive">
+                          설정됨
+                        </span>
+                      ) : (
+                        <span className="rounded-sm bg-surface-secondary px-2 py-0.5 text-xs font-medium text-text-disabled">
+                          미설정
+                        </span>
                       )}
                     </td>
                     <td className="px-6 py-3.5 text-text-secondary">{formatDate(kw.last_checked_at)}</td>
@@ -229,12 +593,20 @@ export default function BidKeywordsPage() {
                       </button>
                     </td>
                     <td className="px-6 py-3.5">
-                      <button
-                        onClick={() => handleDelete(kw.id)}
-                        className="text-sm font-medium text-negative opacity-70 transition-opacity hover:opacity-100"
-                      >
-                        삭제
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => openFilterModal(kw)}
+                          className="text-sm font-medium text-brand opacity-80 transition-opacity hover:opacity-100"
+                        >
+                          설정
+                        </button>
+                        <button
+                          onClick={() => handleDelete(kw.id)}
+                          className="text-sm font-medium text-negative opacity-70 transition-opacity hover:opacity-100"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -244,7 +616,7 @@ export default function BidKeywordsPage() {
         )}
       </div>
 
-      {/* Add Keyword Modal */}
+      {/* ── Add Keyword Modal ─────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl bg-surface-elevated p-6 shadow-xl">
@@ -315,6 +687,13 @@ export default function BidKeywordsPage() {
                 </label>
               </div>
 
+              {/* Info note about filters */}
+              <div className="rounded-md border border-border-secondary bg-surface-secondary px-3 py-2.5">
+                <p className="text-[12px] text-text-tertiary">
+                  키워드 추가 후 목록에서 <span className="font-medium text-brand">설정</span> 버튼을 눌러 상세 필터 조건을 구성할 수 있습니다.
+                </p>
+              </div>
+
               {formError && (
                 <div className="rounded-md bg-negative-bg px-3 py-2 text-sm text-negative">
                   {formError}
@@ -338,6 +717,517 @@ export default function BidKeywordsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Filter Settings Modal ─────────────────────────── */}
+      {filterTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-surface-elevated shadow-xl">
+            {/* Modal Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-border-secondary px-6 py-5">
+              <div>
+                <h2 className="text-[20px] font-semibold text-text-primary">필터 설정</h2>
+                <p className="mt-0.5 text-sm text-text-tertiary">
+                  <span className="font-medium text-text-secondary">{filterTarget.keyword}</span> 키워드의 상세 필터 조건을 설정합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeFilterModal}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-surface-secondary hover:text-text-secondary"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body — scrollable */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="space-y-6">
+
+                {/* ── 공고명 ─────────────────────────────────── */}
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">공고명</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                {/* Section 1: 공고명 키워드 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">1</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">공고명 키워드</h3>
+                    <span className="text-[12px] text-text-disabled">(title_keywords)</span>
+                  </div>
+                  <p className="mb-2.5 text-[12px] text-text-tertiary">공고명에 반드시 포함되어야 할 키워드를 입력합니다.</p>
+                  <TagInput
+                    tags={filterForm.title_keywords}
+                    onAdd={(t) => addTag("title_keywords", t)}
+                    onRemove={(t) => removeTag("title_keywords", t)}
+                    placeholder="예: 데이터, 빅데이터, AI"
+                  />
+                </div>
+
+                <div className="border-t border-border-secondary" />
+
+                {/* Section 2: 제외 키워드 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">2</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">제외 키워드</h3>
+                    <span className="text-[12px] text-text-disabled">(title_exclude)</span>
+                  </div>
+                  <p className="mb-2.5 text-[12px] text-text-tertiary">공고명에 이 키워드가 포함된 경우 알림에서 제외합니다.</p>
+                  <TagInput
+                    tags={filterForm.title_exclude}
+                    onAdd={(t) => addTag("title_exclude", t)}
+                    onRemove={(t) => removeTag("title_exclude", t)}
+                    placeholder="예: 엑스선, 배수로, 상수도"
+                  />
+                </div>
+
+                {/* ── 기관 ─────────────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">기관</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                {/* Section 3: 공고기관/수요기관 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">3</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">공고기관 / 수요기관</h3>
+                    <span className="text-[12px] text-text-disabled">(institutions)</span>
+                  </div>
+                  <p className="mb-2.5 text-[12px] text-text-tertiary">공고기관 또는 수요기관 이름으로 필터링합니다 (부분 매칭).</p>
+                  <TagInput
+                    tags={filterForm.institutions}
+                    onAdd={(t) => addTag("institutions", t)}
+                    onRemove={(t) => removeTag("institutions", t)}
+                    placeholder="예: 조달청, 경상남도, 경북대학교"
+                  />
+                </div>
+
+                {/* ── 분류 체계 ───────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">분류 체계</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                {/* Section 4: 대분류 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">4</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">대분류</h3>
+                    <span className="text-[12px] text-text-disabled">(pubPrcrmntLrgClsfcNm)</span>
+                  </div>
+                  <TagInput
+                    tags={filterForm.lrg_clsfc}
+                    onAdd={(t) => addTag("lrg_clsfc", t)}
+                    onRemove={(t) => removeTag("lrg_clsfc", t)}
+                    placeholder="대분류 직접 입력"
+                    suggestions={LRG_CLSFC_SUGGESTIONS}
+                  />
+                </div>
+
+                <div className="border-t border-border-secondary" />
+
+                {/* Section 5: 분류명 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">5</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">분류명</h3>
+                    <span className="text-[12px] text-text-disabled">(pubPrcrmntClsfcNm)</span>
+                  </div>
+                  <TagInput
+                    tags={filterForm.clsfc}
+                    onAdd={(t) => addTag("clsfc", t)}
+                    onRemove={(t) => removeTag("clsfc", t)}
+                    placeholder="분류명 직접 입력"
+                    suggestions={CLSFC_SUGGESTIONS}
+                  />
+                </div>
+
+                <div className="border-t border-border-secondary" />
+
+                {/* Section 6: 중분류 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">6</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">중분류</h3>
+                    <span className="text-[12px] text-text-disabled">(pubPrcrmntMidClsfcNm)</span>
+                  </div>
+                  <TagInput
+                    tags={filterForm.mid_clsfc}
+                    onAdd={(t) => addTag("mid_clsfc", t)}
+                    onRemove={(t) => removeTag("mid_clsfc", t)}
+                    placeholder="예: DB구축 및 자료입력"
+                    suggestions={MID_CLSFC_SUGGESTIONS}
+                  />
+                </div>
+
+                <div className="border-t border-border-secondary" />
+
+                {/* Section 7: 세부품목분류 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">7</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">세부품목분류</h3>
+                    <span className="text-[12px] text-text-disabled">(dtilPrdctClsfcNoNm)</span>
+                  </div>
+                  <TagInput
+                    tags={filterForm.product_clsfc}
+                    onAdd={(t) => addTag("product_clsfc", t)}
+                    onRemove={(t) => removeTag("product_clsfc", t)}
+                    placeholder="예: AI서버"
+                    suggestions={PRODUCT_CLSFC_SUGGESTIONS}
+                  />
+                </div>
+
+                {/* ── 입찰 정보 ───────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">입찰 정보</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                {/* Section 8: 낙찰방법 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">8</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">낙찰방법</h3>
+                    <span className="text-[12px] text-text-disabled">(sucsfbidMthdNm)</span>
+                  </div>
+                  <TagInput
+                    tags={filterForm.success_bid_method}
+                    onAdd={(t) => addTag("success_bid_method", t)}
+                    onRemove={(t) => removeTag("success_bid_method", t)}
+                    placeholder="예: 협상에의한계약"
+                    suggestions={SUCCESS_BID_SUGGESTIONS}
+                  />
+                </div>
+
+                <div className="border-t border-border-secondary" />
+
+                {/* Section 9: 입찰방법 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">9</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">입찰방법</h3>
+                    <span className="text-[12px] text-text-disabled">(bidMethdNm)</span>
+                  </div>
+                  <TagInput
+                    tags={filterForm.bid_method}
+                    onAdd={(t) => addTag("bid_method", t)}
+                    onRemove={(t) => removeTag("bid_method", t)}
+                    placeholder="예: 전자입찰"
+                    suggestions={BID_METHOD_SUGGESTIONS}
+                  />
+                </div>
+
+                <div className="border-t border-border-secondary" />
+
+                {/* Section 10: 등록유형 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">10</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">등록유형</h3>
+                    <span className="text-[12px] text-text-disabled">(rgstTyNm)</span>
+                  </div>
+                  <TagInput
+                    tags={filterForm.rgst_type}
+                    onAdd={(t) => addTag("rgst_type", t)}
+                    onRemove={(t) => removeTag("rgst_type", t)}
+                    placeholder="예: 조달청 또는 나라장터 자체 공고건"
+                    suggestions={RGST_TYPE_SUGGESTIONS}
+                  />
+                </div>
+
+                {/* ── 지역 ─────────────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">지역</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                {/* Section 11: 지역 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">11</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">지역</h3>
+                    <span className="text-[12px] text-text-disabled">(cnstrtsiteRgnNm)</span>
+                  </div>
+                  <TagInput
+                    tags={filterForm.region}
+                    onAdd={(t) => addTag("region", t)}
+                    onRemove={(t) => removeTag("region", t)}
+                    placeholder="예: 서울특별시"
+                    suggestions={REGION_SUGGESTIONS}
+                  />
+                </div>
+
+                {/* ── 플래그 필터 ─────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">플래그 필터</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                {/* Section 12: 플래그 필터 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">12</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">플래그 필터</h3>
+                    <span className="text-[12px] text-text-disabled">(flags)</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-[12px] text-text-tertiary">정보화사업</label>
+                      <select
+                        value={filterForm.info_biz_yn}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, info_biz_yn: e.target.value as "전체" | "Y" | "N" }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      >
+                        <option value="전체">전체</option>
+                        <option value="Y">Y</option>
+                        <option value="N">N</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-text-tertiary">재공고</label>
+                      <select
+                        value={filterForm.re_ntce_yn}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, re_ntce_yn: e.target.value as "전체" | "Y" | "N" }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      >
+                        <option value="전체">전체</option>
+                        <option value="Y">Y</option>
+                        <option value="N">N</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-text-tertiary">업종제한</label>
+                      <select
+                        value={filterForm.indstryty_lmt_yn}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, indstryty_lmt_yn: e.target.value as "전체" | "Y" | "N" }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      >
+                        <option value="전체">전체</option>
+                        <option value="Y">Y</option>
+                        <option value="N">N</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-text-tertiary">물품분류제한</label>
+                      <select
+                        value={filterForm.prdct_clsfc_lmt_yn}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, prdct_clsfc_lmt_yn: e.target.value as "전체" | "Y" | "N" }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      >
+                        <option value="전체">전체</option>
+                        <option value="Y">Y</option>
+                        <option value="N">N</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-text-tertiary">지명경쟁</label>
+                      <select
+                        value={filterForm.dsgnt_cmpt_yn}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, dsgnt_cmpt_yn: e.target.value as "전체" | "Y" | "N" }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      >
+                        <option value="전체">전체</option>
+                        <option value="Y">Y</option>
+                        <option value="N">N</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-text-tertiary">실적경쟁</label>
+                      <select
+                        value={filterForm.arslt_cmpt_yn}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, arslt_cmpt_yn: e.target.value as "전체" | "Y" | "N" }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      >
+                        <option value="전체">전체</option>
+                        <option value="Y">Y</option>
+                        <option value="N">N</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-text-tertiary">일반용역</label>
+                      <select
+                        value={filterForm.ppsw_gnrl_srvce_yn}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, ppsw_gnrl_srvce_yn: e.target.value as "전체" | "Y" | "N" }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      >
+                        <option value="전체">전체</option>
+                        <option value="Y">Y</option>
+                        <option value="N">N</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── 금액 범위 ───────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">금액 범위</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                {/* Section 13: 금액 범위 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">13</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">금액 범위</h3>
+                    <span className="text-[12px] text-text-disabled">(price_range)</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-[13px] font-medium text-text-secondary">최소 금액</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={filterForm.price_min}
+                          onChange={(e) =>
+                            setFilterForm((f) => ({
+                              ...f,
+                              price_min: formatPrice(e.target.value),
+                            }))
+                          }
+                          placeholder="0"
+                          className="w-full rounded-md bg-surface-secondary px-3 py-2.5 pr-8 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:ring-2 focus:ring-brand"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-text-disabled">원</span>
+                      </div>
+                      {filterForm.price_min && (
+                        <p className="mt-1 text-[12px] text-text-tertiary">{priceHint(filterForm.price_min)}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[13px] font-medium text-text-secondary">최대 금액</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={filterForm.price_max}
+                          onChange={(e) =>
+                            setFilterForm((f) => ({
+                              ...f,
+                              price_max: formatPrice(e.target.value),
+                            }))
+                          }
+                          placeholder="제한 없음"
+                          className="w-full rounded-md bg-surface-secondary px-3 py-2.5 pr-8 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:ring-2 focus:ring-brand"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-text-disabled">원</span>
+                      </div>
+                      {filterForm.price_max && (
+                        <p className="mt-1 text-[12px] text-text-tertiary">{priceHint(filterForm.price_max)}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── 매칭 모드 ───────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">매칭 모드</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                {/* Section 14: 매칭 모드 */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">14</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">매칭 모드</h3>
+                    <span className="text-[12px] text-text-disabled">(match_mode)</span>
+                  </div>
+                  <div className="space-y-2">
+                    {(
+                      [
+                        {
+                          value: "any",
+                          label: "OR 조건 — 하나라도 충족하면 알림",
+                          desc: "설정된 조건 중 하나라도 만족하는 공고에 알림을 보냅니다.",
+                        },
+                        {
+                          value: "all",
+                          label: "AND 조건 — 모든 조건 충족해야 알림",
+                          desc: "설정된 모든 조건을 동시에 만족하는 공고에만 알림을 보냅니다.",
+                        },
+                      ] as const
+                    ).map((option) => (
+                      <label
+                        key={option.value}
+                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors ${
+                          filterForm.match_mode === option.value
+                            ? "border-brand bg-brand/5"
+                            : "border-border-secondary bg-surface-secondary hover:border-brand/40"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="match_mode"
+                          value={option.value}
+                          checked={filterForm.match_mode === option.value}
+                          onChange={() => setFilterForm((f) => ({ ...f, match_mode: option.value }))}
+                          className="mt-0.5 h-4 w-4 shrink-0 text-brand focus:ring-brand"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-text-primary">{option.label}</p>
+                          <p className="mt-0.5 text-[12px] text-text-tertiary">{option.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="shrink-0 border-t border-border-secondary px-6 py-4">
+              {filterError && (
+                <div className="mb-3 rounded-md bg-negative-bg px-3 py-2 text-sm text-negative">
+                  {filterError}
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleClearFilter}
+                  disabled={filterSubmitting}
+                  className="h-9 rounded-md px-4 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-secondary disabled:opacity-50"
+                >
+                  초기화
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={closeFilterModal}
+                    disabled={filterSubmitting}
+                    className="h-9 rounded-md px-4 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-secondary disabled:opacity-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveFilter}
+                    disabled={filterSubmitting}
+                    className="h-9 rounded-md bg-brand px-5 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:opacity-50"
+                  >
+                    {filterSubmitting ? "저장 중..." : "저장"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

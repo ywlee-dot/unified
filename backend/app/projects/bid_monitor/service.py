@@ -44,6 +44,7 @@ class BidMonitorService:
             keyword=data.keyword,
             bid_types=data.bid_types,
             is_active=data.is_active,
+            filter_conditions=data.filter_conditions.model_dump() if data.filter_conditions else None,
         )
         db.add(kw)
         await db.commit()
@@ -62,7 +63,9 @@ class BidMonitorService:
         )).scalar_one_or_none()
         if not row:
             return None
-        for field, value in data.model_dump(exclude_none=True).items():
+        for field, value in data.model_dump(exclude_unset=True).items():
+            if field == "filter_conditions" and value is not None:
+                value = value if isinstance(value, dict) else value.model_dump() if hasattr(value, "model_dump") else value
             setattr(row, field, value)
         await db.commit()
         await db.refresh(row)
@@ -84,6 +87,7 @@ class BidMonitorService:
             keyword=row.keyword,
             bid_types=row.bid_types if isinstance(row.bid_types, list) else [],
             is_active=row.is_active,
+            filter_conditions=row.filter_conditions if isinstance(row.filter_conditions, dict) else None,
             last_checked_at=row.last_checked_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
@@ -163,6 +167,7 @@ class BidMonitorService:
             ntce_kind_nm=row.ntce_kind_nm,
             bid_ntce_url=row.bid_ntce_url,
             bid_ntce_dtl_url=row.bid_ntce_dtl_url,
+            source_keyword=row.source_keyword,
             created_at=row.created_at,
         )
 
@@ -191,6 +196,7 @@ class BidMonitorService:
                 channel=alert.channel,
                 status=alert.status,
                 error_message=alert.error_message,
+                match_reasons=alert.match_reasons if isinstance(alert.match_reasons, list) else None,
                 created_at=alert.created_at,
                 keyword_text=kw_text,
                 notice_title=ntce_title,

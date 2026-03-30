@@ -289,6 +289,28 @@ export interface EvaluationRagStats {
 
 // --- Bid Monitor ---
 
+export interface FilterConditions {
+  title_keywords?: string[];
+  title_exclude?: string[];
+  institutions?: string[];
+  categories?: {
+    pubPrcrmntLrgClsfcNm?: string[];
+    pubPrcrmntClsfcNm?: string[];
+    pubPrcrmntMidClsfcNm?: string[];
+    dtilPrdctClsfcNoNm?: string[];
+    sucsfbidMthdNm?: string[];
+    bidMethdNm?: string[];
+    cnstrtsiteRgnNm?: string[];
+    rgstTyNm?: string[];
+  };
+  flags?: Record<string, string>;
+  price_range?: {
+    min?: number | null;
+    max?: number | null;
+  };
+  match_mode?: "any" | "all";
+}
+
 export interface BidKeyword {
   id: string;
   keyword: string;
@@ -297,6 +319,7 @@ export interface BidKeyword {
   last_checked_at: string | null;
   created_at: string;
   updated_at: string;
+  filter_conditions?: FilterConditions | null;
 }
 
 export interface BidNotice {

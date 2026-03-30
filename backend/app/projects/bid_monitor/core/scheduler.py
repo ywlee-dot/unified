@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.database import async_session_factory
 from app.projects.bid_monitor.core.discord_notifier import DiscordNotifier
+from app.projects.bid_monitor.core.filter_engine import apply_filters
 from app.projects.bid_monitor.core.g2b_client import G2BClient
 from app.projects.bid_monitor.models import (
     BidAlertModel,
@@ -47,7 +48,7 @@ async def run_check(trigger_type: str = "scheduled") -> dict:
         await db.commit()
         await db.refresh(run)
 
-        stats = {"total_fetched": 0, "total_new": 0, "total_duplicate": 0, "total_alerts": 0, "total_error": 0}
+        stats = {"total_fetched": 0, "total_new": 0, "total_duplicate": 0, "total_filtered": 0, "total_alerts": 0, "total_error": 0}
 
         try:
             # Discord 웹훅 URL 가져오기
@@ -100,24 +101,34 @@ async def run_check(trigger_type: str = "scheduled") -> dict:
                             stats["total_duplicate"] += 1
                             continue
 
-                        # 새 공고 저장
+                        # 새 공고 저장 (필터 결과와 무관하게 전체 저장)
                         notice = BidNoticeModel(**{
                             k: v for k, v in item.items()
-                            if k != "metadata_json"
-                        }, metadata_json=item.get("metadata_json", {}))
+                            if k not in ("metadata_json", "source_keyword")
+                        }, metadata_json=item.get("metadata_json", {}), source_keyword=kw.keyword)
                         db.add(notice)
                         await db.flush()
                         stats["total_new"] += 1
 
-                        # Discord 알림
+                        # 필터링 (저장 후 수행 — 통과한 것만 알림)
+                        filter_result = apply_filters(item, kw.keyword, kw.filter_conditions)
+
+                        if not filter_result.passed:
+                            stats["total_filtered"] += 1
+                            continue
+
+                        # Discord 알림 (필터 통과 시에만)
                         if notifier:
-                            sent = await notifier.send_bid_alert(kw.keyword, item)
+                            sent = await notifier.send_bid_alert(
+                                kw.keyword, item, match_reasons=filter_result.match_reasons,
+                            )
                             alert = BidAlertModel(
                                 keyword_id=kw.id,
                                 notice_id=notice.id,
                                 channel="discord",
                                 status="sent" if sent else "failed",
                                 error_message=None if sent else "Discord 전송 실패",
+                                match_reasons=filter_result.match_reasons,
                             )
                             db.add(alert)
                             if sent:

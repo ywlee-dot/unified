@@ -17,6 +17,7 @@ class BidKeywordModel(BaseEntity):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    filter_conditions: Mapped[dict | None] = mapped_column(JSON, default=None)
 
 
 class BidNoticeModel(BaseEntity):
@@ -38,6 +39,7 @@ class BidNoticeModel(BaseEntity):
     bid_ntce_url: Mapped[str | None] = mapped_column(Text)
     bid_ntce_dtl_url: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, default={})
+    source_keyword: Mapped[str | None] = mapped_column(String(200))
 
 
 class BidAlertModel(BaseEntity):
@@ -52,6 +54,7 @@ class BidAlertModel(BaseEntity):
     channel: Mapped[str] = mapped_column(String(20), nullable=False, default="discord")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="sent")
     error_message: Mapped[str | None] = mapped_column(Text)
+    match_reasons: Mapped[list | None] = mapped_column(JSON, default=None)
 
 
 class BidCheckRunModel(BaseEntity):

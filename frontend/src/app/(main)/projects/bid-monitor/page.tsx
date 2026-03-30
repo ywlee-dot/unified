@@ -123,8 +123,7 @@ export default function BidMonitorPage() {
 
   function formatDate(dt: string | null) {
     if (!dt) return "—";
-    const d = new Date(dt);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return new Date(dt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
   }
 
   if (loading) {
