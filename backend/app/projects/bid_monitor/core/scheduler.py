@@ -97,24 +97,37 @@ async def run_check(trigger_type: str = "scheduled") -> dict:
                                 BidNoticeModel.bid_ntce_ord == ntce_ord,
                             )
                         )
-                        if existing.scalar_one_or_none():
+                        existing_id = existing.scalar_one_or_none()
+
+                        if existing_id:
                             stats["total_duplicate"] += 1
-                            continue
+                            notice_id = existing_id
+                        else:
+                            # 새 공고 저장 (필터 결과와 무관하게 전체 저장)
+                            notice = BidNoticeModel(**{
+                                k: v for k, v in item.items()
+                                if k not in ("metadata_json", "source_keyword")
+                            }, metadata_json=item.get("metadata_json", {}), source_keyword=kw.keyword)
+                            db.add(notice)
+                            await db.flush()
+                            notice_id = notice.id
+                            stats["total_new"] += 1
 
-                        # 새 공고 저장 (필터 결과와 무관하게 전체 저장)
-                        notice = BidNoticeModel(**{
-                            k: v for k, v in item.items()
-                            if k not in ("metadata_json", "source_keyword")
-                        }, metadata_json=item.get("metadata_json", {}), source_keyword=kw.keyword)
-                        db.add(notice)
-                        await db.flush()
-                        stats["total_new"] += 1
-
-                        # 필터링 (저장 후 수행 — 통과한 것만 알림)
+                        # 필터링 (신규/중복 모두 수행 — 키워드별 필터가 다르므로)
                         filter_result = apply_filters(item, kw.keyword, kw.filter_conditions)
 
                         if not filter_result.passed:
                             stats["total_filtered"] += 1
+                            continue
+
+                        # 같은 키워드+공고 조합으로 이미 알림을 보낸 적 있으면 스킵
+                        existing_alert = await db.execute(
+                            select(BidAlertModel.id).where(
+                                BidAlertModel.keyword_id == kw.id,
+                                BidAlertModel.notice_id == notice_id,
+                            )
+                        )
+                        if existing_alert.scalar_one_or_none():
                             continue
 
                         # Discord 알림 (필터 통과 시에만)
@@ -124,7 +137,7 @@ async def run_check(trigger_type: str = "scheduled") -> dict:
                             )
                             alert = BidAlertModel(
                                 keyword_id=kw.id,
-                                notice_id=notice.id,
+                                notice_id=notice_id,
                                 channel="discord",
                                 status="sent" if sent else "failed",
                                 error_message=None if sent else "Discord 전송 실패",
