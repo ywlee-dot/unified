@@ -339,6 +339,9 @@ export interface BidNotice {
   ntce_kind_nm: string | null;
   bid_ntce_url: string | null;
   bid_ntce_dtl_url: string | null;
+  source_keyword: string | null;
+  filter_passed: boolean;
+  match_reasons: string[] | null;
   created_at: string;
 }
 

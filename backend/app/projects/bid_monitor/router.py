@@ -65,9 +65,10 @@ async def search_notices(
     sort: str = "date",
     page: int = 1,
     page_size: int = 20,
+    filter_status: str | None = None,
     db: AsyncSession = Depends(get_db_session),
 ):
-    return await _service.search_notices(db, keyword=keyword, bid_type=bid_type, sort=sort, page=page, page_size=page_size)
+    return await _service.search_notices(db, keyword=keyword, bid_type=bid_type, sort=sort, page=page, page_size=page_size, filter_status=filter_status)
 
 
 @router.get("/notices/{notice_id}")

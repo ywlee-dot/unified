@@ -105,13 +105,33 @@ class BidMonitorService:
         sort: str = "date",
         page: int = 1,
         page_size: int = 20,
+        filter_status: str | None = None,
     ) -> dict:
-        query = select(BidNoticeModel)
+        # LEFT JOIN으로 알림(필터 통과) 여부 조회
+        alert_sub = (
+            select(
+                BidAlertModel.notice_id,
+                func.array_agg(BidAlertModel.match_reasons).label("all_match_reasons"),
+            )
+            .group_by(BidAlertModel.notice_id)
+            .subquery()
+        )
+
+        query = (
+            select(BidNoticeModel, alert_sub.c.all_match_reasons)
+            .outerjoin(alert_sub, BidNoticeModel.id == alert_sub.c.notice_id)
+        )
 
         if keyword:
             query = query.where(BidNoticeModel.bid_ntce_nm.ilike(f"%{keyword}%"))
         if bid_type:
             query = query.where(BidNoticeModel.bid_type == bid_type)
+
+        # filter_status: "passed" = 필터 통과, "rejected" = 미통과
+        if filter_status == "passed":
+            query = query.where(alert_sub.c.all_match_reasons.isnot(None))
+        elif filter_status == "rejected":
+            query = query.where(alert_sub.c.all_match_reasons.is_(None))
 
         # Count
         count_q = select(func.count()).select_from(query.subquery())
@@ -127,10 +147,23 @@ class BidMonitorService:
 
         # Paginate
         query = query.offset((page - 1) * page_size).limit(page_size)
-        rows = (await db.execute(query)).scalars().all()
+        rows = (await db.execute(query)).all()
+
+        items = []
+        for notice, all_match_reasons in rows:
+            resp = self._notice(notice)
+            if all_match_reasons:
+                resp.filter_passed = True
+                # flatten: [[r1,r2],[r3]] -> [r1,r2,r3]
+                reasons = []
+                for mr in all_match_reasons:
+                    if isinstance(mr, list):
+                        reasons.extend(mr)
+                resp.match_reasons = list(dict.fromkeys(reasons)) if reasons else None
+            items.append(resp)
 
         return {
-            "items": [self._notice(r) for r in rows],
+            "items": items,
             "total": total,
             "page": page,
             "page_size": page_size,

@@ -87,6 +87,8 @@ class NoticeResponse(BaseModel):
     bid_ntce_url: str | None = None
     bid_ntce_dtl_url: str | None = None
     source_keyword: str | None = None
+    filter_passed: bool = False
+    match_reasons: list[str] | None = None
     created_at: datetime
 
 
