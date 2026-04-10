@@ -1,24 +1,22 @@
-"""
-업무규칙 자동 생성 Pydantic 스키마
-"""
+"""업무규칙 자동 생성 Pydantic 스키마."""
+
 from datetime import datetime
 from pydantic import BaseModel
 
 
-class Business_rule_genItem(BaseModel):
-    id: str
-    name: str
+class TriggerResponse(BaseModel):
+    run_id: str
     status: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+    message: str
 
 
-class Business_rule_genItemCreate(BaseModel):
-    name: str
-
-
-class Business_rule_genStats(BaseModel):
-    total_items: int
-    active_items: int
+class ExecutionStatus(BaseModel):
+    run_id: str
+    workflow_id: str
+    workflow_name: str
+    status: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    result_data: dict | None = None
+    download_url: str | None = None
+    error_message: str | None = None

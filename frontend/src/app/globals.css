@@ -97,6 +97,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -127,4 +136,16 @@ body {
 ::selection {
   background-color: var(--color-brand-light);
   color: var(--color-text-primary);
+}
+
+/* Agent detail panel – expand down */
+@keyframes expandDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Diagnosis funnel – slide entrance */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateX(60px) scale(0.97); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
 }
