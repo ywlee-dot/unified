@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { BidMonitorStats, BidMonitorConfig, BidNotice, BidKeyword, FilterConditions } from "@/lib/types";
 import { formatKst, timeAgoKst } from "@/lib/datetime";
@@ -264,7 +264,7 @@ function CloseBtn({ onClick }: { onClick: () => void }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-export default function BidMonitorPage() {
+function BidMonitorPageContent() {
   const searchParams = useSearchParams();
   const initialGrade = searchParams?.get("grade") ?? "";
 
@@ -1042,5 +1042,13 @@ export default function BidMonitorPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function BidMonitorPage() {
+  return (
+    <Suspense fallback={null}>
+      <BidMonitorPageContent />
+    </Suspense>
   );
 }
