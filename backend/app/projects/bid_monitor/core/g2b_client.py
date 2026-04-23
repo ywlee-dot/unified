@@ -8,15 +8,25 @@ from datetime import datetime
 import httpx
 
 from app.config import settings
+from datetime import timezone, timedelta
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://apis.data.go.kr/1230000/ad/BidPublicInfoService"
 
+# G2B API는 KST 기준 naive 시간 문자열을 반환한다.
+KST = timezone(timedelta(hours=9))
+
 BID_TYPE_ENDPOINTS = {
     "goods": "getBidPblancListInfoThng",
     "services": "getBidPblancListInfoServc",
     "construction": "getBidPblancListInfoCnstwk",
+}
+
+BID_TYPE_SEARCH_ENDPOINTS = {
+    "goods": "getBidPblancListInfoThngPPSSrch",
+    "services": "getBidPblancListInfoServcPPSSrch",
+    "construction": "getBidPblancListInfoCnstwkPPSSrch",
 }
 
 BID_TYPE_LABELS = {
@@ -27,12 +37,15 @@ BID_TYPE_LABELS = {
 
 
 def _parse_dt(value: str | None) -> datetime | None:
-    """나라장터 날짜 문자열 파싱 (YYYYMMDDHHmm or YYYY-MM-DD HH:mm:ss)."""
+    """나라장터 날짜 문자열 파싱 (YYYYMMDDHHmm or YYYY-MM-DD HH:mm:ss).
+    G2B 응답은 KST naive 문자열이므로 KST tzinfo를 부착해서 반환한다.
+    """
     if not value:
         return None
     for fmt in ("%Y%m%d%H%M", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y%m%d%H%M%S"):
         try:
-            return datetime.strptime(value.strip(), fmt)
+            naive = datetime.strptime(value.strip(), fmt)
+            return naive.replace(tzinfo=KST)
         except (ValueError, AttributeError):
             continue
     return None
@@ -123,6 +136,72 @@ class G2BClient:
         except Exception:
             logger.exception("나라장터 API 호출 실패 (bid_type=%s)", bid_type)
             return [], 0
+
+    async def fetch_by_institution(
+        self,
+        bid_type: str,
+        start_dt: str,
+        end_dt: str,
+        dminstt_cd: str | None = None,
+        ntce_instt_cd: str | None = None,
+        page: int = 1,
+        num_of_rows: int = 100,
+    ) -> tuple[list[dict], int]:
+        """PPSSrch 엔드포인트로 기관코드 필터 조회 (서버 필터 작동).
+
+        조회 범위 최대 31일 제한. 기관 필터는 dminsttCd(수요기관) 또는 ntceInsttCd(공고기관).
+        """
+        if not self.api_key:
+            return [], 0
+
+        endpoint = BID_TYPE_SEARCH_ENDPOINTS.get(bid_type)
+        if not endpoint:
+            return [], 0
+
+        url = f"{BASE_URL}/{endpoint}"
+        params = {
+            "serviceKey": self.api_key,
+            "pageNo": str(page),
+            "numOfRows": str(num_of_rows),
+            "inqryDiv": "1",
+            "inqryBgnDt": start_dt,
+            "inqryEndDt": end_dt,
+            "type": "json",
+        }
+        if dminstt_cd:
+            params["dminsttCd"] = dminstt_cd
+        if ntce_instt_cd:
+            params["ntceInsttCd"] = ntce_instt_cd
+
+        import asyncio as _aio
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.get(url, params=params)
+                if resp.status_code == 429:
+                    wait = 15 * (attempt + 1)
+                    logger.warning("PPSSrch 429 (attempt %d) — %ds 대기", attempt + 1, wait)
+                    await _aio.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                body = data.get("response", {}).get("body", {})
+                total_raw = body.get("totalCount", 0)
+                total = int(total_raw) if isinstance(total_raw, (int, str)) and str(total_raw).isdigit() else 0
+                items_raw = body.get("items", [])
+                if not items_raw:
+                    return [], total
+                if isinstance(items_raw, dict):
+                    items_raw = [items_raw]
+                items = [self._normalize_item(item, bid_type) for item in items_raw]
+                return items, total
+            except httpx.HTTPStatusError:
+                logger.exception("PPSSrch API 호출 실패 (bid_type=%s, dminsttCd=%s)", bid_type, dminstt_cd)
+                return [], 0
+            except Exception:
+                logger.exception("PPSSrch API 호출 실패 (bid_type=%s, dminsttCd=%s)", bid_type, dminstt_cd)
+                return [], 0
+        return [], 0
 
     def _normalize_item(self, raw: dict, bid_type: str) -> dict:
         """API 응답 항목을 정규화된 dict로 변환."""

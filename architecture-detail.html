@@ -1,0 +1,1655 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unified Workspace — 시스템 아키텍처</title>
+<style>
+  :root {
+    --bg-base:       #07070e;
+    --bg-surface:    #0d0d1a;
+    --bg-card:       #111126;
+    --bg-card-hover: #161630;
+    --border:        rgba(255,255,255,0.07);
+    --border-bright: rgba(255,255,255,0.14);
+
+    --nginx:    #ef4444;
+    --frontend: #3b82f6;
+    --backend:  #22c55e;
+    --n8n:      #f97316;
+    --data:     #a855f7;
+    --cicd:     #eab308;
+    --infra:    #64748b;
+    --ext:      #06b6d4;
+
+    --nginx-dim:    rgba(239,68,68,0.12);
+    --frontend-dim: rgba(59,130,246,0.12);
+    --backend-dim:  rgba(34,197,94,0.12);
+    --n8n-dim:      rgba(249,115,22,0.12);
+    --data-dim:     rgba(168,85,247,0.12);
+    --cicd-dim:     rgba(234,179,8,0.12);
+    --infra-dim:    rgba(100,116,139,0.12);
+    --ext-dim:      rgba(6,182,212,0.12);
+
+    --text-primary:   #f0f0ff;
+    --text-secondary: #8888aa;
+    --text-muted:     #44445a;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+
+    --font: -apple-system, 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── Noise texture overlay ─── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── Header ─── */
+  .page-header {
+    position: relative;
+    z-index: 10;
+    padding: 40px 48px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .page-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 48px; right: 48px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(59,130,246,0.4), rgba(34,197,94,0.4), transparent);
+  }
+
+  .header-title {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .header-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .header-title h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(120deg, #f0f0ff 30%, #8888cc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header-title p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .header-meta {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .meta-pill .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--backend);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.7); }
+  }
+
+  /* ─── Main canvas ─── */
+  .canvas {
+    position: relative;
+    z-index: 1;
+    padding: 40px 48px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ─── SVG Flow Lines ─── */
+  .flow-svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 2;
+    overflow: visible;
+  }
+
+  /* ─── Section headers ─── */
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .section-label .badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+
+  .section-label .title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── Layer containers ─── */
+  .layer {
+    position: relative;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: border-color 0.25s;
+  }
+
+  .layer:hover { border-color: var(--border-bright); }
+
+  .layer-infra  { border-color: rgba(100,116,139,0.3); background: linear-gradient(135deg, rgba(100,116,139,0.05) 0%, transparent 60%); }
+  .layer-nginx  { border-color: rgba(239,68,68,0.25);  background: linear-gradient(135deg, rgba(239,68,68,0.07) 0%, transparent 60%); }
+  .layer-app    { border-color: var(--border); background: transparent; }
+  .layer-data   { border-color: rgba(168,85,247,0.25); background: linear-gradient(135deg, rgba(168,85,247,0.07) 0%, transparent 60%); }
+  .layer-cicd   { border-color: rgba(234,179,8,0.25);  background: linear-gradient(135deg, rgba(234,179,8,0.07) 0%, transparent 60%); }
+
+  /* ─── Row layouts ─── */
+  .row { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+  .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row-auto { display: flex; gap: 12px; flex-wrap: wrap; }
+
+  /* ─── Cards ─── */
+  .card {
+    position: relative;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    padding: 16px;
+    cursor: default;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    flex: 1;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    opacity: 0.8;
+    transition: opacity 0.22s;
+  }
+
+  .card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-bright);
+    transform: translateY(-2px);
+  }
+
+  .card:hover::before { opacity: 1; }
+
+  .card-nginx::before    { background: var(--nginx); }
+  .card-frontend::before { background: var(--frontend); }
+  .card-backend::before  { background: var(--backend); }
+  .card-n8n::before      { background: var(--n8n); }
+  .card-data::before     { background: var(--data); }
+  .card-cicd::before     { background: var(--cicd); }
+  .card-infra::before    { background: var(--infra); }
+  .card-ext::before      { background: var(--ext); }
+
+  .card-nginx    { box-shadow: 0 0 0 0 var(--nginx); }
+  .card-frontend { box-shadow: 0 0 0 0 var(--frontend); }
+  .card-backend  { box-shadow: 0 0 0 0 var(--backend); }
+  .card-n8n      { box-shadow: 0 0 0 0 var(--n8n); }
+  .card-data     { box-shadow: 0 0 0 0 var(--data); }
+  .card-cicd     { box-shadow: 0 0 0 0 var(--cicd); }
+  .card-ext      { box-shadow: 0 0 0 0 var(--ext); }
+
+  .card-nginx:hover    { box-shadow: 0 8px 32px rgba(239,68,68,0.18),    inset 0 0 40px rgba(239,68,68,0.04); }
+  .card-frontend:hover { box-shadow: 0 8px 32px rgba(59,130,246,0.18),   inset 0 0 40px rgba(59,130,246,0.04); }
+  .card-backend:hover  { box-shadow: 0 8px 32px rgba(34,197,94,0.18),    inset 0 0 40px rgba(34,197,94,0.04); }
+  .card-n8n:hover      { box-shadow: 0 8px 32px rgba(249,115,22,0.18),   inset 0 0 40px rgba(249,115,22,0.04); }
+  .card-data:hover     { box-shadow: 0 8px 32px rgba(168,85,247,0.18),   inset 0 0 40px rgba(168,85,247,0.04); }
+  .card-cicd:hover     { box-shadow: 0 8px 32px rgba(234,179,8,0.18),    inset 0 0 40px rgba(234,179,8,0.04); }
+  .card-ext:hover      { box-shadow: 0 8px 32px rgba(6,182,212,0.18),    inset 0 0 40px rgba(6,182,212,0.04); }
+
+  /* ─── Card internals ─── */
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .card-icon {
+    width: 32px; height: 32px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .card-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    margin-top: 1px;
+  }
+
+  .card-body { display: flex; flex-direction: column; gap: 6px; }
+
+  .tag-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    border: 1px solid transparent;
+  }
+
+  .tag-nginx    { background: var(--nginx-dim);    color: var(--nginx);    border-color: rgba(239,68,68,0.2); }
+  .tag-frontend { background: var(--frontend-dim); color: var(--frontend); border-color: rgba(59,130,246,0.2); }
+  .tag-backend  { background: var(--backend-dim);  color: var(--backend);  border-color: rgba(34,197,94,0.2); }
+  .tag-n8n      { background: var(--n8n-dim);      color: var(--n8n);      border-color: rgba(249,115,22,0.2); }
+  .tag-data     { background: var(--data-dim);     color: var(--data);     border-color: rgba(168,85,247,0.2); }
+  .tag-cicd     { background: var(--cicd-dim);     color: var(--cicd);     border-color: rgba(234,179,8,0.2); }
+  .tag-infra    { background: var(--infra-dim);    color: var(--infra);    border-color: rgba(100,116,139,0.2); }
+  .tag-ext      { background: var(--ext-dim);      color: var(--ext);      border-color: rgba(6,182,212,0.2); }
+  .tag-neutral  { background: rgba(255,255,255,0.05); color: var(--text-secondary); border-color: var(--border); }
+
+  .route-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    font-size: 11px;
+  }
+
+  .route-path {
+    font-family: var(--mono);
+    color: var(--nginx);
+    font-weight: 600;
+    min-width: 110px;
+  }
+
+  .route-arrow {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .route-target {
+    color: var(--text-secondary);
+    font-family: var(--mono);
+    font-size: 10px;
+  }
+
+  /* ─── Project chips ─── */
+  .project-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .project-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    font-size: 10px;
+    font-weight: 500;
+    font-family: var(--mono);
+    color: var(--text-secondary);
+    transition: all 0.18s;
+    cursor: default;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .project-chip:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: var(--border-bright);
+    color: var(--text-primary);
+  }
+
+  .project-chip .chip-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .chip-standard .chip-dot { background: var(--backend); }
+  .chip-n8n     .chip-dot { background: var(--n8n); }
+
+  /* ─── Network bands ─── */
+  .network-band {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px dashed;
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: 8px;
+  }
+
+  .network-frontend { border-color: rgba(59,130,246,0.3); background: rgba(59,130,246,0.05); color: var(--frontend); }
+  .network-backend  { border-color: rgba(34,197,94,0.3);  background: rgba(34,197,94,0.05);  color: var(--backend); }
+
+  /* ─── Volume list ─── */
+  .volume-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+
+  .volume-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: rgba(100,116,139,0.1);
+    border: 1px solid rgba(100,116,139,0.2);
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--infra);
+  }
+
+  /* ─── Flow arrows (CSS animated) ─── */
+  .flow-arrow {
+    position: absolute;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* ─── Vertical connector ─── */
+  .v-connector {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 32px;
+    position: relative;
+    z-index: 3;
+    margin: -4px 0;
+  }
+
+  .v-connector-line {
+    width: 2px;
+    height: 100%;
+    position: relative;
+    overflow: visible;
+  }
+
+  .v-connector-line::before {
+    content: '';
+    position: absolute;
+    left: 50%; top: 0;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(180deg, transparent, var(--border-bright), transparent);
+  }
+
+  /* Animated dashes */
+  .flow-dash {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 8px;
+    border-radius: 1px;
+    animation: flow-down 1.4s linear infinite;
+    opacity: 0;
+  }
+
+  @keyframes flow-down {
+    0%   { top: 0%;   opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+
+  /* ─── Tooltip ─── */
+  .tooltip-wrapper { position: relative; }
+
+  .tooltip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%) scale(0.92);
+    min-width: 220px;
+    max-width: 300px;
+    background: #1a1a2e;
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 100;
+    white-space: normal;
+  }
+
+  .tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--border-bright);
+  }
+
+  .tooltip-wrapper:hover .tooltip {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+
+  .tooltip strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 5px;
+  }
+
+  .tooltip code {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: rgba(255,255,255,0.07);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--text-primary);
+  }
+
+  /* ─── CI/CD pipeline visual ─── */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .pipeline-step {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .pipeline-node {
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+
+  .pipeline-arrow-seg {
+    width: 24px;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(234,179,8,0.4), rgba(234,179,8,0.1));
+    position: relative;
+    overflow: hidden;
+  }
+
+  .pipeline-arrow-seg::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%;
+    height: 100%;
+    background: var(--cicd);
+    animation: flow-right 2s linear infinite;
+  }
+
+  @keyframes flow-right {
+    0%   { left: -60%; }
+    100% { left: 160%; }
+  }
+
+  /* ─── External service row ─── */
+  .ext-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+
+  .ext-card {
+    flex: 1;
+    min-width: 120px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(6,182,212,0.2);
+    background: rgba(6,182,212,0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .ext-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ext);
+  }
+
+  .ext-card-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--mono);
+  }
+
+  /* ─── Legend ─── */
+  .legend {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: rgba(13,13,26,0.95);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    z-index: 50;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  .legend-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .legend-items { display: flex; flex-direction: column; gap: 6px; }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ─── Animated grid bg ─── */
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── Glow orbs ─── */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    z-index: 0;
+    animation: orb-drift 20s ease-in-out infinite;
+  }
+
+  .orb-1 { width: 400px; height: 400px; background: rgba(59,130,246,0.06);  top: -100px; left: -100px; animation-delay: 0s; }
+  .orb-2 { width: 300px; height: 300px; background: rgba(34,197,94,0.05);   top: 40%;   right: -80px; animation-delay: -7s; }
+  .orb-3 { width: 350px; height: 350px; background: rgba(168,85,247,0.05);  bottom: 10%; left: 30%; animation-delay: -14s; }
+
+  @keyframes orb-drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%       { transform: translate(20px, -20px) scale(1.05); }
+    66%       { transform: translate(-10px, 15px) scale(0.97); }
+  }
+
+  /* ─── Scroll hint ─── */
+  .scroll-hint {
+    text-align: center;
+    padding: 12px;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  /* ─── Utility ─── */
+  .mt-2  { margin-top: 8px; }
+  .mt-3  { margin-top: 12px; }
+  .mono  { font-family: var(--mono); }
+  .dim   { color: var(--text-muted); }
+  .small { font-size: 10px; }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 900px) {
+    .page-header { padding: 24px; }
+    .canvas { padding: 20px 16px 48px; }
+    .row-3  { grid-template-columns: 1fr; }
+    .row-2  { grid-template-columns: 1fr; }
+    .legend { bottom: 10px; right: 10px; padding: 10px 12px; }
+  }
+
+  /* ─── Animated SVG flows ─── */
+  @keyframes dash-flow {
+    to { stroke-dashoffset: -40; }
+  }
+
+  .flow-line {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 6;
+    animation: dash-flow 1.2s linear infinite;
+  }
+
+  .flow-line-slow {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 10;
+    animation: dash-flow 2s linear infinite;
+  }
+
+  /* ─── Section title inline icon ─── */
+  .section-icon {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    margin-right: 2px;
+    vertical-align: middle;
+  }
+
+  /* ─── Info rows ─── */
+  .info-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 2px 0;
+  }
+
+  .info-key {
+    color: var(--text-muted);
+    min-width: 70px;
+    font-size: 10px;
+  }
+
+  /* separator */
+  .sep {
+    height: 1px;
+    background: var(--border);
+    margin: 8px 0;
+  }
+
+  /* Port badge */
+  .port-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--mono);
+    font-weight: 600;
+  }
+
+  .port-nginx    { background: rgba(239,68,68,0.15);    color: var(--nginx); }
+  .port-frontend { background: rgba(59,130,246,0.15);   color: var(--frontend); }
+  .port-backend  { background: rgba(34,197,94,0.15);    color: var(--backend); }
+  .port-n8n      { background: rgba(249,115,22,0.15);   color: var(--n8n); }
+  .port-data     { background: rgba(168,85,247,0.15);   color: var(--data); }
+
+  /* ─── Animated scanner line for nginx ─── */
+  @keyframes scan {
+    0%   { top: 0%; opacity: 0; }
+    5%   { opacity: 0.6; }
+    95%  { opacity: 0.6; }
+    100% { top: 100%; opacity: 0; }
+  }
+
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--nginx), transparent);
+    animation: scan 3s linear infinite;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- Background effects -->
+<div class="grid-bg"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<!-- ═══════════════════════════════════════════
+     PAGE HEADER
+═══════════════════════════════════════════ -->
+<header class="page-header">
+  <div class="header-title">
+    <span class="header-eyebrow">System Architecture</span>
+    <h1>Unified Workspace</h1>
+    <p>통합 워크스페이스 — 전체 시스템 아키텍처 다이어그램</p>
+  </div>
+  <div class="header-meta">
+    <span class="meta-pill"><span class="dot"></span>7 Services Running</span>
+    <span class="meta-pill">10 Projects</span>
+    <span class="meta-pill">Docker Compose</span>
+    <span class="meta-pill">OCI Ubuntu Server</span>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════
+     CANVAS
+═══════════════════════════════════════════ -->
+<main class="canvas">
+
+  <!-- ── 1. CI/CD Pipeline ── -->
+  <div class="layer layer-cicd">
+    <div class="section-label">
+      <span class="badge tag tag-cicd">CI/CD</span>
+      <span class="title">배포 파이프라인 — GitHub Actions</span>
+    </div>
+    <div class="row">
+
+      <div class="card card-cicd tooltip-wrapper" style="flex: 0 0 auto; min-width: 200px;">
+        <div class="tooltip">
+          <strong>GitHub Repository</strong>
+          main 브랜치 push → CI 트리거<br>
+          production 브랜치 push → CD 트리거<br>
+          <code>pytest</code> + <code>tsc</code> + <code>eslint</code>
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(234,179,8,0.15);">⑂</div>
+          <div>
+            <div class="card-title">GitHub</div>
+            <div class="card-subtitle">source of truth</div>
+          </div>
+        </div>
+        <div class="tag-list">
+          <span class="tag tag-cicd">main</span>
+          <span class="tag tag-cicd">production</span>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:0; flex:1;">
+        <div class="pipeline" style="flex:1; flex-wrap:nowrap; overflow-x:auto;">
+          <div class="pipeline-step">
+            <div class="pipeline-node" style="border-color:rgba(234,179,8,0.3); background:rgba(234,179,8,0.08); color:var(--cicd);">
+              push to main
+            </div>
+            <div class="pipeline-arrow-seg"></div>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-node" style="border-color:rgba(234,179,8,0.3); background:rgba(234,179,8,0.08); color:var(--cicd);">
+              CI: pytest
+            </div>
+            <div class="pipeline-arrow-seg"></div>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-node" style="border-color:rgba(234,179,8,0.3); background:rgba(234,179,8,0.08); color:var(--cicd);">
+              CI: tsc + eslint
+            </div>
+            <div class="pipeline-arrow-seg"></div>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-node" style="border-color:rgba(234,179,8,0.5); background:rgba(234,179,8,0.15); color:var(--cicd); font-weight:700;">
+              ✓ merged
+            </div>
+          </div>
+          <div style="width:32px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:12px; padding:0 4px;">→</div>
+          <div class="pipeline-step">
+            <div class="pipeline-node" style="border-color:rgba(239,68,68,0.4); background:rgba(239,68,68,0.1); color:var(--nginx);">
+              push to production
+            </div>
+            <div class="pipeline-arrow-seg" style="background:linear-gradient(90deg,rgba(239,68,68,0.4),rgba(239,68,68,0.1));"></div>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-node" style="border-color:rgba(239,68,68,0.4); background:rgba(239,68,68,0.1); color:var(--nginx);">
+              SSH → OCI
+            </div>
+            <div class="pipeline-arrow-seg" style="background:linear-gradient(90deg,rgba(239,68,68,0.4),rgba(239,68,68,0.1));"></div>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-node" style="border-color:rgba(239,68,68,0.4); background:rgba(239,68,68,0.1); color:var(--nginx);">
+              docker build
+            </div>
+            <div class="pipeline-arrow-seg" style="background:linear-gradient(90deg,rgba(239,68,68,0.4),rgba(239,68,68,0.1));"></div>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-node" style="border-color:rgba(239,68,68,0.5); background:rgba(239,68,68,0.15); color:var(--nginx); font-weight:700;">
+              🚀 compose up
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Connector ── -->
+  <div class="v-connector">
+    <div class="v-connector-line">
+      <div class="flow-dash" style="background:var(--cicd); animation-delay:0s;"></div>
+      <div class="flow-dash" style="background:var(--cicd); animation-delay:0.5s;"></div>
+    </div>
+  </div>
+
+  <!-- ── 2. OCI Infrastructure Layer ── -->
+  <div class="layer layer-infra">
+    <div class="section-label">
+      <span class="badge tag tag-infra">인프라</span>
+      <span class="title">OCI Ubuntu Server — Docker Compose 오케스트레이션</span>
+    </div>
+    <div class="row-3">
+
+      <div class="card card-infra tooltip-wrapper">
+        <div class="tooltip">
+          <strong>OCI Compute Instance</strong>
+          Oracle Cloud Infrastructure Ubuntu 서버.<br>
+          모든 서비스가 Docker 컨테이너로 실행됩니다.<br>
+          <code>docker compose up -d</code>로 시작.
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(100,116,139,0.15);">☁</div>
+          <div>
+            <div class="card-title">OCI Ubuntu Server</div>
+            <div class="card-subtitle">compute instance</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="info-row"><span class="info-key">OS</span> Ubuntu (LTS)</div>
+          <div class="info-row"><span class="info-key">Runtime</span> Docker Engine</div>
+          <div class="info-row"><span class="info-key">Services</span> 7 containers</div>
+        </div>
+      </div>
+
+      <div class="card card-infra tooltip-wrapper">
+        <div class="tooltip">
+          <strong>Docker Networks</strong>
+          서비스 간 격리된 네트워크.<br>
+          <code>frontend-net</code>: Frontend ↔ Backend<br>
+          <code>backend-net</code>: Backend ↔ DB / Redis / n8n
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(100,116,139,0.15);">⬡</div>
+          <div>
+            <div class="card-title">네트워크 격리</div>
+            <div class="card-subtitle">docker networks</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="network-band network-frontend">
+            <span>frontend-net</span>
+            <span class="dim small">Frontend ↔ Backend</span>
+          </div>
+          <div class="network-band network-backend">
+            <span>backend-net</span>
+            <span class="dim small">Backend ↔ DB / Redis / n8n</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-infra tooltip-wrapper">
+        <div class="tooltip">
+          <strong>영구 볼륨</strong>
+          컨테이너 재시작 후에도 데이터가 유지되는 Docker named volumes.<br>
+          <code>docker compose down -v</code>로 모두 삭제 가능.
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(100,116,139,0.15);">◫</div>
+          <div>
+            <div class="card-title">영구 볼륨</div>
+            <div class="card-subtitle">persistent volumes</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="volume-list">
+            <span class="volume-item">📦 postgres_data</span>
+            <span class="volume-item">📦 redis_data</span>
+            <span class="volume-item">📦 n8n_data</span>
+            <span class="volume-item">📦 uploads_data</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Connector ── -->
+  <div class="v-connector">
+    <div class="v-connector-line">
+      <div class="flow-dash" style="background:var(--infra); animation-delay:0s;"></div>
+      <div class="flow-dash" style="background:var(--infra); animation-delay:0.4s;"></div>
+    </div>
+  </div>
+
+  <!-- ── 3. Nginx Reverse Proxy ── -->
+  <div class="layer layer-nginx" style="position:relative; overflow:hidden;">
+    <div class="scan-line"></div>
+    <div class="section-label">
+      <span class="badge tag tag-nginx">게이트웨이</span>
+      <span class="title">Nginx Reverse Proxy — 진입점 & 라우팅</span>
+    </div>
+    <div class="row">
+      <div class="card card-nginx tooltip-wrapper" style="flex: 0 0 auto; min-width: 200px;">
+        <div class="tooltip">
+          <strong>Nginx</strong>
+          모든 외부 트래픽의 단일 진입점.<br>
+          SSL 종료, 프록시 패싱, WebSocket 업그레이드 지원.<br>
+          <code>client_max_body_size 100M</code>
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(239,68,68,0.15);">⟨/⟩</div>
+          <div>
+            <div class="card-title">Nginx</div>
+            <div class="card-subtitle">reverse proxy</div>
+          </div>
+        </div>
+        <div class="tag-list">
+          <span class="tag tag-nginx">Port 80</span>
+          <span class="tag tag-nginx">Port 443 (SSL)</span>
+        </div>
+        <div class="sep"></div>
+        <div class="info-row small dim">SSL 종료 · WebSocket 업그레이드</div>
+      </div>
+
+      <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+        <div style="font-size:10px; font-weight:600; letter-spacing:0.08em; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">라우팅 규칙</div>
+
+        <div class="route-item tooltip-wrapper">
+          <div class="tooltip" style="left:20%;">
+            <strong>/api/* → Backend</strong>
+            FastAPI 백엔드로 API 요청 프록시.<br>
+            <code>proxy_read_timeout 300s</code>
+          </div>
+          <span class="route-path">/api/*</span>
+          <span class="route-arrow">→</span>
+          <span class="route-target">backend:8000</span>
+          <span class="tag tag-backend" style="margin-left:auto;">FastAPI</span>
+        </div>
+
+        <div class="route-item tooltip-wrapper">
+          <div class="tooltip" style="left:20%;">
+            <strong>/n8n/* → n8n UI</strong>
+            n8n 워크플로우 대시보드 접근.<br>
+            WebSocket 업그레이드 포함.
+          </div>
+          <span class="route-path">/n8n/*</span>
+          <span class="route-arrow">→</span>
+          <span class="route-target">n8n:5678</span>
+          <span class="tag tag-n8n" style="margin-left:auto;">n8n UI</span>
+        </div>
+
+        <div class="route-item tooltip-wrapper">
+          <div class="tooltip" style="left:20%;">
+            <strong>/webhook/* → n8n Webhook</strong>
+            워크플로우 트리거용 웹훅 수신.<br>
+            <code>proxy_read_timeout 300s</code>
+          </div>
+          <span class="route-path">/webhook/*</span>
+          <span class="route-arrow">→</span>
+          <span class="route-target">n8n:5678/webhook/</span>
+          <span class="tag tag-n8n" style="margin-left:auto;">Webhook</span>
+        </div>
+
+        <div class="route-item tooltip-wrapper">
+          <div class="tooltip" style="left:20%;">
+            <strong>/webhook-test/* → n8n</strong>
+            테스트용 웹훅 엔드포인트.
+          </div>
+          <span class="route-path">/webhook-test/*</span>
+          <span class="route-arrow">→</span>
+          <span class="route-target">n8n:5678/webhook-test/</span>
+          <span class="tag tag-n8n" style="margin-left:auto;">Test</span>
+        </div>
+
+        <div class="route-item tooltip-wrapper">
+          <div class="tooltip" style="left:20%;">
+            <strong>/* → Frontend</strong>
+            Next.js SSR 앱으로 나머지 요청 프록시.<br>
+            WebSocket 업그레이드 포함 (HMR).
+          </div>
+          <span class="route-path">/*</span>
+          <span class="route-arrow">→</span>
+          <span class="route-target">frontend:3000</span>
+          <span class="tag tag-frontend" style="margin-left:auto;">Next.js</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Connector ── -->
+  <div class="v-connector">
+    <div class="v-connector-line">
+      <div class="flow-dash" style="background:var(--nginx); animation-delay:0s;"></div>
+      <div class="flow-dash" style="background:var(--nginx); animation-delay:0.35s;"></div>
+    </div>
+  </div>
+
+  <!-- ── 4. Application Layer ── -->
+  <div class="layer layer-app">
+    <div class="section-label">
+      <span class="badge tag tag-neutral">애플리케이션</span>
+      <span class="title">서비스 레이어</span>
+    </div>
+    <div class="row-3">
+
+      <!-- Frontend Card -->
+      <div class="card card-frontend tooltip-wrapper">
+        <div class="tooltip">
+          <strong>Next.js 15 Frontend</strong>
+          React 19 + TypeScript 5.6 + Tailwind CSS 4.<br>
+          App Router 기반 SSR/CSR 하이브리드.<br>
+          SSR: <code>http://backend:8000/api</code> (내부)<br>
+          CSR: <code>/api</code> (Nginx 경유)
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(59,130,246,0.15);">▲</div>
+          <div>
+            <div class="card-title">Frontend</div>
+            <div class="card-subtitle">Next.js 15 · App Router</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <span class="port-badge port-frontend">:3000</span>
+          <div class="sep"></div>
+
+          <div class="tag-list">
+            <span class="tag tag-frontend">React 19</span>
+            <span class="tag tag-frontend">TypeScript 5.6</span>
+            <span class="tag tag-frontend">Tailwind 4</span>
+            <span class="tag tag-frontend">React Query</span>
+            <span class="tag tag-frontend">Recharts</span>
+            <span class="tag tag-frontend">XYFlow</span>
+          </div>
+
+          <div class="sep"></div>
+
+          <div style="font-size:10px; color:var(--text-muted); font-weight:600; margin-bottom:4px;">API 통신</div>
+          <div class="info-row small">
+            <span class="info-key">SSR</span>
+            <code class="mono" style="font-size:9px; color:var(--frontend);">backend:8000</code>
+            <span class="dim" style="font-size:9px;">(내부망)</span>
+          </div>
+          <div class="info-row small">
+            <span class="info-key">Client</span>
+            <code class="mono" style="font-size:9px; color:var(--nginx);">/api</code>
+            <span class="dim" style="font-size:9px;">(Nginx)</span>
+          </div>
+
+          <div class="sep"></div>
+          <div style="font-size:10px; color:var(--text-muted); font-weight:600; margin-bottom:4px;">주요 구조</div>
+          <div class="info-row small dim">App Router / layout.tsx</div>
+          <div class="info-row small dim">ApiClient (lib/api.ts)</div>
+          <div class="info-row small dim">useProjectData hooks</div>
+          <div class="info-row small dim">ErrorBoundary + QueryClient</div>
+        </div>
+      </div>
+
+      <!-- Backend Card -->
+      <div class="card card-backend tooltip-wrapper">
+        <div class="tooltip">
+          <strong>FastAPI Backend</strong>
+          Python async 기반 API 서버.<br>
+          Auto-discovery Project Registry 패턴.<br>
+          <code>ProjectRegistry.auto_discover_and_register()</code><br>
+          Pydantic v2 · SQLAlchemy 2.0 async
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(34,197,94,0.15);">⚡</div>
+          <div>
+            <div class="card-title">Backend</div>
+            <div class="card-subtitle">FastAPI · Python async</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <span class="port-badge port-backend">:8000</span>
+          <div class="sep"></div>
+
+          <div class="tag-list">
+            <span class="tag tag-backend">FastAPI</span>
+            <span class="tag tag-backend">SQLAlchemy 2.0</span>
+            <span class="tag tag-backend">Pydantic v2</span>
+            <span class="tag tag-backend">Alembic</span>
+            <span class="tag tag-backend">JWT Auth</span>
+          </div>
+
+          <div class="sep"></div>
+
+          <div style="font-size:10px; color:var(--text-muted); font-weight:600; margin-bottom:4px;">Project Registry</div>
+          <div style="font-size:10px; color:var(--text-secondary); margin-bottom:6px;">
+            <code class="mono" style="font-size:9px;">/projects/&lt;slug&gt;/</code> 자동 감지 · 마운트
+          </div>
+
+          <div style="font-size:10px; color:var(--text-muted); font-weight:600; margin-bottom:4px;">10개 프로젝트</div>
+          <div class="project-grid">
+            <!-- standard -->
+            <div class="project-chip chip-standard tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>dataset_summary</strong>
+                Type: standard (DB CRUD)<br>
+                데이터셋 요약 분석
+              </div>
+              <span class="chip-dot"></span>dataset_summary
+            </div>
+            <div class="project-chip chip-standard tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>evaluation_rag</strong>
+                Type: standard (DB CRUD)<br>
+                RAG 평가 시스템 (Pinecone)
+              </div>
+              <span class="chip-dot"></span>evaluation_rag
+            </div>
+            <div class="project-chip chip-standard tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>gov_news_crawler</strong>
+                Type: standard (DB CRUD)<br>
+                정부 뉴스 크롤러
+              </div>
+              <span class="chip-dot"></span>gov_news_crawler
+            </div>
+            <div class="project-chip chip-standard tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>open_data_analyzer</strong>
+                Type: standard (DB CRUD)<br>
+                공공데이터 분석기
+              </div>
+              <span class="chip-dot"></span>open_data_analyzer
+            </div>
+            <!-- n8n -->
+            <div class="project-chip chip-n8n tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>ai_case_report</strong>
+                Type: n8n (webhook trigger)<br>
+                AI 케이스 리포트 생성
+              </div>
+              <span class="chip-dot"></span>ai_case_report
+            </div>
+            <div class="project-chip chip-n8n tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>best_practice_search</strong>
+                Type: n8n (webhook trigger)<br>
+                베스트 프랙티스 검색
+              </div>
+              <span class="chip-dot"></span>best_practice_search
+            </div>
+            <div class="project-chip chip-n8n tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>business_rule_gen</strong>
+                Type: n8n (webhook trigger)<br>
+                비즈니스 규칙 생성기
+              </div>
+              <span class="chip-dot"></span>business_rule_gen
+            </div>
+            <div class="project-chip chip-n8n tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>effort_public_data</strong>
+                Type: n8n (webhook trigger)<br>
+                공공데이터 활용 분석
+              </div>
+              <span class="chip-dot"></span>effort_public_data
+            </div>
+            <div class="project-chip chip-n8n tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>summarize</strong>
+                Type: n8n (webhook trigger)<br>
+                텍스트 요약 서비스
+              </div>
+              <span class="chip-dot"></span>summarize
+            </div>
+            <div class="project-chip chip-n8n tooltip-wrapper">
+              <div class="tooltip" style="left:60%;">
+                <strong>test1</strong>
+                Type: n8n (webhook trigger)<br>
+                테스트 프로젝트
+              </div>
+              <span class="chip-dot"></span>test1
+            </div>
+          </div>
+
+          <div class="tag-list mt-2">
+            <span class="tag tag-backend" style="font-size:9px;"><span class="chip-dot" style="background:var(--backend); width:4px; height:4px; border-radius:50%; display:inline-block;"></span> standard: DB CRUD (4)</span>
+            <span class="tag tag-n8n" style="font-size:9px;"><span class="chip-dot" style="background:var(--n8n); width:4px; height:4px; border-radius:50%; display:inline-block;"></span> n8n: webhook (6)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- n8n Card -->
+      <div class="card card-n8n tooltip-wrapper">
+        <div class="tooltip">
+          <strong>n8n Workflow Engine</strong>
+          로컬 n8n 컨테이너 + 외부 n8n 클라우드 계정.<br>
+          Webhook trigger → 처리 → Callback 패턴.<br>
+          Basic Auth 보호, Asia/Seoul 타임존.
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(249,115,22,0.15);">⟳</div>
+          <div>
+            <div class="card-title">n8n</div>
+            <div class="card-subtitle">workflow engine</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <span class="port-badge port-n8n">:5678</span>
+          <div class="sep"></div>
+
+          <div style="font-size:10px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">외부 n8n 계정 (클라우드)</div>
+          <div class="ext-row">
+            <div class="ext-card" style="border-color:rgba(249,115,22,0.3);">
+              <div class="ext-card-title">계정 1</div>
+              <div class="ext-card-sub">ywlee.app.n8n.cloud</div>
+            </div>
+            <div class="ext-card" style="border-color:rgba(249,115,22,0.2);">
+              <div class="ext-card-title">계정 2</div>
+              <div class="ext-card-sub">n8n-1-76-1-a5ze.onrender.com</div>
+            </div>
+            <div class="ext-card" style="border-color:rgba(249,115,22,0.1);">
+              <div class="ext-card-title">계정 3</div>
+              <div class="ext-card-sub dim">(optional)</div>
+            </div>
+          </div>
+
+          <div class="sep"></div>
+
+          <div style="font-size:10px; color:var(--text-muted); font-weight:600; margin-bottom:4px;">트리거 패턴</div>
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <span class="tag tag-backend" style="font-size:9px;">Backend trigger</span>
+            <span style="color:var(--text-muted); font-size:10px;">→</span>
+            <span class="tag tag-n8n" style="font-size:9px;">Webhook POST</span>
+            <span style="color:var(--text-muted); font-size:10px;">→</span>
+            <span class="tag tag-n8n" style="font-size:9px;">Workflow</span>
+            <span style="color:var(--text-muted); font-size:10px;">→</span>
+            <span class="tag tag-backend" style="font-size:9px;">Callback</span>
+          </div>
+
+          <div class="sep"></div>
+          <div class="tag-list">
+            <span class="tag tag-n8n">Basic Auth</span>
+            <span class="tag tag-n8n">Asia/Seoul TZ</span>
+            <span class="tag tag-n8n">n8n_data 볼륨</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Connector ── -->
+  <div class="v-connector">
+    <div class="v-connector-line">
+      <div class="flow-dash" style="background:var(--data); animation-delay:0s;"></div>
+      <div class="flow-dash" style="background:var(--data); animation-delay:0.4s;"></div>
+    </div>
+  </div>
+
+  <!-- ── 5. Data Layer ── -->
+  <div class="layer layer-data">
+    <div class="section-label">
+      <span class="badge tag tag-data">데이터</span>
+      <span class="title">데이터 레이어 — 영구 저장소</span>
+    </div>
+    <div class="row-2">
+
+      <div class="card card-data tooltip-wrapper">
+        <div class="tooltip">
+          <strong>PostgreSQL 16</strong>
+          메인 관계형 데이터베이스.<br>
+          async SQLAlchemy 연결 (<code>asyncpg</code> 드라이버).<br>
+          Alembic 마이그레이션 관리.<br>
+          <code>backend-net</code>에서만 접근 가능.
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(168,85,247,0.15);">🐘</div>
+          <div>
+            <div class="card-title">PostgreSQL 16</div>
+            <div class="card-subtitle">primary database</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <span class="port-badge port-data">:5432</span>
+          <div class="sep"></div>
+          <div class="tag-list">
+            <span class="tag tag-data">asyncpg</span>
+            <span class="tag tag-data">Alembic migrations</span>
+            <span class="tag tag-data">postgres_data 볼륨</span>
+          </div>
+          <div class="sep"></div>
+          <div class="info-row small">
+            <span class="info-key">DB</span>
+            <code class="mono" style="font-size:9px;">workspace</code>
+          </div>
+          <div class="info-row small">
+            <span class="info-key">Network</span>
+            <span class="dim" style="font-size:10px;">backend-net 전용</span>
+          </div>
+          <div class="info-row small">
+            <span class="info-key">Healthcheck</span>
+            <span class="dim" style="font-size:10px;">pg_isready</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-data tooltip-wrapper" style="opacity: 0.75;">
+        <div class="tooltip">
+          <strong>Redis 7</strong>
+          캐싱 / 세션 / 작업 큐 예정.<br>
+          현재 미활성 (TODO).<br>
+          <code>backend-net</code>에서만 접근 가능.
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(168,85,247,0.10);">⚙</div>
+          <div>
+            <div class="card-title">Redis 7</div>
+            <div class="card-subtitle">cache · session · queue</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <span class="port-badge port-data">:6379</span>
+          <div class="sep"></div>
+          <div class="tag-list">
+            <span class="tag tag-data">redis_data 볼륨</span>
+            <span class="tag tag-neutral">향후 활용 예정</span>
+          </div>
+          <div class="sep"></div>
+          <div class="info-row small">
+            <span class="info-key">Use case</span>
+            <span class="dim" style="font-size:10px;">캐싱 / 작업큐 (TODO)</span>
+          </div>
+          <div class="info-row small">
+            <span class="info-key">Healthcheck</span>
+            <span class="dim" style="font-size:10px;">redis-cli ping</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Connector ── -->
+  <div class="v-connector">
+    <div class="v-connector-line">
+      <div class="flow-dash" style="background:var(--ext); animation-delay:0s;"></div>
+      <div class="flow-dash" style="background:var(--ext); animation-delay:0.4s;"></div>
+    </div>
+  </div>
+
+  <!-- ── 6. External APIs ── -->
+  <div class="layer" style="border-color:rgba(6,182,212,0.25); background:linear-gradient(135deg, rgba(6,182,212,0.05) 0%, transparent 60%);">
+    <div class="section-label">
+      <span class="badge tag tag-ext">외부 서비스</span>
+      <span class="title">External APIs — 백엔드에서 직접 호출</span>
+    </div>
+    <div class="row">
+
+      <div class="card card-ext tooltip-wrapper" style="flex: 1; min-width:180px;">
+        <div class="tooltip">
+          <strong>Google Gemini</strong>
+          LLM API. 텍스트 생성, 요약, 분석에 사용.<br>
+          <code>GEMINI_MODEL=gemini-2.5-flash</code><br>
+          <code>GEMINI_BASE_URL</code> (설정 가능)
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(6,182,212,0.15);">✦</div>
+          <div>
+            <div class="card-title">Google Gemini</div>
+            <div class="card-subtitle">LLM API</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="tag-list">
+            <span class="tag tag-ext">gemini-2.5-flash</span>
+            <span class="tag tag-ext">텍스트 생성</span>
+            <span class="tag tag-ext">요약 / 분석</span>
+          </div>
+          <div class="info-row small mt-2">
+            <span class="info-key">Config</span>
+            <code class="mono" style="font-size:9px;">GEMINI_API_KEY</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-ext tooltip-wrapper" style="flex: 1; min-width:180px;">
+        <div class="tooltip">
+          <strong>Pinecone</strong>
+          벡터 데이터베이스. RAG 평가 시스템에서 사용.<br>
+          <code>evaluation_rag</code> 프로젝트 전용.<br>
+          Index: <code>evaluation-guidelines</code>
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(6,182,212,0.15);">⬡</div>
+          <div>
+            <div class="card-title">Pinecone</div>
+            <div class="card-subtitle">Vector DB (RAG)</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="tag-list">
+            <span class="tag tag-ext">Vector Search</span>
+            <span class="tag tag-ext">evaluation_rag</span>
+          </div>
+          <div class="info-row small mt-2">
+            <span class="info-key">Index</span>
+            <code class="mono" style="font-size:9px;">evaluation-guidelines</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-ext tooltip-wrapper" style="flex: 1; min-width:180px;">
+        <div class="tooltip">
+          <strong>OpenAI (Optional)</strong>
+          대체 LLM 백엔드. 설정 시 Gemini 대신 사용 가능.<br>
+          <code>OPENAI_API_KEY</code>, <code>OPENAI_MODEL</code> 설정 필요.
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(6,182,212,0.10);">◎</div>
+          <div>
+            <div class="card-title">OpenAI</div>
+            <div class="card-subtitle">LLM (optional)</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="tag-list">
+            <span class="tag tag-ext">GPT models</span>
+            <span class="tag tag-neutral">선택적 설정</span>
+          </div>
+          <div class="info-row small mt-2">
+            <span class="info-key">Config</span>
+            <code class="mono" style="font-size:9px;">OPENAI_API_KEY</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-n8n tooltip-wrapper" style="flex: 1; min-width:180px;">
+        <div class="tooltip">
+          <strong>n8n Cloud Accounts</strong>
+          외부 n8n 워크플로우 계정.<br>
+          백엔드가 웹훅으로 트리거.<br>
+          N8N_WEBHOOK_BASE_1,2,3 환경변수로 설정.
+        </div>
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(249,115,22,0.15);">⟳</div>
+          <div>
+            <div class="card-title">n8n Cloud</div>
+            <div class="card-subtitle">외부 워크플로우</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="tag-list">
+            <span class="tag tag-n8n">ywlee.app.n8n.cloud</span>
+            <span class="tag tag-n8n">onrender.com</span>
+          </div>
+          <div class="info-row small mt-2">
+            <span class="info-key">Pattern</span>
+            <span class="dim" style="font-size:10px;">trigger → callback</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="scroll-hint">모든 컴포넌트에 마우스를 올리면 상세 정보를 확인할 수 있습니다</div>
+</main>
+
+<!-- ═══════════════════════════════════════════
+     LEGEND
+═══════════════════════════════════════════ -->
+<div class="legend">
+  <div class="legend-title">범례</div>
+  <div class="legend-items">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--infra);"></div>인프라 / Docker</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--nginx);"></div>Nginx 게이트웨이</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--frontend);"></div>Frontend (Next.js)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--backend);"></div>Backend (FastAPI)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--n8n);"></div>n8n 워크플로우</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--data);"></div>데이터 레이어</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--ext);"></div>외부 API</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cicd);"></div>CI/CD 파이프라인</div>
+    <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+      <div class="legend-item">
+        <span style="display:inline-flex; gap:2px; align-items:center;">
+          <span style="width:5px;height:5px;border-radius:50%;background:var(--backend);"></span>
+        </span>
+        standard (DB CRUD)
+      </div>
+      <div class="legend-item">
+        <span style="display:inline-flex; gap:2px; align-items:center;">
+          <span style="width:5px;height:5px;border-radius:50%;background:var(--n8n);"></span>
+        </span>
+        n8n (webhook trigger)
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Stagger card entrance animations
+  document.addEventListener('DOMContentLoaded', () => {
+    const cards = document.querySelectorAll('.card, .layer');
+    cards.forEach((card, i) => {
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(16px)';
+      card.style.transition = 'opacity 0.45s ease, transform 0.45s ease';
+      setTimeout(() => {
+        card.style.opacity = '';
+        card.style.transform = '';
+      }, 80 + i * 40);
+    });
+  });
+
+  // Tooltip positioning — flip if near viewport edge
+  document.querySelectorAll('.tooltip').forEach(tip => {
+    const wrapper = tip.closest('.tooltip-wrapper');
+    if (!wrapper) return;
+    wrapper.addEventListener('mouseenter', () => {
+      const rect = tip.getBoundingClientRect();
+      if (rect.left < 0) {
+        tip.style.left = '0';
+        tip.style.transform = 'translateX(0) scale(1)';
+      }
+      if (rect.right > window.innerWidth) {
+        tip.style.left = 'auto';
+        tip.style.right = '0';
+        tip.style.transform = 'translateX(0) scale(1)';
+      }
+      if (rect.top < 0) {
+        tip.style.bottom = 'auto';
+        tip.style.top = 'calc(100% + 10px)';
+        tip.style.setProperty('--tip-dir', 'bottom');
+      }
+    });
+  });
+</script>
+</body>
+</html>

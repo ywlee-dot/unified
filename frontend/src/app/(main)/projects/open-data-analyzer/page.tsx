@@ -5,7 +5,6 @@ import type {
   OpenDataStageRow,
   OpenDataStageResponse,
 } from "@/lib/types";
-
 const API_BASE = "/api";
 
 const STAGES = [

@@ -163,19 +163,21 @@ class GovNewsCrawlerService:
         if date_to:
             stmt = stmt.where(GovArticleModel.published_at <= date_to)
 
-        # Join scores for filtering/sorting by score
+        # Join scores for filtering/sorting by score (subquery to avoid duplicate rows)
         if keyword_id or min_score is not None or sort == "score":
-            stmt = stmt.join(
-                GovScoreModel,
-                GovScoreModel.article_id == GovArticleModel.id,
-                isouter=True,
-            )
+            score_subq = select(
+                GovScoreModel.article_id,
+                func.max(GovScoreModel.final_score).label("max_score"),
+            ).group_by(GovScoreModel.article_id)
             if keyword_id:
-                stmt = stmt.where(GovScoreModel.keyword_id == keyword_id)
+                score_subq = score_subq.where(GovScoreModel.keyword_id == keyword_id)
+            score_subq = score_subq.subquery()
+
+            stmt = stmt.join(score_subq, score_subq.c.article_id == GovArticleModel.id, isouter=True)
             if min_score is not None:
-                stmt = stmt.where(GovScoreModel.final_score >= min_score)
+                stmt = stmt.where(score_subq.c.max_score >= min_score)
             if sort == "score":
-                stmt = stmt.order_by(GovScoreModel.final_score.desc().nullslast())
+                stmt = stmt.order_by(score_subq.c.max_score.desc().nullslast())
 
         if sort == "date":
             stmt = stmt.order_by(GovArticleModel.published_at.desc().nullslast())

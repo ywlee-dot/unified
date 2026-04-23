@@ -1,0 +1,402 @@
+{
+  "name": "공공데이터 활용도 제고 정성보고서 작성",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 공공데이터 활용 지원 정성보고서 항목\n\n1. 수행시기\n2. 추진 필요성(추진배경) : 현황 및 문제점을 바탕으로 기관에서 해당 지원노력을 추진한 배경 기술\n3. 추진 내용 : 국민/기업이 기관에서 개방 중인 데이터를 파악하고, 이를 다방면에 활용할 수 있도록 직접적으로 지원한 기관의 노력 제시\n4. 핵심 성과 :  상기 기재한 기관 지원 노력을 바탕으로 나타난 기관 공공데이터 활용도 제고 성과 제시",
+        "height": 224,
+        "width": 1024,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        0
+      ],
+      "id": "8005cbf3-2cb3-4411-9b09-a20383dfba1a",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 실적번호(숫자 1~5) 기준으로 그룹핑\nconst items = $input.all();\nconst groups = {};\n\nfor (const item of items) {\n  const meta = item.json.메타데이터 || {};\n  const 실적번호 = meta.실적번호;\n\n  if (실적번호 === undefined || 실적번호 === null || 실적번호 === '알 수 없음') {\n    console.log('경고: 실적번호 불명 아이템:', JSON.stringify(meta));\n    continue;\n  }\n\n  const key = String(실적번호);\n\n  if (!groups[key]) {\n    groups[key] = {\n      실적번호:   실적번호,\n      실적인덱스: meta.실적인덱스 ?? -1,\n      평가항목:   meta.평가항목  || '',\n      제출시간:   meta.제출시간  || '',\n      파일수:     0,\n      파일목록:   [],\n      문서목록:   []\n    };\n  }\n\n  groups[key].파일목록.push(meta.원본파일명);\n  groups[key].문서목록.push(item.json);\n  groups[key].파일수 = groups[key].문서목록.length;\n}\n\nconst sorted = Object.values(groups)\n  .sort((a, b) => a.실적인덱스 - b.실적인덱스)\n  .map(g => ({ json: g }));\n\nconsole.log('그룹핑 결과:');\nsorted.forEach(s =>\n  console.log(`  실적 ${s.json.실적번호}: ${s.json.파일수}개 - [${s.json.파일목록.join(', ')}]`)\n);\n\nreturn sorted;"
+      },
+      "id": "e2573db5-60ff-4f33-9157-5bfb130235b8",
+      "name": "Group by 실적",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read PDF 실행 후 json = { text:'...' } 만 남음\n// → $('Expand All Files').all()[idx] 로 _meta 복원\n// → 문서제목은 파일명 그대로 사용\n\nconst items         = $input.all();\nconst expandedItems = $('Expand All Files').all();\n\nconsole.log(`Structure PDF Data: items=${items.length}, expandedItems=${expandedItems.length}`);\n\nreturn items.map((item, idx) => {\n  const text = item.json.text || '';\n\n  const expandedItem = expandedItems[idx];\n  const meta = (expandedItem && expandedItem.json && expandedItem.json._meta)\n    ? expandedItem.json._meta\n    : {};\n\n  const 실적번호     = meta.실적번호     !== undefined ? meta.실적번호     : '알 수 없음';\n  const 실적인덱스   = meta.실적인덱스   !== undefined ? meta.실적인덱스   : -1;\n  const 파일명       = meta.파일명       || '알 수 없음';\n  const 파일순번     = meta.파일순번     || 1;\n  const 실적내파일수 = meta.실적내파일수 || 1;\n  const 제출시간     = meta.제출시간     || '';\n\n  console.log(`[${idx}] 실적번호: ${실적번호}, 파일명: ${파일명}`);\n\n  function removeDuplicateWords(t) {\n    const words = t.split(/\\s+/);\n    const result = []; let prev = '';\n    for (const w of words) { if (w !== prev) { result.push(w); prev = w; } }\n    return result.join(' ');\n  }\n\n  function removeDuplicateSentences(t) {\n    t = removeDuplicateWords(t);\n    const words = t.split(/\\s+/);\n    const max = Math.floor(words.length / 2);\n    for (let len = max; len >= 3; len--) {\n      const a = words.slice(0, len).join(' ');\n      const b = words.slice(len, len * 2).join(' ');\n      if (a === b) return a + ' ' + words.slice(len).join(' ');\n    }\n    return t;\n  }\n\n  function extractMainSections(text) {\n    const sections = {};\n    const matches  = [...text.matchAll(/□\\s*([^\\n]+)/g)];\n    for (let i = 0; i < matches.length; i++) {\n      const title = matches[i][1].trim();\n      const start = matches[i].index + matches[i][0].length;\n      const end   = i < matches.length - 1 ? matches[i+1].index : text.length;\n      sections[title] = text.slice(start, end).trim();\n    }\n    return sections;\n  }\n\n  function parseSubSections(content) {\n    const matches = [...content.matchAll(/❍\\s*\\(\\s*([^)]+)\\s*\\)/g)];\n    if (matches.length === 0) return content.replace(/^\\s*❍\\s*/gm, '').trim();\n    const result = {};\n    for (let i = 0; i < matches.length; i++) {\n      const sub   = matches[i][1].trim();\n      const start = matches[i].index + matches[i][0].length;\n      const end   = i < matches.length - 1 ? matches[i+1].index : content.length;\n      result[sub] = content.slice(start, end)\n        .replace(/^\\s*-\\s*/gm, '').replace(/^\\s*❍\\s*/gm, '').trim();\n    }\n    return result;\n  }\n\n  const mainSections = extractMainSections(text);\n\n  const structuredData = {\n    메타데이터: {\n      문서제목:     파일명.replace(/\\.pdf$/i, ''),\n      원본파일명:   파일명,\n      실적번호:     실적번호,\n      실적인덱스:   실적인덱스,\n      파일순번:     파일순번,\n      실적내파일수: 실적내파일수,\n      평가항목:     '선택 안됨',\n      제출시간:     제출시간\n    }\n  };\n\n  for (const [sTitle, sContent] of Object.entries(mainSections)) {\n    structuredData[sTitle] = parseSubSections(sContent);\n  }\n  structuredData['원본텍스트'] = text;\n\n  console.log('구조화 완료:', JSON.stringify(structuredData.메타데이터));\n  return { json: structuredData };\n});"
+      },
+      "id": "3ddbf80b-5d5d-45ca-b56f-d88f2b45510b",
+      "name": "Structure PDF Data1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -784,
+        464
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8c488315-8063-4afc-8d04-a225a2bfbe63",
+      "name": "Read PDF1",
+      "type": "n8n-nodes-base.readPDF",
+      "typeVersion": 1,
+      "position": [
+        -1008,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 실적 1~5의 모든 PDF를 개별 아이템으로 펼치기\n// _meta를 json에 직접 포함 → Structure PDF Data에서 $('Expand All Files').all()[idx]로 참조\n\nconst formItem   = $input.first();\nconst formJson   = formItem.json;\nconst formBinary = formItem.binary || {};\nconst allBinaryKeys = Object.keys(formBinary);\n\nconsole.log('=== Expand All Files 시작 ===');\nconsole.log('바이너리 키 목록:', allBinaryKeys);\n\nconst 실적필드목록 = ['실적 1', '실적 2', '실적 3', '실적 4', '실적 5'];\nconst outputItems = [];\n\nfor (let i = 0; i < 실적필드목록.length; i++) {\n  const fieldName = 실적필드목록[i];\n  const 실적번호  = i + 1;\n  const files = formJson[fieldName];\n\n  if (!files || !Array.isArray(files) || files.length === 0) {\n    console.log(`실적 ${실적번호}: 파일 없음, 건너뜀`);\n    continue;\n  }\n\n  for (let j = 0; j < files.length; j++) {\n    const file     = files[j];\n    const fileName = file.filename || '알 수 없음';\n    const mimeType = file.mimetype || 'application/pdf';\n\n    let matchedKey = allBinaryKeys.find(key => {\n      const b = formBinary[key];\n      return b.fileName === fileName || b.filename === fileName;\n    });\n\n    if (!matchedKey) {\n      let globalIdx = 0;\n      for (let pi = 0; pi < i; pi++) {\n        const pf = formJson[실적필드목록[pi]];\n        if (pf && Array.isArray(pf)) globalIdx += pf.length;\n      }\n      globalIdx += j;\n      matchedKey = allBinaryKeys[globalIdx];\n      console.log(`실적${실적번호} 파일명 매칭 실패 → 인덱스(${globalIdx}) 대체: ${matchedKey}`);\n    }\n\n    if (!matchedKey || !formBinary[matchedKey]) {\n      console.log(`실적${실적번호} - ${fileName}: 바이너리 없음, 건너뜀`);\n      continue;\n    }\n\n    const globalItemIndex = outputItems.length;\n\n    outputItems.push({\n      json: {\n        _meta: {\n          _itemIndex:    globalItemIndex,\n          실적번호:       실적번호,\n          실적인덱스:     i,\n          파일명:         fileName,\n          파일순번:       j + 1,\n          실적내파일수:   files.length,\n          제출시간:       formJson.submittedAt || ''\n        }\n      },\n      binary: {\n        data: {\n          ...formBinary[matchedKey],\n          mimeType:      formBinary[matchedKey].mimeType || mimeType,\n          fileExtension: formBinary[matchedKey].fileExtension || 'pdf'\n        }\n      }\n    });\n\n    console.log(`실적${실적번호} - 파일 ${j+1}: ${fileName} → 아이템 인덱스 ${globalItemIndex}`);\n  }\n}\n\nconsole.log(`=== 총 ${outputItems.length}개 아이템 생성 완료 ===`);\nreturn outputItems;"
+      },
+      "id": "2b38932b-6843-4116-a058-68faee84b120",
+      "name": "Expand All Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "공공데이터 평가 '1-4-3 공공데이터 활용지원' 정성보고서 작성 서비스",
+        "formDescription": "공공데이터 제공 운영실태 평가 「1-4-3 공공데이터 활용 지원」 지표와 관련된 활용 지원 실적 증빙자료(PDF)를 업로드해주세요.\n\n✓ 실적 제출 : (A기관) 최대 5건 / (B기관) 최대 4건\n✓ 파일 수 : 실적별 제한 없음\n✓ 파일 형식 : PDF 필수",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "실적 1",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "실적 2",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf"
+            },
+            {
+              "fieldLabel": "실적 3",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf"
+            },
+            {
+              "fieldLabel": "실적 4",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf"
+            },
+            {
+              "fieldLabel": "실적 5",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf"
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a6f77898-e713-4240-ad25-b748d89eeb75",
+      "name": "Form Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -1456,
+        464
+      ],
+      "webhookId": "0b1b213e-b245-4411-866f-dc12590becd3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 실적별 HTML 보고서 생성\nconst items = $input.all();\n\nfunction escapeHtml(text) {\n  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#039;' };\n  return String(text || '').replace(/[&<>\"']/g, m => map[m]);\n}\n\nfunction formatText(text) {\n  if (!text || !text.trim()) return '<span style=\"color:#9ca3af;font-style:italic;\">내용 없음</span>';\n  return escapeHtml(text.trim()).replace(/\\n/g, '<br>');\n}\n\n// 모든 실적 아이템으로 하나의 HTML 생성\nconst 실적목록 = items.map(item => item.json);\n\nconst 실적탭버튼 = 실적목록.map((실적, i) => `\n  <button class=\"tab-btn${i === 0 ? ' active' : ''}\" onclick=\"showTab(${i})\">\n    실적 ${실적.실적번호}\n    <span class=\"file-count\">${실적.파일목록.length}개 파일</span>\n  </button>\n`).join('');\n\nconst 실적패널 = 실적목록.map((실적, i) => {\n  const r = 실적.최종보고서;\n  const 파일태그 = 실적.파일목록.map(f =>\n    `<span class=\"file-tag\">${escapeHtml(f.replace(/\\.pdf$/i, ''))}</span>`\n  ).join('');\n\n  return `\n  <div class=\"tab-panel${i === 0 ? ' active' : ''}\" id=\"panel-${i}\">\n\n    <div class=\"report-meta\">\n      <div class=\"meta-row\">\n        <span class=\"meta-label\">실적 번호</span>\n        <span class=\"meta-value\">실적 ${실적.실적번호}</span>\n      </div>\n      <div class=\"meta-row\">\n        <span class=\"meta-label\">증빙 파일</span>\n        <span class=\"meta-value files\">${파일태그}</span>\n      </div>\n    </div>\n\n    <div class=\"section\">\n      <div class=\"section-header\">\n        <div class=\"section-icon\">📌</div>\n        <h2 class=\"section-title\">추진실적명</h2>\n      </div>\n      <div class=\"section-content\">${formatText(r.추진실적명)}</div>\n    </div>\n\n    <div class=\"section\">\n      <div class=\"section-header\">\n        <div class=\"section-icon\">📅</div>\n        <h2 class=\"section-title\">수행시기</h2>\n      </div>\n      <div class=\"section-content\">${formatText(r.수행시기)}</div>\n    </div>\n\n    <div class=\"section\">\n      <div class=\"section-header\">\n        <div class=\"section-icon\">🎯</div>\n        <h2 class=\"section-title\">추진 필요성 및 배경</h2>\n        <span class=\"section-guide\">현황 및 문제점을 바탕으로 기관이 해당 지원노력을 추진한 배경</span>\n      </div>\n      <div class=\"section-content\">${formatText(r.추진필요성및배경)}</div>\n    </div>\n\n    <div class=\"section\">\n      <div class=\"section-header\">\n        <div class=\"section-icon\">📋</div>\n        <h2 class=\"section-title\">추진 내용</h2>\n        <span class=\"section-guide\">국민/기업이 기관 개방데이터를 다방면에 활용할 수 있도록 직접적으로 지원한 기관의 노력</span>\n      </div>\n      <div class=\"section-content\">${formatText(r.추진내용)}</div>\n    </div>\n\n    <div class=\"section\">\n      <div class=\"section-header\">\n        <div class=\"section-icon\">✨</div>\n        <h2 class=\"section-title\">핵심 성과</h2>\n        <span class=\"section-guide\">기관 지원 노력을 바탕으로 나타난 공공데이터 활용도 제고 성과</span>\n      </div>\n      <div class=\"section-content\">${formatText(r.핵심성과)}</div>\n    </div>\n\n  </div>`;\n}).join('');\n\nconst html = `<!DOCTYPE html>\n<html lang=\"ko\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>공공데이터 활용지원 정성보고서</title>\n  <style>\n    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }\n\n    body {\n      font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;\n      background: #f1f5f9;\n      color: #1e293b;\n      min-height: 100vh;\n    }\n\n    /* ── 헤더 ── */\n    .header {\n      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);\n      color: white;\n      padding: 48px 40px 36px;\n      text-align: center;\n    }\n    .header-badge {\n      display: inline-block;\n      background: rgba(255,255,255,0.2);\n      border: 1px solid rgba(255,255,255,0.35);\n      border-radius: 20px;\n      padding: 4px 16px;\n      font-size: 0.78em;\n      letter-spacing: 0.08em;\n      margin-bottom: 16px;\n    }\n    .header h1 {\n      font-size: 1.9em;\n      font-weight: 700;\n      line-height: 1.35;\n      margin-bottom: 8px;\n    }\n    .header-sub {\n      font-size: 0.9em;\n      opacity: 0.75;\n    }\n\n    /* ── 탭 ── */\n    .tabs-wrap {\n      background: white;\n      border-bottom: 1px solid #e2e8f0;\n      padding: 0 32px;\n      display: flex;\n      gap: 4px;\n      overflow-x: auto;\n    }\n    .tab-btn {\n      flex-shrink: 0;\n      padding: 16px 24px 14px;\n      border: none;\n      background: none;\n      cursor: pointer;\n      font-size: 0.95em;\n      font-weight: 600;\n      color: #64748b;\n      border-bottom: 3px solid transparent;\n      transition: all 0.2s;\n      display: flex;\n      flex-direction: column;\n      align-items: center;\n      gap: 4px;\n    }\n    .tab-btn:hover { color: #3b82f6; }\n    .tab-btn.active {\n      color: #1e3a8a;\n      border-bottom-color: #3b82f6;\n    }\n    .file-count {\n      font-size: 0.72em;\n      font-weight: 400;\n      color: #94a3b8;\n      background: #f1f5f9;\n      padding: 1px 8px;\n      border-radius: 10px;\n    }\n    .tab-btn.active .file-count { background: #dbeafe; color: #1d4ed8; }\n\n    /* ── 패널 ── */\n    .tab-panel { display: none; padding: 32px; max-width: 900px; margin: 0 auto; }\n    .tab-panel.active { display: block; }\n\n    /* ── 메타 ── */\n    .report-meta {\n      background: white;\n      border: 1px solid #e2e8f0;\n      border-radius: 12px;\n      padding: 20px 24px;\n      margin-bottom: 28px;\n    }\n    .meta-row {\n      display: flex;\n      align-items: flex-start;\n      gap: 16px;\n      padding: 6px 0;\n    }\n    .meta-row + .meta-row { border-top: 1px solid #f1f5f9; margin-top: 6px; padding-top: 12px; }\n    .meta-label {\n      flex-shrink: 0;\n      width: 80px;\n      font-size: 0.8em;\n      font-weight: 600;\n      color: #64748b;\n      text-transform: uppercase;\n      letter-spacing: 0.05em;\n      padding-top: 2px;\n    }\n    .meta-value { font-size: 0.92em; color: #1e293b; }\n    .files { display: flex; flex-wrap: wrap; gap: 6px; }\n    .file-tag {\n      background: #eff6ff;\n      color: #1d4ed8;\n      border: 1px solid #bfdbfe;\n      border-radius: 6px;\n      padding: 2px 10px;\n      font-size: 0.8em;\n    }\n\n    /* ── 섹션 ── */\n    .section {\n      background: white;\n      border: 1px solid #e2e8f0;\n      border-radius: 14px;\n      padding: 28px;\n      margin-bottom: 20px;\n      transition: box-shadow 0.2s;\n    }\n    .section:hover { box-shadow: 0 4px 20px rgba(59,130,246,0.08); }\n    .section-header {\n      display: flex;\n      align-items: flex-start;\n      gap: 12px;\n      margin-bottom: 18px;\n      padding-bottom: 14px;\n      border-bottom: 1px solid #f1f5f9;\n    }\n    .section-icon {\n      font-size: 1.3em;\n      line-height: 1;\n      padding-top: 2px;\n    }\n    .section-title {\n      font-size: 1.05em;\n      font-weight: 700;\n      color: #1e293b;\n      flex: 1;\n    }\n    .section-guide {\n      display: block;\n      margin-top: 4px;\n      font-size: 0.78em;\n      font-weight: 400;\n      color: #94a3b8;\n      line-height: 1.5;\n    }\n    .section-content {\n      font-size: 0.97em;\n      color: #374151;\n      line-height: 2;\n    }\n\n    /* ── 푸터 ── */\n    .footer {\n      text-align: center;\n      padding: 32px;\n      font-size: 0.83em;\n      color: #94a3b8;\n      border-top: 1px solid #e2e8f0;\n      background: white;\n      margin-top: 8px;\n    }\n\n    @media (max-width: 640px) {\n      .header { padding: 32px 20px 24px; }\n      .header h1 { font-size: 1.4em; }\n      .tab-panel { padding: 20px; }\n      .tabs-wrap { padding: 0 12px; }\n    }\n\n    @media print {\n      .tabs-wrap { display: none; }\n      .tab-panel { display: block !important; page-break-after: always; }\n    }\n  </style>\n</head>\n<body>\n\n  <div class=\"header\">\n    <div class=\"header-badge\">공공데이터 제공 운영실태 평가</div>\n    <h1>1-4-3 공공데이터 활용지원<br>정성보고서</h1>\n    <p class=\"header-sub\">총 ${실적목록.length}건의 실적 · 생성일시 ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>\n  </div>\n\n  <div class=\"tabs-wrap\">\n    ${실적탭버튼}\n  </div>\n\n  ${실적패널}\n\n  <div class=\"footer\">\n    본 보고서는 제출된 증빙 PDF를 AI가 분석하여 자동 생성되었습니다.<br>\n    최종 제출 전 내용을 반드시 검토·수정하시기 바랍니다.\n  </div>\n\n  <script>\n    function showTab(idx) {\n      document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));\n      document.querySelectorAll('.tab-panel').forEach((p, i) => p.classList.toggle('active', i === idx));\n    }\n  </script>\n\n</body>\n</html>`;\n\nconst buffer = Buffer.from(html, 'utf-8');\nconst fileName = `공공데이터_활용지원_정성보고서_${new Date().toISOString().split('T')[0]}.html`;\n\nreturn [{\n  json: { 생성파일명: fileName, 실적수: 실적목록.length },\n  binary: {\n    data: {\n      data: buffer.toString('base64'),\n      mimeType: 'text/html',\n      fileName,\n      fileExtension: 'html'\n    }\n  }\n}];"
+      },
+      "id": "7839745d-5cfa-4090-8c32-5f4e9bcea25b",
+      "name": "Generate HTML Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Label Report Items - 실적별로 문서목록 전체에 라벨 부여\nconst items = $input.all();\n\nfunction findSectionsByKeywords(dataObj, keywords) {\n  const found = [];\n  if (!dataObj || typeof dataObj !== 'object') return found;\n  for (const [sectionTitle, sectionContent] of Object.entries(dataObj)) {\n    if (sectionTitle === '메타데이터' || sectionTitle === '원본텍스트') continue;\n    const titleLower = String(sectionTitle).toLowerCase();\n    for (const keyword of keywords) {\n      if (titleLower.includes(String(keyword).toLowerCase())) {\n        found.push({ 제목: sectionTitle, 내용: sectionContent });\n        break;\n      }\n    }\n  }\n  return found;\n}\n\nfunction labelDocument(data) {\n  const docTitle = data.메타데이터?.문서제목 || data.메타데이터?.원본파일명 || '';\n\n  const 추진실적명데이터 = {\n    항목명: '추진실적명',\n    출처: '메타데이터.문서제목(파일명)',\n    찾은섹션: docTitle ? [{ 제목: '문서제목', 내용: docTitle }] : []\n  };\n\n  const 수행시기섹션 = findSectionsByKeywords(data, ['기간', '일정', '추진기간', '추진 일정', '수행기간', '수행시기', '추진시기']);\n  const 수행시기데이터 = { 항목명: '수행시기', 출처: '기간/일정 섹션', 찾은섹션: 수행시기섹션 };\n\n  const 추진배경섹션 = findSectionsByKeywords(data, ['배경', '목적', '취지', '필요성', '현황', '문제점', '추진배경', '추진 배경', '추진 목적']);\n  const 추진배경데이터 = { 항목명: '추진필요성및배경', 출처: '배경/목적/현황/문제점 섹션', 찾은섹션: 추진배경섹션 };\n\n  const 추진내용섹션 = findSectionsByKeywords(data, ['추진', '내용', '방향', '개요', '방법', '지원', '운영', '활동', '실시', '수행']);\n  const 추진내용데이터 = { 항목명: '추진내용', 출처: '내용/방향/지원 섹션', 찾은섹션: 추진내용섹션 };\n\n  const 핵심성과섹션 = findSectionsByKeywords(data, ['성과', '효과', '결과', '실적', '기대효과', '활용', '달성']);\n  const 핵심성과데이터 = { 항목명: '핵심성과', 출처: '성과/효과/결과 섹션', 찾은섹션: 핵심성과섹션 };\n\n  return {\n    추진실적명: 추진실적명데이터,\n    수행시기: 수행시기데이터,\n    추진필요성및배경: 추진배경데이터,\n    추진내용: 추진내용데이터,\n    핵심성과: 핵심성과데이터\n  };\n}\n\nreturn items.map(item => {\n  const 실적번호   = item.json.실적번호;\n  const 실적인덱스 = item.json.실적인덱스;\n  const 제출시간   = item.json.제출시간;\n  const 파일목록   = item.json.파일목록 || [];\n  const 문서목록   = item.json.문서목록 || [];\n\n  console.log(`=== 실적 ${실적번호} 라벨링 시작 (${문서목록.length}개 문서) ===`);\n\n  // 실적 내 전체 원본텍스트 합산 (AI 컨텍스트용)\n  const 전체원본텍스트 = 문서목록.map((doc, i) => {\n    const 파일명 = doc.메타데이터?.원본파일명 || `파일${i+1}`;\n    return `[문서 ${i+1}: ${파일명}]\\n${doc.원본텍스트 || ''}`;\n  }).join('\\n\\n---\\n\\n');\n\n  // 문서별 라벨\n  const 문서별라벨 = 문서목록.map((doc, docIdx) => {\n    const labels = labelDocument(doc);\n    const 파일명  = doc.메타데이터?.원본파일명 || 파일목록[docIdx] || `파일${docIdx+1}`;\n    console.log(`  문서[${docIdx}] ${파일명} 라벨링 완료`);\n    return { 파일명, 파일순번: doc.메타데이터?.파일순번 || (docIdx + 1), 라벨: labels, 구조화PDF: doc };\n  });\n\n  // 실적 통합: 문서별 섹션을 항목명 기준으로 병합\n  const 통합라벨 = {};\n  const 항목명목록 = ['추진실적명', '수행시기', '추진필요성및배경', '추진내용', '핵심성과'];\n  for (const 항목명 of 항목명목록 ) {\n    const 합산섹션 = [];\n    for (const doc of 문서별라벨) {\n      const 라벨 = doc.라벨[항목명];\n      if (라벨 && 라벨.찾은섹션.length > 0) {\n        합산섹션.push(...라벨.찾은섹션);\n      }\n    }\n    통합라벨[항목명] = {\n      항목명,\n      찾은섹션: 합산섹션,\n      데이터있음: 합산섹션.length > 0\n    };\n  }\n\n  return {\n    json: {\n      실적번호,\n      실적인덱스,\n      제출시간,\n      파일수: 문서목록.length,\n      파일목록,\n      통합라벨,\n      문서별라벨,\n      전체원본텍스트  // AI Agent 프롬프트용\n    }\n  };\n});"
+      },
+      "id": "e7419ac3-1a5c-4ed0-876c-a19ddc098ec5",
+      "name": "Label Report Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-pro-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        112,
+        640
+      ],
+      "id": "59c8d545-7744-4a32-990b-037d70d25549",
+      "name": "Google Gemini Chat Model"
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI Agent에 넘길 프롬프트를 실적별로 구성\nconst items = $input.all();\n\nreturn items.map(item => {\n  const 실적번호      = item.json.실적번호;\n  const 파일목록      = item.json.파일목록 || [];\n  const 통합라벨      = item.json.통합라벨 || {};\n  const 전체원본텍스트 = item.json.전체원본텍스트 || '';\n\n  // 라벨에서 찾은 섹션 내용을 텍스트로 변환\n  function 섹션텍스트(항목명) {\n    const 라벨 = 통합라벨[항목명];\n    if (!라벨 || !라벨.데이터있음) return null;\n    return 라벨.찾은섹션\n      .map(s => {\n        const 내용 = typeof s.내용 === 'object'\n          ? JSON.stringify(s.내용, null, 2)\n          : String(s.내용 || '');\n        return `[${s.제목}]\\n${내용}`;\n      })\n      .join('\\n\\n');\n  }\n\n  // 파일명에서 추진실적명 후보 추출 (.pdf 제거, 특수문자 정리)\n  const 파일명목록텍스트 = 파일목록\n    .map((f, i) => `${i + 1}. ${f.replace(/\\.pdf$/i, '').replace(/[_\\[\\]()]/g, ' ').replace(/\\s+/g, ' ').trim()}`)\n    .join('\\n');\n\n  const 수행시기원본    = 섹션텍스트('수행시기');\n  const 추진배경원본    = 섹션텍스트('추진필요성및배경');\n  const 추진내용원본    = 섹션텍스트('추진내용');\n  const 핵심성과원본    = 섹션텍스트('핵심성과');\n\n  function 항목블록(번호, 제목, 가이드, 원본내용, 없을때지시) {\n    const 원본블록 = 원본내용\n      ? `→ 관련 원본:\\n${원본내용}`\n      : `→ 관련 원본: 명시적 내용 없음 — 아래 전체 원본 문서를 참고하세요.`;\n    const 작성지시 = 원본내용\n      ? `원본 내용을 바탕으로 아래 가이드에 맞게 정리해주세요.`\n      : `원본 문서에서 명시적 내용을 찾지 못했습니다.\\n${없을때지시}\\n⚠️ 문서에 없는 사실, 수치, 기관명, 사업명을 절대 추가하지 마세요.`;\n    return `## 항목 ${번호}. ${제목}\\n${가이드}\\n\\n${작성지시}\\n\\n${원본블록}`;\n  }\n\n  const 프롬프트 = `아래는 실적 ${실적번호}의 증빙 PDF 문서들에서 추출한 내용입니다.\n이 내용을 바탕으로 「1-4-3 공공데이터 활용지원」 정성보고서의 5개 항목을 작성해주세요.\n\n${'='.repeat(60)}\n📄 원본 문서 내용 (전체 참고용)\n${'='.repeat(60)}\n${전체원본텍스트.slice(0, 12000)}\n\n${'='.repeat(60)}\n✍️ 항목별 작성 지시\n${'='.repeat(60)}\n\n## 항목 1. 추진실적명\n아래 파일명 목록을 참고하여 추진실적명을 작성하세요.\n\n작성 규칙:\n- 파일명에서 연도, 기관명, 사업명 핵심 키워드를 추출하여 자연스러운 실적명으로 정리\n- 불필요한 기호(_), 괄호, 버전 표기(v1.0, 최종본 등), 파일 유형 표현(결과보고서, 제작계획 등 행정 접미사) 제거\n- 여러 파일이 있을 경우 공통된 사업명을 대표 실적명으로 추출\n- 예시: \"2025년 한국학중앙연구원_개방데이터 수요조사 결과보고서\" → \"2025년 한국학중앙연구원 개방데이터 수요조사\"\n\n파일명 목록:\n${파일명목록텍스트}\n\n---\n\n${항목블록(\n  2,\n  '수행시기',\n  '사업/활동의 수행 시기와 기간을 간결하게 서술합니다. (예: 2025년 3월 ~ 2025년 8월)',\n  수행시기원본,\n  '원본 문서 전체를 참고하여 사업/활동이 수행된 시기와 기간을 추론하세요.\\n문서의 작성일, 보고일, 행사일, 계획서 일정 등 날짜 관련 정보를 최대한 활용하세요.'\n)}\n\n---\n\n${항목블록(\n  3,\n  '추진 필요성 및 배경',\n  `기관이 해당 활동을 추진하게 된 현황과 문제점, 추진 필요성을 서술합니다.\n\n작성 규칙:\n- 반드시 번호 목록 형식으로 작성 (줄글 금지)\n- 음슴체로 작성 (예: ~임, ~함, ~필요함, ~있음) — 존댓말(~습니다, ~합니다) 절대 사용 금지\n- 각 항목은 하나의 완결된 내용을 담되 간결하게\n\n출력 예시:\n1. 공공데이터 활용 수요는 높으나 개방 현황에 대한 인식이 낮음\n2. 기업·연구자 대상 데이터 활용 안내 채널이 부재함\n3. 수요 기반의 체계적인 데이터 개방 계획 수립이 필요함`,\n  추진배경원본,\n  '원본 문서 전체 맥락을 바탕으로 기관이 이 활동을 추진하게 된 배경을 합리적으로 추론하여 서술하세요.'\n)}\n\n---\n\n${항목블록(\n  4,\n  '추진 내용',\n  `국민/기업이 기관 개방데이터를 다방면에 활용할 수 있도록 기관이 직접 수행한 구체적인 지원 활동을 서술합니다.\n기관의 노력 수준(직접 수행한 내용)을 중심으로 작성하세요.\n\n작성 규칙:\n- 반드시 항목-세부내용 계층 구조로 작성 (줄글 금지)\n- 항목은 활동 단위로 구분하고, 각 항목 아래 세부내용을 bullet(-)으로 기술\n- 음슴체 불필요, 간결하고 명확하게\n\n출력 예시:\n1. 공공데이터 수요조사 실시\n- 기업·연구자·일반 국민 대상 온라인 설문 진행\n- 총 150개 기관·기업 참여, 개방 희망 데이터 항목 수집\n2. 공공데이터 활용 설명회 개최\n- 데이터 목록 및 활용 방법 안내\n- 질의응답 세션 운영`,\n  추진내용원본,\n  '원본 문서 전체를 참고하여 기관이 수행한 활동을 정리하세요. 문서에 없는 활동은 절대 추가하지 마세요.'\n)}\n\n---\n\n${항목블록(\n  5,\n  '핵심 성과',\n  `기관의 지원 노력을 통해 실제로 창출된 공공데이터 활용도 제고 성과를 서술합니다.\n가능하면 수치(참여자 수, 활용 건수, 만족도, 다운로드 수 등)를 포함하세요.\n정량 성과가 없으면 정성적 성과를 구체적으로 서술하세요.\n\n작성 규칙:\n- 반드시 항목-세부내용 계층 구조로 작성 (줄글 금지)\n- 항목은 성과 유형 단위로 구분하고, 각 항목 아래 세부내용을 bullet(-)으로 기술\n- 음슴체 불필요, 간결하고 명확하게\n\n출력 예시:\n1. 수요 기반 데이터 개방 확대\n- 수요조사 결과를 반영하여 신규 데이터셋 12종 추가 개방\n- 활용도 높은 데이터 우선 정비 완료\n2. 공공데이터 활용 인식 제고\n- 설명회 참석자 만족도 4.6/5.0 달성\n- 참여 기업의 데이터 활용 의향 87% 응답`,\n  핵심성과원본,\n  '원본 문서에서 성과를 확인할 수 없습니다. 추진 내용에 근거하여 기대되는 성과를 합리적으로 서술하되, 수치는 절대 임의로 만들지 마세요.'\n)}\n\n${'='.repeat(60)}\n📤 출력 형식 (아래 JSON 외 다른 텍스트 절대 금지)\n${'='.repeat(60)}\n{\n  \"추진실적명\": \"파일명 기반으로 정리한 실적명\",\n  \"수행시기\": \"수행 시기 및 기간\",\n  \"추진필요성및배경\": \"1. ...\\n2. ...\\n3. ...\",\n  \"추진내용\": \"1. 항목명\\n- 세부내용\\n- 세부내용\\n2. 항목명\\n- 세부내용\",\n  \"핵심성과\": \"1. 항목명\\n- 세부내용\\n- 세부내용\\n2. 항목명\\n- 세부내용\"\n}`;\n\n  return {\n    json: {\n      ...item.json,\n      _ai_prompt: 프롬프트\n    }\n  };\n});"
+      },
+      "id": "0ce219c3-bdfc-4dc2-b151-8540b2251cc0",
+      "name": "Build AI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI Agent 응답을 파싱해서 최종 보고서 데이터 구성\n// Build AI Prompt 노드 출력을 같은 idx로 직접 참조\nconst items = $input.all();\n\n// ★ 실제 워크플로우에 있는 노드 이름과 정확히 일치시킴\nconst promptItems = $('Build AI Prompt').all();\n\nreturn items.map((item, idx) => {\n  const 원본데이터 = promptItems[idx]?.json || {};\n  const 실적번호   = 원본데이터.실적번호;\n  const 파일목록   = 원본데이터.파일목록 || [];\n  const 제출시간   = 원본데이터.제출시간 || '';\n\n  // AI 응답 텍스트 추출 (Agent 버전에 따라 필드명 다름)\n  const aiOutput = (\n    item.json.output ||\n    item.json.text ||\n    item.json.response ||\n    item.json.message ||\n    ''\n  );\n\n  console.log(`실적 ${실적번호} AI 응답 원문 (앞 300자):`, String(aiOutput).slice(0, 300));\n\n  let 보고서 = {};\n  try {\n    // 마크다운 코드블록 및 앞뒤 공백 제거 후 JSON 파싱\n    const cleaned = String(aiOutput)\n      .replace(/```json\\s*/gi, '')\n      .replace(/```\\s*/g, '')\n      .trim();\n    보고서 = JSON.parse(cleaned);\n  } catch (e) {\n    console.error(`실적 ${실적번호} JSON 파싱 실패:`, e.message);\n    보고서 = {\n      추진실적명:       파일목록.join(', '),\n      수행시기:         '',\n      추진필요성및배경: '',\n      추진내용:         aiOutput,\n      핵심성과:         ''\n    };\n  }\n\n  return {\n    json: {\n      실적번호,\n      파일목록,\n      제출시간,\n      최종보고서: {\n        추진실적명:       보고서.추진실적명       || 파일목록.join(', '),\n        수행시기:         보고서.수행시기         || '',\n        추진필요성및배경: 보고서.추진필요성및배경 || '',\n        추진내용:         보고서.추진내용         || '',\n        핵심성과:         보고서.핵심성과         || ''\n      }\n    }\n  };\n});"
+      },
+      "id": "4e5348d9-6011-4739-9d4d-24fe37160d71",
+      "name": "Parse AI Response1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json._ai_prompt }}",
+        "options": {
+          "systemMessage": "당신은 공공데이터 제공 운영실태 평가 「1-4-3 공공데이터 활용지원」 지표의 정성보고서 작성 전문가입니다.\n\n## 평가 지표 이해\n이 지표는 국민/기업이 기관에서 개방 중인 공공데이터를 다양한 분야에서 활용할 수 있도록 기관이 직접적으로 지원한 노력 수준과 그 추진 성과를 평가합니다.\n- 노력 수준: 기관이 직접 기획·수행한 활동 (교육, 설명회, 컨설팅, 홍보, 수요조사 등)\n- 추진 성과: 기관의 노력을 통해 실제로 창출된 공공데이터 활용도 제고 효과 (참여자 수, 활용 건수, 만족도 등 수치 포함)\n\n## 항목별 작성 형식 규칙\n\n### 추진실적명\n- 파일명에서 연도·기관명·사업명 핵심 키워드만 추출하여 간결한 실적명으로 정리\n- 불필요한 기호, 괄호, 버전 표기, 행정 접미사(결과보고서·계획안·최종본 등) 제거\n- 여러 파일이 있을 경우 공통 사업명을 대표 실적명으로 추출\n\n### 수행시기\n- 단답형으로 간결하게 (예: 2025년 3월 ~ 8월)\n\n### 추진 필요성 및 배경\n- 반드시 번호 목록 형식 (줄글 절대 금지)\n- 반드시 음슴체 사용 (~임, ~함, ~있음, ~필요함) — 존댓말(~습니다, ~합니다) 절대 사용 금지\n\n### 추진 내용\n- 반드시 항목-세부내용 계층 구조 (줄글 절대 금지)\n- 형식: 번호. 항목명 → 줄바꿈 후 하이픈(-)으로 세부내용 나열\n\n### 핵심 성과\n- 반드시 항목-세부내용 계층 구조 (줄글 절대 금지)\n- 형식: 번호. 항목명 → 줄바꿈 후 하이픈(-)으로 세부내용 나열\n- 수치(참여자 수, 건수, 만족도 등)가 있으면 반드시 포함\n\n## 일반 작성 원칙\n1. 반드시 제공된 원본 문서 내용에만 근거하여 작성합니다.\n2. 문서에 없는 사실, 수치, 기관명, 사업명을 절대 창작하거나 추가하지 않습니다.\n3. 문서에서 명시적으로 찾을 수 없는 항목은 문서의 전체 맥락을 바탕으로 합리적으로 추론하되, 없는 수치는 절대 만들지 않습니다.\n4. 평가자가 읽었을 때 기관의 노력과 성과가 명확히 전달되도록 논리적이고 구체적으로 작성합니다.\n5. 응답은 반드시 순수 JSON 형식으로만 출력합니다. 마크다운 코드블록(```json 등), 설명 텍스트 등 JSON 외 어떤 문자도 절대 포함하지 않습니다."
+        }
+      },
+      "id": "14aa7079-ee7a-45ba-afe4-bf9d96ffac5e",
+      "name": "AI Agent-보고서 작성 및 검토",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        112,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 1. 데이터 입력 및 구조화\n### [입력 정보]\n✓ 실적 제출 : (A기관) 최대 5건 / (B기관) 최대 4건\n✓ 파일 수 : 실적별 제한 없음\n✓ 파일 형식 : PDF 필수",
+        "height": 448,
+        "width": 1040
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1472,
+        240
+      ],
+      "id": "8b8a388f-9791-4b84-bfea-0f0d3fe2955b",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 2. 보고서 작성 및 검토\n### [관련 정보]\n1. 보고서 필수 작성 항목\n-수행시기, 추진 필요성, 추진 내용, 핵심 성과\n\n2. 프롬프트\n- 보고서 내 있는 항목 : 원본 사용, AI 요약 / 보고서 내 없는 항목 : AI 작성\n",
+        "height": 448,
+        "width": 1024
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        240
+      ],
+      "id": "9d1b0ff4-0e5a-4ee6-a12f-666dd0bb0828",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## 3. 보고서 저장\n### [관련 정보]\n1. 저장 형식 : HTML\n",
+        "height": 448,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        624,
+        240
+      ],
+      "id": "c850f414-a78d-4826-9a87-262d6ce95848",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {
+    "Form Trigger": [
+      {
+        "json": {
+          "실적 1": [
+            {
+              "filename": "2025년 한국학중앙연구원_개방데이터 수요조사 결과보고서_v1.0.pdf",
+              "mimetype": "application/pdf",
+              "size": 408002
+            }
+          ],
+          "실적 2": [
+            {
+              "filename": "2025년 한국학중앙연구원 공공데이터 카드뉴스 결과 보고서.pdf",
+              "mimetype": "application/pdf",
+              "size": 491633
+            },
+            {
+              "filename": "2025년 한국학중앙연구원 공공데이터 카드뉴스 제작 계획(안).pdf",
+              "mimetype": "application/pdf",
+              "size": 107928
+            }
+          ],
+          "실적 3": null,
+          "실적 4": null,
+          "실적 5": null,
+          "submittedAt": "2026-03-17T14:05:42.385+09:00",
+          "formMode": "test"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Group by 실적": {
+      "main": [
+        [
+          {
+            "node": "Label Report Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structure PDF Data1": {
+      "main": [
+        [
+          {
+            "node": "Group by 실적",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read PDF1": {
+      "main": [
+        [
+          {
+            "node": "Structure PDF Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand All Files": {
+      "main": [
+        [
+          {
+            "node": "Read PDF1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Expand All Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Report Items": {
+      "main": [
+        [
+          {
+            "node": "Build AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent-보고서 작성 및 검토",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Agent-보고서 작성 및 검토",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response1": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent-보고서 작성 및 검토": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "37bc2006-038a-4fa0-ba32-d66966fdce76",
+  "meta": {
+    "instanceId": "32c5f95e2856792afb4cb6b3c219708d546ea9cd357650e1e624ba9066377ac0"
+  },
+  "id": "uxCrtQCRmejMPFHK",
+  "tags": []
+}

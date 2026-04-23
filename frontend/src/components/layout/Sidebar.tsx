@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
 import {
+  LayoutDashboard,
   FileText,
   Sparkles,
   ShieldCheck,
@@ -27,6 +28,7 @@ import {
   ClipboardList,
   Landmark,
   Compass,
+  Eye,
 } from "lucide-react";
 
 interface SidebarItem {
@@ -100,6 +102,12 @@ const SECTIONS: SidebarSection[] = [
     ],
   },
   // 미매핑: { label: "입찰공고 모니터링", path: "/projects/bid-monitor" } — 새 목록에 대응 항목 없음
+  {
+    title: "개발 도구",
+    items: [
+      { label: "HWP 미리보기 컴포넌트", path: "/hwp-preview", icon: <Eye className="h-[18px] w-[18px]" /> },
+    ],
+  },
 ];
 
 const ALL_ITEMS = SECTIONS.flatMap((s) => s.items).filter((item) => !!item.path);
@@ -192,8 +200,13 @@ function SidebarContent() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-2">
-        {/* 구: 대시보드 링크 제거 (임시) — 오류데이터 개선 가이드에 "/" 매핑됨 */}
+      <nav className="flex-1 overflow-y-auto scrollbar-hide px-3 py-2">
+        {/* 대시보드 */}
+        {renderItem({
+          label: "대시보드",
+          path: "/dashboard",
+          icon: <LayoutDashboard className="h-[18px] w-[18px]" />,
+        })}
 
         {/* Sections */}
         {SECTIONS.map((section) => (

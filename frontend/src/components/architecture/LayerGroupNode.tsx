@@ -6,7 +6,7 @@ import type { NodeProps } from "@xyflow/react";
 export interface LayerGroupData {
   label: string;
   sublabel: string;
-  layerType: "frontend" | "backend" | "external" | "data";
+  layerType: "frontend" | "backend" | "external" | "data" | "n8n" | "ep" | "ads";
   [key: string]: unknown;
 }
 
@@ -15,6 +15,9 @@ const LAYER_STYLES: Record<string, { bg: string; border: string; badge: string }
   backend:  { bg: "bg-green-50/40",  border: "border-green-300/60",  badge: "bg-green-100 text-green-700" },
   external: { bg: "bg-violet-50/40", border: "border-violet-300/60", badge: "bg-violet-100 text-violet-700" },
   data:     { bg: "bg-amber-50/40",  border: "border-amber-300/60",  badge: "bg-amber-100 text-amber-700" },
+  n8n:      { bg: "bg-orange-50/40",  border: "border-orange-300/60",  badge: "bg-orange-100 text-orange-700" },
+  ep:       { bg: "bg-emerald-50/40", border: "border-emerald-300/60", badge: "bg-emerald-100 text-emerald-700" },
+  ads:      { bg: "bg-cyan-50/40",    border: "border-cyan-300/60",    badge: "bg-cyan-100 text-cyan-700" },
 };
 
 function LayerGroupNode({ data }: NodeProps) {

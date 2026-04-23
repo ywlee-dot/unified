@@ -11,7 +11,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const hasToken = request.cookies.has("access_token");
+  const hasToken =
+    request.cookies.has("access_token") || request.cookies.has("refresh_token");
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
 
   // Authenticated user on login page -> redirect to dashboard

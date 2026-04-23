@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.projects.bid_monitor.models import (
@@ -18,13 +18,26 @@ from app.projects.bid_monitor.schemas import (
     CheckRunResponse,
     ConfigResponse,
     ConfigUpdate,
+    FilterConditions,
     KeywordCreate,
     KeywordResponse,
     KeywordUpdate,
     NoticeDetailResponse,
     NoticeResponse,
+    ScoringConfigResponse,
 )
 from app.projects.bid_monitor.core.scheduler import is_scheduler_running, run_check
+
+
+# grade 우선순위 매핑 (PostgreSQL CASE 표현용)
+GRADE_PRIORITY_SQL = """
+    CASE grade
+        WHEN 'high' THEN 3
+        WHEN 'medium' THEN 2
+        WHEN 'low' THEN 1
+        ELSE 0
+    END
+"""
 
 
 class BidMonitorService:
@@ -105,20 +118,51 @@ class BidMonitorService:
         sort: str = "date",
         page: int = 1,
         page_size: int = 20,
-        filter_status: str | None = None,
+        grade: list[str] | None = None,
     ) -> dict:
-        # LEFT JOIN으로 알림(필터 통과) 여부 조회
+        # 등급 우선순위: high=3, medium=2, low=1 (그 외 0)
+        grade_rank = case(
+            (BidAlertModel.grade == "high", 3),
+            (BidAlertModel.grade == "medium", 2),
+            (BidAlertModel.grade == "low", 1),
+            else_=0,
+        )
+
+        # 알림 집계 서브쿼리: 공고별 최고 점수 + 최고 등급 rank + match_reasons 합집합
         alert_sub = (
             select(
                 BidAlertModel.notice_id,
-                func.array_agg(BidAlertModel.match_reasons).label("all_match_reasons"),
+                func.max(BidAlertModel.score).label("best_score"),
+                func.max(grade_rank).label("best_rank"),
+                func.array_agg(BidAlertModel.grade).label("grades"),
+                func.array_agg(BidAlertModel.match_reasons).label("all_reasons"),
             )
             .group_by(BidAlertModel.notice_id)
             .subquery()
         )
 
+        # 재공고 중복 제거: 같은 (제목, 공고기관) 조합에서 created_at 최신만 남김
+        from sqlalchemy import func as _f, Integer
+        dedup_sub = (
+            select(
+                BidNoticeModel.id,
+                _f.row_number().over(
+                    partition_by=(BidNoticeModel.bid_ntce_nm, BidNoticeModel.ntce_instt_nm),
+                    order_by=BidNoticeModel.created_at.desc(),
+                ).label("rn"),
+            )
+            .subquery()
+        )
+
         query = (
-            select(BidNoticeModel, alert_sub.c.all_match_reasons)
+            select(
+                BidNoticeModel,
+                alert_sub.c.best_score,
+                alert_sub.c.grades,
+                alert_sub.c.all_reasons,
+            )
+            .join(dedup_sub, BidNoticeModel.id == dedup_sub.c.id)
+            .where(dedup_sub.c.rn == 1)
             .outerjoin(alert_sub, BidNoticeModel.id == alert_sub.c.notice_id)
         )
 
@@ -127,39 +171,34 @@ class BidMonitorService:
         if bid_type:
             query = query.where(BidNoticeModel.bid_type == bid_type)
 
-        # filter_status: "passed" = 필터 통과, "rejected" = 미통과
-        if filter_status == "passed":
-            query = query.where(alert_sub.c.all_match_reasons.isnot(None))
-        elif filter_status == "rejected":
-            query = query.where(alert_sub.c.all_match_reasons.is_(None))
+        if grade:
+            rank_map = {"high": 3, "medium": 2, "low": 1}
+            valid_ranks = [rank_map[g] for g in grade if g in rank_map]
+            if valid_ranks:
+                query = query.where(or_(*(alert_sub.c.best_rank == r for r in valid_ranks)))
 
-        # Count
         count_q = select(func.count()).select_from(query.subquery())
         total = (await db.execute(count_q)).scalar() or 0
 
-        # Sort
         if sort == "price":
             query = query.order_by(BidNoticeModel.presmpt_prce.desc().nulls_last())
         elif sort == "deadline":
             query = query.order_by(BidNoticeModel.bid_clse_dt.asc().nulls_last())
+        elif sort == "score":
+            query = query.order_by(alert_sub.c.best_score.desc().nulls_last())
         else:
             query = query.order_by(BidNoticeModel.created_at.desc())
 
-        # Paginate
         query = query.offset((page - 1) * page_size).limit(page_size)
         rows = (await db.execute(query)).all()
 
         items = []
-        for notice, all_match_reasons in rows:
+        for notice, best_score, grades, all_reasons in rows:
             resp = self._notice(notice)
-            if all_match_reasons:
-                resp.filter_passed = True
-                # flatten: [[r1,r2],[r3]] -> [r1,r2,r3]
-                reasons = []
-                for mr in all_match_reasons:
-                    if isinstance(mr, list):
-                        reasons.extend(mr)
-                resp.match_reasons = list(dict.fromkeys(reasons)) if reasons else None
+            if best_score is not None:
+                resp.best_score = float(best_score)
+                resp.best_grade = self._best_grade(grades)
+                resp.match_reasons = self._flatten_reasons(all_reasons)
             items.append(resp)
 
         return {
@@ -170,14 +209,153 @@ class BidMonitorService:
             "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
         }
 
+    def _best_grade(self, grades: list | None) -> str | None:
+        if not grades:
+            return None
+        priority = {"high": 3, "medium": 2, "low": 1}
+        best = None
+        best_rank = -1
+        for g in grades:
+            if g in priority and priority[g] > best_rank:
+                best = g
+                best_rank = priority[g]
+        return best
+
+    def _flatten_reasons(self, all_reasons: list | None) -> list[str] | None:
+        if not all_reasons:
+            return None
+        out: list[str] = []
+        for mr in all_reasons:
+            if isinstance(mr, list):
+                out.extend(mr)
+        return list(dict.fromkeys(out)) if out else None
+
+    async def get_similar_past_notices(
+        self, db: AsyncSession, notice_id: str, min_overlap: int = 0, limit: int = 10
+    ) -> list[dict]:
+        """동일 수요기관 과거 24개월 공고 전수 수집 후 유사도 순 반환.
+
+        스케줄러에서 사전 수집된 캐시가 있으면 즉시 반환.
+        없으면 G2B PPSSrch 엔드포인트로 실시간 조회 (월 단위 병렬 호출).
+        """
+        current = (await db.execute(
+            select(BidNoticeModel).where(BidNoticeModel.id == notice_id)
+        )).scalar_one_or_none()
+        if not current:
+            return []
+
+        # 캐시 우선 반환 (similarity_score 기준 정렬 후 top-limit)
+        if current.similar_past_json is not None:
+            cached = sorted(
+                current.similar_past_json,
+                key=lambda x: x.get("similarity_score", 0),
+                reverse=True,
+            )
+            return cached[:limit]
+
+        # --- 실시간 조회 (캐시 미스 fallback) ---
+        import asyncio
+        from datetime import datetime, timedelta, timezone
+        from app.projects.bid_monitor.core.g2b_client import G2BClient
+
+        metadata = current.metadata_json if isinstance(current.metadata_json, dict) else {}
+        dminstt_cd = metadata.get("dminsttCd")
+        ntce_instt_cd = metadata.get("ntceInsttCd")
+        if not dminstt_cd and not ntce_instt_cd:
+            return []
+
+        fc_resp = await self.get_scoring_config(db)
+        kws = fc_resp.filter_conditions.title_keywords + fc_resp.filter_conditions.search_aliases
+        if not kws:
+            return []
+
+        from app.projects.bid_monitor.core.scheduler import _similarity_score
+
+        current_title = current.bid_ntce_nm or ""
+        KST = timezone(timedelta(hours=9))
+        bid_type = current.bid_type or "services"
+        end_ref = current.bid_ntce_dt if current.bid_ntce_dt else datetime.now(KST)
+
+        g2b = G2BClient()
+
+        async def fetch_month(month_end: datetime):
+            month_start = month_end - timedelta(days=30)
+            items, _ = await g2b.fetch_by_institution(
+                bid_type=bid_type,
+                start_dt=month_start.strftime("%Y%m%d%H%M"),
+                end_dt=month_end.strftime("%Y%m%d%H%M"),
+                dminstt_cd=dminstt_cd,
+                ntce_instt_cd=ntce_instt_cd if not dminstt_cd else None,
+                num_of_rows=100,
+            )
+            return items
+
+        cursor = end_ref
+        tasks = []
+        for _ in range(24):
+            tasks.append(fetch_month(cursor))
+            cursor = cursor - timedelta(days=31)
+
+        results_lists = await asyncio.gather(*tasks, return_exceptions=True)
+
+        seen: set[tuple[str, str]] = {(current.bid_ntce_no, current.bid_ntce_ord)}
+        candidates: list[dict] = []
+        title_lower = current_title.lower()
+
+        for result in results_lists:
+            if isinstance(result, Exception):
+                continue
+            for item in result:
+                key = (item.get("bid_ntce_no", ""), item.get("bid_ntce_ord", "00"))
+                if not key[0] or key in seen:
+                    continue
+                seen.add(key)
+                past_title = item.get("bid_ntce_nm") or ""
+                sim = _similarity_score(current_title, past_title, kws)
+                matched = [k for k in kws if k and k.lower() in title_lower and k.lower() in past_title.lower()]
+                dt = item.get("bid_ntce_dt")
+                clse = item.get("bid_clse_dt")
+                candidates.append({
+                    "id": f"past-{key[0]}-{key[1]}",
+                    "bid_ntce_no": key[0],
+                    "bid_ntce_ord": key[1],
+                    "bid_ntce_nm": past_title,
+                    "ntce_instt_nm": item.get("ntce_instt_nm"),
+                    "dminstt_nm": item.get("dminstt_nm"),
+                    "bid_ntce_dt": dt.isoformat() if isinstance(dt, datetime) else dt,
+                    "bid_clse_dt": clse.isoformat() if isinstance(clse, datetime) else clse,
+                    "presmpt_prce": item.get("presmpt_prce"),
+                    "bid_ntce_url": item.get("bid_ntce_url"),
+                    "bid_ntce_dtl_url": item.get("bid_ntce_dtl_url"),
+                    "matched_keywords": matched,
+                    "similarity_score": sim,
+                })
+
+        candidates.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
+        return candidates[:limit]
+
     async def get_notice(self, db: AsyncSession, notice_id: str) -> NoticeDetailResponse | None:
         row = (await db.execute(
             select(BidNoticeModel).where(BidNoticeModel.id == notice_id)
         )).scalar_one_or_none()
         if not row:
             return None
+
+        # 해당 공고의 알림들에서 점수/등급 추출
+        alerts_q = await db.execute(
+            select(BidAlertModel).where(BidAlertModel.notice_id == notice_id)
+        )
+        alerts = alerts_q.scalars().all()
+        best_score = max((a.score or 0 for a in alerts), default=None) if alerts else None
+        best_grade = self._best_grade([a.grade for a in alerts]) if alerts else None
+        reasons = self._flatten_reasons([a.match_reasons for a in alerts]) if alerts else None
+
+        base = self._notice(row).model_dump()
+        base["best_score"] = float(best_score) if best_score is not None else None
+        base["best_grade"] = best_grade
+        base["match_reasons"] = reasons
         return NoticeDetailResponse(
-            **self._notice(row).model_dump(),
+            **base,
             metadata_json=row.metadata_json if isinstance(row.metadata_json, dict) else {},
             updated_at=row.updated_at,
         )
@@ -208,7 +386,12 @@ class BidMonitorService:
     # Alerts
     # -----------------------------------------------------------------------
 
-    async def get_alerts(self, db: AsyncSession, limit: int = 50) -> list[AlertResponse]:
+    async def get_alerts(
+        self,
+        db: AsyncSession,
+        limit: int = 50,
+        grade: str | None = None,
+    ) -> list[AlertResponse]:
         query = (
             select(
                 BidAlertModel,
@@ -217,9 +400,14 @@ class BidMonitorService:
             )
             .outerjoin(BidKeywordModel, BidAlertModel.keyword_id == BidKeywordModel.id)
             .outerjoin(BidNoticeModel, BidAlertModel.notice_id == BidNoticeModel.id)
-            .order_by(BidAlertModel.created_at.desc())
-            .limit(limit)
         )
+        if grade in ("high", "medium", "low"):
+            query = query.where(BidAlertModel.grade == grade)
+        query = query.order_by(
+            BidAlertModel.score.desc().nulls_last(),
+            BidAlertModel.created_at.desc(),
+        ).limit(limit)
+
         rows = (await db.execute(query)).all()
         return [
             AlertResponse(
@@ -230,6 +418,9 @@ class BidMonitorService:
                 status=alert.status,
                 error_message=alert.error_message,
                 match_reasons=alert.match_reasons if isinstance(alert.match_reasons, list) else None,
+                score=alert.score,
+                grade=alert.grade,
+                signals=alert.signals if isinstance(alert.signals, list) else None,
                 created_at=alert.created_at,
                 keyword_text=kw_text,
                 notice_title=ntce_title,
@@ -243,6 +434,10 @@ class BidMonitorService:
 
     async def trigger_check(self, db: AsyncSession, trigger_type: str = "manual") -> dict:
         return await run_check(trigger_type=trigger_type)
+
+    async def trigger_backfill(self, db: AsyncSession, hours: int) -> dict:
+        hours = max(1, min(168, hours))  # 1h ~ 7d 제한
+        return await run_check(trigger_type="backfill", window_minutes=hours * 60)
 
     async def get_check_runs(self, db: AsyncSession, limit: int = 20) -> list[CheckRunResponse]:
         result = await db.execute(
@@ -278,8 +473,67 @@ class BidMonitorService:
         return ConfigResponse(
             discord_webhook_url=config_map.get("discord_webhook_url"),
             check_interval_minutes=int(config_map.get("check_interval_minutes", "30")),
+            notify_grade_threshold=config_map.get("notify_grade_threshold", "medium"),
             data_go_kr_api_key_set=bool(api_key),
         )
+
+    # -----------------------------------------------------------------------
+    # Scoring Config (전역 스코어링 설정)
+    # -----------------------------------------------------------------------
+
+    _DEFAULT_SCORING_FC = {
+        "title_keywords": ["공공데이터", "데이터기반행정", "데이터 기반 행정"],
+        "title_exclude": [
+            "ISP", "ISMP", "영향평가", "감리", "빅데이터 분석플랫폼", "분석플랫폼",
+            "정보보안", "성과관리", "장비", "PC", "노트북", "차량", "구매", "교체",
+            "하드웨어", "재활용", "엑스선", "배수로",
+        ],
+        "search_aliases": [
+            "공공데이터 개방", "공공데이터 제공", "공공데이터 활용",
+            "데이터기반행정 활성화", "데이터 기반 행정 활성화",
+            "품질관리 컨설팅", "품질관리 용역",
+        ],
+        "keyword_combinations": [
+            ["공공데이터", "데이터기반행정"],
+            ["공공데이터", "데이터 기반 행정"],
+            ["공공데이터", "품질관리"],
+        ],
+        "categories": {
+            "pubPrcrmntLrgClsfcNm": ["ICT 서비스"],
+            "pubPrcrmntClsfcNm": ["데이터서비스", "정보화전략계획서비스", "정보통신연구조사서비스"],
+            "pubPrcrmntMidClsfcNm": ["ICT사업 컨설팅", "DB구축 및 자료입력"],
+        },
+        "scoring_weights": {
+            "title_keyword": 25, "title_alias": 20, "keyword_combo_bonus": 30,
+            "category_exact": 10, "category_mid": 5, "category_large": 3,
+            "institution": 10, "flag": 10, "price_in_range": 5, "price_out_range": -5,
+        },
+        "scoring_thresholds": {"high": 80, "medium": 50, "low": 25},
+    }
+
+    async def get_scoring_config(self, db: AsyncSession) -> ScoringConfigResponse:
+        import json
+        raw = (await db.execute(
+            select(BidMonitorConfigModel).where(BidMonitorConfigModel.key == "scoring_filter_conditions")
+        )).scalar_one_or_none()
+        if raw:
+            fc_dict = json.loads(raw.value)
+        else:
+            fc_dict = self._DEFAULT_SCORING_FC
+        return ScoringConfigResponse(filter_conditions=FilterConditions(**fc_dict))
+
+    async def update_scoring_config(self, db: AsyncSession, fc: FilterConditions) -> ScoringConfigResponse:
+        import json
+        fc_dict = fc.model_dump()
+        existing = (await db.execute(
+            select(BidMonitorConfigModel).where(BidMonitorConfigModel.key == "scoring_filter_conditions")
+        )).scalar_one_or_none()
+        if existing:
+            existing.value = json.dumps(fc_dict, ensure_ascii=False)
+        else:
+            db.add(BidMonitorConfigModel(key="scoring_filter_conditions", value=json.dumps(fc_dict, ensure_ascii=False)))
+        await db.commit()
+        return ScoringConfigResponse(filter_conditions=fc)
 
     async def update_config(self, db: AsyncSession, data: ConfigUpdate) -> ConfigResponse:
         updates = data.model_dump(exclude_none=True)
@@ -308,6 +562,32 @@ class BidMonitorService:
         total_notices = (await db.execute(select(func.count(BidNoticeModel.id)))).scalar() or 0
         total_alerts = (await db.execute(select(func.count(BidAlertModel.id)))).scalar() or 0
 
+        # 공고별 최고 등급 집계 — 한 공고가 여러 키워드에서 매칭되면 최고 등급만 카운트
+        grade_subq = (
+            select(
+                BidAlertModel.notice_id,
+                func.max(
+                    func.coalesce(
+                        # high=3, medium=2, low=1 (CASE)
+                        func.nullif(
+                            func.coalesce(BidAlertModel.grade, ""), ""
+                        ), ""
+                    )
+                )
+            )
+            .where(BidAlertModel.grade.in_(["high", "medium", "low"]))
+            .group_by(BidAlertModel.notice_id)
+        ).subquery()
+
+        # 각 등급별 카운트 (단순 alerts 테이블 기준)
+        grade_counts = {}
+        for g in ("high", "medium", "low"):
+            c = (await db.execute(
+                select(func.count(func.distinct(BidAlertModel.notice_id)))
+                .where(BidAlertModel.grade == g)
+            )).scalar() or 0
+            grade_counts[g] = c
+
         runs_result = await db.execute(
             select(BidCheckRunModel).order_by(BidCheckRunModel.started_at.desc()).limit(10)
         )
@@ -330,6 +610,9 @@ class BidMonitorService:
             active_keywords=active_kw,
             total_notices=total_notices,
             total_alerts=total_alerts,
+            high_count=grade_counts["high"],
+            medium_count=grade_counts["medium"],
+            low_count=grade_counts["low"],
             recent_runs=recent_runs,
             scheduler_running=is_scheduler_running(),
         )

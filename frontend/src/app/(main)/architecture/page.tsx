@@ -9,6 +9,7 @@ import {
 } from "@/lib/pipeline-data";
 import ProjectTabNav from "@/components/architecture/ProjectTabNav";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import { BranchingPipeline } from "@/components/architecture/BranchingPipeline";
 
 const PipelineFlow = dynamic(
   () => import("@/components/architecture/PipelineFlow"),
@@ -65,16 +66,23 @@ function ArchitectureContent() {
           </div>
 
           {/* Flow Canvas */}
-          <div
-            className="rounded-2xl overflow-hidden"
-            style={{
-              backgroundColor: '#FFFFFF',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              minHeight: '600px',
-            }}
-          >
-            <PipelineFlow pipeline={pipeline} />
-          </div>
+          {pipeline.pipelineGraph ? (
+            <BranchingPipeline
+              graph={pipeline.pipelineGraph}
+              color={pipeline.color ?? "#3182f6"}
+            />
+          ) : (
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: '#FFFFFF',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                minHeight: '600px',
+              }}
+            >
+              <PipelineFlow pipeline={pipeline} />
+            </div>
+          )}
         </div>
       ) : (
         <div

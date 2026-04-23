@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 공공데이터 분석 주제 탐색</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --primary-dark: #4f46e5;
+            --secondary: #10b981;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.15) 0px, transparent 50%);
+            color: var(--text-main);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+        }
+
+        .header {
+            padding: 4rem 2rem;
+            text-align: center;
+            background: transparent;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto 5rem;
+            padding: 0 1.5rem;
+        }
+
+        .step-indicator {
+            display: flex;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            padding: 0.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--glass-border);
+            margin-bottom: 3rem;
+            gap: 0.5rem;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .step:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+        }
+
+        .step.active {
+            background: var(--gradient);
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border-radius: 1.5rem;
+            padding: 2.5rem;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h2 {
+            font-size: 1.75rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            background: var(--gradient);
+            color: white;
+            border: none;
+            padding: 0.875rem 1.75rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.2);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.4);
+            filter: brightness(1.1);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        input[type="text"] {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            width: 100%;
+            transition: border-color 0.3s;
+        }
+
+        input[type="file"] {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .tag {
+            display: inline-block;
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--primary-light);
+            padding: 0.35rem 0.85rem;
+            border-radius: 2rem;
+            font-size: 0.8rem;
+            margin: 0.25rem;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            font-weight: 500;
+        }
+
+        .pair-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 1.25rem;
+            padding: 2rem;
+            margin-top: 2rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        .topic-item {
+            background: var(--glass);
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            border-radius: 1rem;
+            border-left: 4px solid var(--primary);
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        .topic-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateX(5px);
+        }
+
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 2rem;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .alert {
+            padding: 1.25rem;
+            border-radius: 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .alert-info {
+            background: rgba(59, 130, 246, 0.1);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.1);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 1.5rem;
+            overflow: hidden;
+            border-radius: 0.75rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        th,
+        td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.05);
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        .loading-animation {
+            height: 4px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .loading-animation-bar {
+            height: 100%;
+            width: 30%;
+            background: var(--gradient);
+            animation: loadingProgress 2s linear infinite;
+        }
+
+        @keyframes loadingProgress {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(400%);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>AI Data Explorer</h1>
+        <p>기관 데이터 기반 지능형 분석 과제 도출 및 전략 계획 수립 시스템</p>
+    </div>
+
+    <div class="container">
+        <div class="step-indicator">
+            <div class="step active" id="step1" onclick="showSection('section-upload', 'step1')">
+                <span style="opacity:0.6">01</span> 자료 업로드
+            </div>
+            <div class="step" id="step3" onclick="if(currentContext) showSection('section-review', 'step3')">
+                <span style="opacity:0.6">02</span> 주제 검토
+            </div>
+            <div class="step" id="step4" onclick="if(currentContext) showSection('section-plans', 'step4')">
+                <span style="opacity:0.6">03</span> 전략 계획서
+            </div>
+        </div>
+
+        <!-- Step 1: Upload -->
+        <div id="section-upload" class="card">
+            <h2><span style="font-size:1.5rem">📤</span> 분석 대상 자료 업로드</h2>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">각 기관의 사업계획서(PDF/HWP)와 데이터 카탈로그(Excel/CSV)를 업로드
+                해주세요.</p>
+
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div id="institutionsContainer">
+                    <div class="institution-entry"
+                        style="background: rgba(0,0,0,0.2); padding:2rem; border-radius:1rem; margin-bottom:1.5rem; position:relative; border: 1px solid var(--glass-border);">
+                        <button type="button" class="btn"
+                            style="position:absolute; top:1rem; right:1rem; background:rgba(239, 68, 68, 0.2); color:#f87171; padding:0.4rem 0.8rem; font-size:0.8rem;"
+                            onclick="this.parentElement.remove()">삭제</button>
+                        <div class="form-group">
+                            <label>기관 구분</label>
+                            <input type="text" name="instName[]" required placeholder="예: 국토교통부, 서울시청 등">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
+                            <div class="form-group">
+                                <label>기관 프로파일 (프로젝트/사업 공고)</label>
+                                <input type="file" name="profileFiles_0[]" multiple>
+                            </div>
+                            <div class="form-group">
+                                <label>데이터 메타데이터 (보유 데이터셋)</label>
+                                <input type="file" name="catalogFile_0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:1.25rem; margin-top:2rem;">
+                    <button type="button" class="btn btn-secondary" onclick="addInstitutionField()" style="flex:1">+ 기관
+                        추가</button>
+                    <button type="submit" class="btn" style="flex:2">모든 자료 저장 및 서버 전송</button>
+                </div>
+            </form>
+            <div id="uploadResult" style="margin-top: 1.5rem;"></div>
+
+            <div
+                style="margin-top: 3rem; padding: 2rem; border-radius: 1rem; background: var(--gradient); opacity: 0.9;">
+                <h3 style="color: white; margin-bottom: 0.5rem;">AI 분석 엔진 실행</h3>
+                <p style="color: rgba(255,255,255,0.8); margin-bottom: 1.5rem;">업로드된 데이터를 바탕으로 기관 간 시너지를 분석하고 최적의 분석 주제를
+                    도출합니다.</p>
+                <button class="btn" onclick="startGeneration()"
+                    style="background: white; color: var(--primary-dark); font-weight:700;">자동 탐색 시작하기</button>
+            </div>
+        </div>
+
+        <!-- 로딩 -->
+        <div id="loading" class="card hidden">
+            <div class="spinner"></div>
+            <h3 id="loadingText" style="text-align:center; margin-bottom: 1rem;">고성능 AI 연산 중...</h3>
+            <div class="loading-animation">
+                <div class="loading-animation-bar"></div>
+            </div>
+            <p style="text-align:center; color: var(--text-muted); font-size: 0.9rem;">LLM 에이전트가 데이터 간의 상관관계를 분석하고
+                있습니다.<br>이 과정은 데이터 규모에 따라 1~3분 정도 소요될 수 있습니다.</p>
+        </div>
+
+        <!-- Step 3: Review -->
+        <div id="section-review" class="card hidden">
+            <h2><span style="font-size:1.5rem">🎯</span> 추천 분석 주제 및 데이터 매핑</h2>
+            <div id="pipelineStatus" class="alert alert-info">분석이 성공적으로 완료되었습니다. 아래 추천 항목들을 검토하세요.</div>
+
+            <div id="resultsContainer"></div>
+
+            <div style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h3>분석 계획서 수립</h3>
+                        <p style="color: var(--text-muted);">선택한 주제들을 바탕으로 구체적인 추진 로드맵과 세부 계획서를 생성합니다.</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <span id="selectedCount"
+                            style="display:block; margin-bottom:0.75rem; font-weight: 600; color: var(--primary-light);">0개
+                            선택됨</span>
+                        <button class="btn" onclick="generatePlans()" style="padding: 1rem 2rem;">선택 주제 계획서 도출</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: Plans -->
+        <div id="section-plans" class="card hidden">
+            <h2><span style="font-size:1.5rem">📄</span> 최종 분석 전략 계획서</h2>
+            <div id="plansContainer"></div>
+            <div style="text-align:center; margin-top:3rem;">
+                <button class="btn btn-secondary" onclick="location.reload()">새로운 분석 시작하기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentContext = null;
+        let selectedTopicIds = new Set();
+        let currentTaskId = null;
+        let pollingInterval = null;
+
+        // Initialization
+        window.addEventListener('load', () => fetchLatestResult());
+
+        async function fetchLatestResult() {
+            try {
+                const res = await fetch('/api/latest_result');
+                const data = await res.json();
+                if (data && data.context && data.context.topic_discoverer) {
+                    currentContext = data.context;
+                    renderResults(data.context);
+                    document.getElementById('uploadResult').innerHTML =
+                        `<div class="alert alert-info">📌 이전 분석 결과가 로드되었습니다. '주제 검토' 탭에서 확인 가능합니다.</div>`;
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        let instCounter = 1;
+
+        function addInstitutionField() {
+            const container = document.getElementById('institutionsContainer');
+            const newEntry = document.createElement('div');
+            newEntry.className = 'institution-entry';
+            newEntry.style = 'background: rgba(0,0,0,0.2); padding:2rem; border-radius:1rem; margin-bottom:1.5rem; position:relative; border: 1px solid var(--glass-border);';
+            newEntry.innerHTML = `
+                <button type="button" class="btn" style="position:absolute; top:1rem; right:1rem; background:rgba(239, 68, 68, 0.2); color:#f87171; padding:0.4rem 0.8rem; font-size:0.8rem;" onclick="this.parentElement.remove()">삭제</button>
+                <div class="form-group">
+                    <label>기관 구분</label>
+                    <input type="text" name="instName[]" required placeholder="예: 추가 기관명">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
+                    <div class="form-group">
+                        <label>기관 프로파일 (PDF/HWP)</label>
+                        <input type="file" name="profileFiles_${instCounter}[]" multiple>
+                    </div>
+                    <div class="form-group">
+                        <label>데이터 메타데이터 (Excel/CSV)</label>
+                        <input type="file" name="catalogFile_${instCounter}">
+                    </div>
+                </div>
+            `;
+            container.appendChild(newEntry);
+            instCounter++;
+        }
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            document.getElementById('uploadResult').innerHTML = '<div class="alert alert-info">데이터 인코딩 및 업로드 중...</div>';
+            try {
+                const res = await fetch('/api/upload_multiple', { method: 'POST', body: formData });
+                const result = await res.json();
+                document.getElementById('uploadResult').innerHTML = result.status === 'error' ?
+                    `<div class="alert alert-error">실패: ${result.error}</div>` :
+                    `<div class="alert alert-success">${result.message}</div>`;
+            } catch (e) {
+                document.getElementById('uploadResult').innerHTML = `<div class="alert alert-error">네트워크 오류: ${e.message}</div>`;
+            }
+        });
+
+        async function pollTaskStatus(taskId, onSuccess, onError) {
+            currentTaskId = taskId;
+            if (pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/task_status/${taskId}`);
+                    if (res.status === 404) { clearInterval(pollingInterval); onError("태스크 유실"); return; }
+                    const task = await res.json();
+                    document.getElementById('loadingText').innerText = task.message || "연산 진행 중...";
+                    if (task.status === 'completed') { clearInterval(pollingInterval); onSuccess(task.result); }
+                    else if (task.status === 'error') { clearInterval(pollingInterval); onError(task.error); }
+                } catch (e) { console.error(e); }
+            }, 2500);
+        }
+
+        async function startGeneration() {
+            showSection('loading', '');
+            try {
+                const res = await fetch('/api/run_pipeline', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'accepted') {
+                    pollTaskStatus(data.task_id,
+                        (result) => { currentContext = result.context; renderResults(currentContext); showSection('section-review', 'step3'); },
+                        (err) => { alert("분석 실패: " + err); showSection('section-upload', 'step1'); }
+                    );
+                }
+            } catch (e) { alert(e.message); showSection('section-upload', 'step1'); }
+        }
+
+        async function generatePlans() {
+            if (selectedTopicIds.size === 0) return alert("최소 1개의 주제를 선택해주세요.");
+            showSection('loading', 'step4');
+            try {
+                const res = await fetch('/api/generate_plans', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ selected_topic_ids: Array.from(selectedTopicIds), context_path: currentContext.file_path })
+                });
+                const data = await res.json();
+                if (data.status === 'accepted') {
+                    pollTaskStatus(data.task_id,
+                        (result) => { renderPlans(result.plans); showSection('section-plans', 'step4'); },
+                        (err) => { alert(err); showSection('section-review', 'step3'); }
+                    );
+                }
+            } catch (e) { alert(e.message); showSection('section-review', 'step3'); }
+        }
+
+        function toggleTopicSelection(topicId) {
+            selectedTopicIds.has(topicId) ? selectedTopicIds.delete(topicId) : selectedTopicIds.add(topicId);
+            document.getElementById('selectedCount').innerText = `${selectedTopicIds.size}개 선택됨`;
+        }
+
+        function renderResults(context) {
+            const container = document.getElementById('resultsContainer');
+            container.innerHTML = '';
+            const pairs = context.institution_matcher?.collaboration_pairs || [];
+            const topics = context.topic_discoverer?.topics || [];
+
+            // 기관 경고 표시
+            const institutions = context.institution_matcher?.institutions || [];
+            institutions.forEach(inst => {
+                if (inst.profile_alert) {
+                    container.insertAdjacentHTML('beforeend',
+                        `<div class="alert alert-info" style="margin-bottom:0.75rem">⚠️ <strong>${inst.name}</strong>: ${inst.profile_alert}</div>`
+                    );
+                }
+            });
+
+            pairs.forEach(pair => {
+                const pairDiv = document.createElement('div');
+                pairDiv.className = 'pair-section';
+                pairDiv.innerHTML = `<h3 style="color:var(--primary-light)">🤝 ${pair.institution_a} × ${pair.institution_b}</h3><p style="font-size:0.9rem; color:var(--text-muted)">${pair.synergy_reason}</p>`;
+
+                // 신 스키마: datasets[].institution 기준으로 필터링
+                const related = topics.filter(t => {
+                    const instNames = (t.datasets || []).map(d => d.institution);
+                    return instNames.includes(pair.institution_a) && instNames.includes(pair.institution_b);
+                });
+
+                if (related.length === 0) {
+                    pairDiv.insertAdjacentHTML('beforeend',
+                        `<p style="color:var(--text-muted); font-size:0.9rem; margin-top:1rem">이 기관 쌍에 대한 분석 주제가 없습니다.</p>`
+                    );
+                }
+
+                related.forEach(topic => {
+                    const datasets = topic.datasets || [];
+                    const tableNames = datasets.map(d => `[${d.institution}] ${d.table_name}`);
+                    const feasibilityColor = topic.feasibility === '높음' ? '#34d399' : topic.feasibility === '중' ? '#fbbf24' : '#f87171';
+
+                    const topicDiv = document.createElement('div');
+                    topicDiv.className = 'topic-item';
+                    topicDiv.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; align-items:start; flex-wrap:wrap; gap:0.5rem">
+                            <h4 style="display:flex; align-items:center; gap:0.75rem; flex:1">
+                                <input type="checkbox" onchange="toggleTopicSelection('${topic.id}')" style="width:1.25rem; height:1.25rem; cursor:pointer; flex-shrink:0">
+                                ${topic.title}
+                            </h4>
+                            <span class="tag" style="background:rgba(251,191,36,0.1); color:${feasibilityColor}; border:1px solid ${feasibilityColor}40">실현가능성: ${topic.feasibility || 'N/A'}</span>
+                        </div>
+
+                        ${topic.join_specification?.description ? `<p style="font-size:0.9rem; margin:1rem 0; color:var(--text-main)">${topic.join_specification.description}</p>` : ''}
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin:1rem 0">
+                            ${topic.policy_impact_a ? `<div style="background:rgba(0,0,0,0.2); padding:0.75rem; border-radius:0.5rem; font-size:0.85rem"><strong style="color:var(--primary-light)">${topic.policy_impact_a.institution}</strong><p style="margin-top:0.4rem; color:var(--text-muted)">${topic.policy_impact_a.impact}</p></div>` : ''}
+                            ${topic.policy_impact_b ? `<div style="background:rgba(0,0,0,0.2); padding:0.75rem; border-radius:0.5rem; font-size:0.85rem"><strong style="color:var(--secondary)">${topic.policy_impact_b.institution}</strong><p style="margin-top:0.4rem; color:var(--text-muted)">${topic.policy_impact_b.impact}</p></div>` : ''}
+                        </div>
+
+                        <div style="background:rgba(0,0,0,0.3); padding:1rem; border-radius:0.75rem">
+                            <div style="font-weight:600; font-size:0.8rem; color:#34d399; margin-bottom:0.5rem">● 검증 완료 데이터셋</div>
+                            <div>${tableNames.map(t => `<span class="tag" style="font-size:0.75rem">${t}</span>`).join('')}</div>
+                            ${topic.additional_data_needed ? `<div style="margin-top:0.75rem; font-size:0.8rem; color:#fbbf24">추가 필요 데이터: ${topic.additional_data_needed}</div>` : ''}
+                        </div>
+                    `;
+                    pairDiv.appendChild(topicDiv);
+                });
+                container.appendChild(pairDiv);
+            });
+
+            // 쌍이 없는 주제도 표시
+            const pairedTopicIds = new Set(
+                pairs.flatMap(pair => topics.filter(t => {
+                    const names = (t.datasets||[]).map(d=>d.institution);
+                    return names.includes(pair.institution_a) && names.includes(pair.institution_b);
+                }).map(t => t.id))
+            );
+            const unpaired = topics.filter(t => !pairedTopicIds.has(t.id));
+            if (unpaired.length > 0) {
+                const div = document.createElement('div');
+                div.className = 'pair-section';
+                div.innerHTML = `<h3 style="color:var(--text-muted)">기타 분석 주제</h3>`;
+                unpaired.forEach(t => {
+                    div.insertAdjacentHTML('beforeend',
+                        `<div class="topic-item"><h4>${t.title}</h4></div>`
+                    );
+                });
+                container.appendChild(div);
+            }
+        }
+
+        function renderPlans(plans) {
+            const container = document.getElementById('plansContainer');
+            container.innerHTML = plans.map(plan => `
+                <div class="pair-section">
+                    <h3 style="margin-bottom:1.5rem">${plan.title} [${plan.plan_id}]</h3>
+                    <table>
+                        <tr><th>핵심 목표</th><td>${plan.overview.objective}</td></tr>
+                        <tr><th>기대 효과</th><td>${plan.overview.expected_impact}</td></tr>
+                        <tr><th>사용 데이터</th><td>${plan.data_plan.required_datasets?.join(', ') || 'N/A'}</td></tr>
+                        <tr><th>방법론</th><td>${plan.methodology.analysis_approach}</td></tr>
+                    </table>
+                </div>
+            `).join('');
+        }
+
+        function showSection(sectionId, stepId) {
+            document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+            document.getElementById(sectionId).classList.remove('hidden');
+            if (stepId) {
+                document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+                document.getElementById(stepId).classList.add('active');
+            }
+        }
+    </script>
+</body>
+
+</html>

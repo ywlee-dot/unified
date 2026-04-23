@@ -1,0 +1,131 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "여기에-webhook-경로",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                -400,
+                0
+            ],
+            "id": "a0000001-0000-0000-0000-000000000001",
+            "name": "Webhook",
+            "webhookId": "여기에-webhook-경로"
+        },
+        {
+            "parameters": {
+                "jsCode": "const webhook = $('Webhook').first().json;\nconst body = webhook.body || webhook;\n\nreturn [{\n  json: {\n    tracking_id: body.tracking_id || \"\"\n  },\n  binary: $input.item.binary\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                0,
+                0
+            ],
+            "id": "a1000001-0000-0000-0000-000000000001",
+            "name": "결과 준비"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "=http://backend:8000/api/webhooks/n8n/upload/{{ $json.tracking_id }}",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "X-N8N-Callback-Secret",
+                            "value": "tucon-n8n"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "multipart-form-data",
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "parameterType": "formBinaryData",
+                            "name": "file",
+                            "inputDataFieldName": "data"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                220,
+                0
+            ],
+            "id": "a1000001-0000-0000-0000-000000000002",
+            "name": "파일 업로드"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://backend:8000/api/webhooks/n8n/callback",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "X-N8N-Callback-Secret",
+                            "value": "tucon-n8n"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"execution_id\": \"{{ $('결과 준비').first().json.tracking_id }}\",\n  \"status\":\"completed\",\n  \"result_data\": {\n    \"download_url\": \"{{ $json.download_url }}\",\n    \"filename\": \"{{      $json.filename }}\",\n    \"size\": {{ $json.size || 0 }},\n    \"message\": \"작업 완료\"\n  },\n  \"finished_at\":   \"{{ new Date().toISOString() }}\"\n}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                440,
+                0
+            ],
+            "id": "a1000001-0000-0000-0000-000000000003",
+            "name": "콜백 전송"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "결과 준비",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "결과 준비": {
+            "main": [
+                [
+                    {
+                        "node": "파일 업로드",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "파일 업로드": {
+            "main": [
+                [
+                    {
+                        "node": "콜백 전송",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {}
+}

@@ -12,10 +12,12 @@ import "@xyflow/react/dist/style.css";
 import type { ProjectPipeline } from "@/lib/pipeline-data";
 import PipelineNodeCard from "./PipelineNodeCard";
 import LayerGroupNode from "./LayerGroupNode";
+import PipelineStepNode from "./PipelineStepNode";
 
 const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNodeCard,
   layerGroup: LayerGroupNode,
+  stepNode: PipelineStepNode,
 };
 
 interface Props {

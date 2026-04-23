@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #0F172A; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+  background-image: url('bg2.png'); background-size: cover;
+  color: #E2E8F0;
+}
+
+/* Title bar */
+.title-bar {
+  margin: 14pt 24pt 0 24pt;
+  padding: 8pt 18pt;
+  background: rgba(30,58,95,0.7);
+  border-radius: 8pt;
+  border-left: 5pt solid #8B5CF6;
+}
+.title-bar h1 { font-size: 18pt; color: #FFFFFF; margin: 0; }
+.title-bar p { font-size: 9pt; color: #94A3B8; margin: 2pt 0 0 0; }
+
+/* Registry flow */
+.registry-flow {
+  margin: 8pt 24pt 0 24pt;
+  display: flex; align-items: center; justify-content: center; gap: 6pt;
+}
+.reg-box {
+  padding: 6pt 12pt;
+  border-radius: 6pt;
+  text-align: center;
+}
+.reg-startup { background: rgba(59,130,246,0.15); border: 1.5pt solid #3B82F6; }
+.reg-scan { background: rgba(139,92,246,0.2); border: 1.5pt solid #8B5CF6; }
+.reg-mount { background: rgba(16,185,129,0.15); border: 1.5pt solid #10B981; }
+.reg-box h6 { margin: 0; font-size: 9pt; color: #FFFFFF; }
+.reg-box p { margin: 1pt 0 0 0; font-size: 7pt; color: #94A3B8; }
+.arrow-sm { width: 18pt; height: 9pt; }
+
+/* Two columns */
+.columns {
+  margin: 6pt 24pt 0 24pt;
+  display: flex; gap: 10pt; flex: 1;
+}
+
+/* Column header */
+.col {
+  flex: 1; display: flex; flex-direction: column;
+}
+.col-header {
+  padding: 5pt 10pt;
+  border-radius: 6pt 6pt 0 0;
+  text-align: center;
+}
+.col-header.standard { background: rgba(59,130,246,0.25); border-bottom: 2pt solid #3B82F6; }
+.col-header.n8n { background: rgba(16,185,129,0.25); border-bottom: 2pt solid #10B981; }
+.col-header h6 { margin: 0; font-size: 9.5pt; color: #FFFFFF; }
+.col-header p { margin: 1pt 0 0 0; font-size: 7pt; color: #94A3B8; }
+
+/* Project items */
+.proj-list {
+  padding: 4pt 6pt;
+  background: rgba(15,23,42,0.5);
+  border-radius: 0 0 6pt 6pt;
+  border: 1pt solid rgba(71,85,105,0.3);
+  border-top: none;
+  flex: 1;
+  display: flex; flex-direction: column; gap: 3pt;
+}
+.proj-item {
+  padding: 4pt 8pt;
+  border-radius: 5pt;
+  display: flex; align-items: center; gap: 6pt;
+}
+.proj-item.blue { background: rgba(59,130,246,0.08); border-left: 3pt solid #3B82F6; }
+.proj-item.purple { background: rgba(139,92,246,0.08); border-left: 3pt solid #8B5CF6; }
+.proj-item.green { background: rgba(16,185,129,0.08); border-left: 3pt solid #10B981; }
+.proj-item.emerald { background: rgba(5,150,105,0.08); border-left: 3pt solid #059669; }
+.proj-item.teal { background: rgba(20,184,166,0.08); border-left: 3pt solid #14B8A6; }
+.proj-item.indigo { background: rgba(99,102,241,0.08); border-left: 3pt solid #6366F1; }
+.proj-item.violet { background: rgba(139,92,246,0.08); border-left: 3pt solid #A78BFA; }
+.proj-item.amber { background: rgba(245,158,11,0.08); border-left: 3pt solid #F59E0B; }
+
+.proj-info { flex: 1; }
+.proj-info h6 { margin: 0; font-size: 8pt; color: #F1F5F9; }
+.proj-info p { margin: 1pt 0 0 0; font-size: 6.5pt; color: #94A3B8; }
+
+.slug-tag {
+  padding: 1pt 5pt;
+  border-radius: 3pt;
+  background: rgba(71,85,105,0.3);
+}
+.slug-tag p { margin: 0; font-size: 6pt; color: #64748B; }
+
+/* Module structure */
+.module-section {
+  margin: 5pt 24pt 0 24pt;
+  padding: 6pt 14pt;
+  background: rgba(30,41,59,0.6);
+  border-radius: 6pt;
+  border-top: 2pt solid #A78BFA;
+}
+.module-section h6 { margin: 0 0 3pt 0; font-size: 8pt; color: #A78BFA; }
+.module-flow {
+  display: flex; align-items: center; justify-content: center; gap: 4pt;
+}
+.mod-box {
+  padding: 3pt 7pt;
+  border-radius: 4pt;
+  background: rgba(139,92,246,0.1);
+  border: 1pt solid rgba(167,139,250,0.3);
+}
+.mod-box p { margin: 0; font-size: 7pt; color: #CBD5E1; }
+.mod-arrow p { margin: 0; font-size: 8pt; color: #64748B; }
+
+/* API path */
+.api-path {
+  margin: 0 24pt;
+  text-align: center;
+}
+.api-path p { margin: 2pt 0 0 0; font-size: 7pt; color: #64748B; }
+
+/* Footer */
+.footer {
+  margin: auto 24pt 8pt 24pt;
+  display: flex; justify-content: space-between;
+}
+.footer p { margin: 0; font-size: 6.5pt; color: #475569; }
+</style>
+</head>
+<body>
+
+<!-- Title -->
+<div class="title-bar">
+  <h1>프로젝트 모듈 구성 - Auto-Discovery Registry</h1>
+  <p>시작 시 자동 스캔 → 라우터 마운트 → API 엔드포인트 자동 등록</p>
+</div>
+
+<!-- Registry Flow Diagram -->
+<div class="registry-flow">
+  <div class="reg-box reg-startup">
+    <h6>App Startup</h6>
+    <p>FastAPI lifespan</p>
+  </div>
+  <img class="arrow-sm" src="arrow-right-blue.png">
+  <div class="reg-box reg-scan">
+    <h6>ProjectRegistry.auto_discover</h6>
+    <p>projects/ 디렉토리 스캔</p>
+  </div>
+  <img class="arrow-sm" src="arrow-right-blue.png">
+  <div class="reg-box reg-scan">
+    <h6>manifest.py 로드</h6>
+    <p>ProjectManifest 파싱</p>
+  </div>
+  <img class="arrow-sm" src="arrow-right-blue.png">
+  <div class="reg-box reg-mount">
+    <h6>Router Mount</h6>
+    <p>/api/projects/{slug}</p>
+  </div>
+</div>
+
+<!-- Two Column Layout -->
+<div class="columns">
+  <!-- Standard Projects -->
+  <div class="col">
+    <div class="col-header standard">
+      <h6>Standard 타입 (DB 기반 CRUD)</h6>
+      <p>SQLAlchemy ORM + PostgreSQL</p>
+    </div>
+    <div class="proj-list">
+      <div class="proj-item blue">
+        <div class="proj-info">
+          <h6>개방데이터 설명/키워드 자동생성</h6>
+          <p>LLM 기반 키워드 8개 + 설명문 자동 생성</p>
+        </div>
+        <div class="slug-tag"><p>dataset-summary</p></div>
+      </div>
+      <div class="proj-item purple">
+        <div class="proj-info">
+          <h6>평가편람 (RAG)</h6>
+          <p>RAG + Gemini 기반 공공데이터 자동 평가</p>
+        </div>
+        <div class="slug-tag"><p>evaluation-rag</p></div>
+      </div>
+      <div class="proj-item emerald">
+        <div class="proj-info">
+          <h6>정부 뉴스 크롤링</h6>
+          <p>정부 기관 뉴스 자동 수집/분석</p>
+        </div>
+        <div class="slug-tag"><p>gov-news-crawler</p></div>
+      </div>
+      <div class="proj-item green">
+        <div class="proj-info">
+          <h6>개방 가능 여부 판단</h6>
+          <p>LLM 5단계 개방 가능 여부 판단</p>
+        </div>
+        <div class="slug-tag"><p>open-data-analyzer</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- n8n Projects -->
+  <div class="col">
+    <div class="col-header n8n">
+      <h6>n8n 타입 (워크플로우 기반)</h6>
+      <p>n8n Webhook 트리거 + 폴링</p>
+    </div>
+    <div class="proj-list">
+      <div class="proj-item teal">
+        <div class="proj-info">
+          <h6>리포트 생성기</h6>
+          <p>일간/주간 자동 리포트 생성</p>
+        </div>
+        <div class="slug-tag"><p>report-generator</p></div>
+      </div>
+      <div class="proj-item indigo">
+        <div class="proj-info">
+          <h6>데이터 파이프라인</h6>
+          <p>ETL 파이프라인, 외부 DB 동기화</p>
+        </div>
+        <div class="slug-tag"><p>data-pipeline</p></div>
+      </div>
+      <div class="proj-item violet">
+        <div class="proj-info">
+          <h6>공유데이터 제공 노력</h6>
+          <p>n8n 워크플로우 연동 실행</p>
+        </div>
+        <div class="slug-tag"><p>effort-public-data</p></div>
+      </div>
+      <div class="proj-item amber">
+        <div class="proj-info">
+          <h6>텍스트 요약</h6>
+          <p>n8n 기반 텍스트 자동 요약</p>
+        </div>
+        <div class="slug-tag"><p>summarize</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Module Structure -->
+<div class="module-section">
+  <h6>각 프로젝트 모듈 표준 구조</h6>
+  <div class="module-flow">
+    <div class="mod-box"><p><b>manifest.py</b></p></div>
+    <div class="mod-arrow"><p>→</p></div>
+    <div class="mod-box"><p><b>router.py</b></p></div>
+    <div class="mod-arrow"><p>→</p></div>
+    <div class="mod-box"><p><b>service.py</b></p></div>
+    <div class="mod-arrow"><p>→</p></div>
+    <div class="mod-box"><p><b>schemas.py</b></p></div>
+    <div class="mod-arrow"><p>→</p></div>
+    <div class="mod-box"><p><b>models.py</b></p></div>
+  </div>
+  <div class="api-path">
+    <p>API 자동 마운트: <b>/api/projects/{slug}/*</b></p>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <p>Unified Workspace v1.0.0</p>
+  <p>Auto-Discovery Registry Pattern</p>
+</div>
+
+</body>
+</html>

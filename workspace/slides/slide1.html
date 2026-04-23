@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #0F172A; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+  background-image: url('bg1.png'); background-size: cover;
+  color: #E2E8F0;
+}
+.title-bar {
+  margin: 16pt 22pt 0 22pt;
+  padding: 9pt 16pt;
+  background: rgba(30,58,95,0.7);
+  border-radius: 8pt;
+  border-left: 5pt solid #3B82F6;
+}
+.title-bar h1 { font-size: 19pt; color: #FFFFFF; margin: 0; }
+.title-bar p { font-size: 9pt; color: #94A3B8; margin: 2pt 0 0 0; }
+
+.diagram {
+  margin: 8pt 22pt 0 22pt;
+  display: flex; flex-direction: column; align-items: center; gap: 5pt;
+}
+/* Row 1: Browser → Frontend → Backend */
+.flow-top {
+  display: flex; align-items: center; gap: 8pt;
+}
+.node-box {
+  padding: 7pt 10pt;
+  border-radius: 7pt;
+  text-align: center;
+}
+.node-browser { background: rgba(100,116,139,0.25); border: 1.5pt solid #64748B; }
+.node-frontend { background: rgba(59,130,246,0.15); border: 1.5pt solid #3B82F6; }
+.node-backend { background: rgba(139,92,246,0.15); border: 1.5pt solid #8B5CF6; min-width: 100pt; }
+.node-db { background: rgba(245,158,11,0.15); border: 1.5pt solid #F59E0B; }
+.node-redis { background: rgba(239,68,68,0.15); border: 1.5pt solid #EF4444; }
+.node-n8n { background: rgba(16,185,129,0.15); border: 1.5pt solid #10B981; }
+.node-box p { margin: 0; font-size: 8pt; color: #CBD5E1; }
+.node-box h6 { margin: 0 0 1pt 0; font-size: 10pt; color: #FFFFFF; }
+.arrow-img { width: 20pt; height: 10pt; }
+.arrow-down-img { width: 10pt; height: 14pt; }
+
+/* Row 2: downstream services */
+.flow-bottom {
+  display: flex; align-items: center; gap: 10pt;
+}
+.down-col {
+  display: flex; flex-direction: column; align-items: center; gap: 2pt;
+}
+
+.net-labels {
+  margin: 5pt 22pt 0 22pt;
+  display: flex; gap: 10pt; justify-content: center;
+}
+.net-label {
+  padding: 3pt 10pt;
+  border-radius: 10pt;
+  border: 1pt dashed #475569;
+}
+.net-label p { margin: 0; font-size: 7pt; color: #94A3B8; }
+
+.tech-section {
+  margin: 7pt 22pt 0 22pt;
+  display: flex; gap: 7pt;
+}
+.tech-card {
+  flex: 1;
+  padding: 6pt 9pt;
+  background: rgba(30,41,59,0.7);
+  border-radius: 6pt;
+  border-top: 2.5pt solid #3B82F6;
+}
+.tech-card.purple { border-top-color: #8B5CF6; }
+.tech-card.amber { border-top-color: #F59E0B; }
+.tech-card.green { border-top-color: #10B981; }
+.tech-card h6 { margin: 0 0 2pt 0; font-size: 7.5pt; color: #94A3B8; }
+.tech-card p { margin: 0; font-size: 7pt; color: #CBD5E1; line-height: 1.4; }
+
+.footer {
+  margin: auto 22pt 8pt 22pt;
+  display: flex; justify-content: space-between;
+}
+.footer p { margin: 0; font-size: 6pt; color: #475569; }
+</style>
+</head>
+<body>
+
+<div class="title-bar">
+  <h1>Unified Workspace - 시스템 아키텍처</h1>
+  <p>Docker Compose 기반 5개 서비스 오케스트레이션</p>
+</div>
+
+<div class="diagram">
+  <!-- Row 1 -->
+  <div class="flow-top">
+    <div class="node-box node-browser">
+      <h6>Browser</h6>
+      <p>사용자 접속</p>
+    </div>
+    <img class="arrow-img" src="arrow-right-blue.png">
+    <div class="node-box node-frontend">
+      <h6>Next.js Frontend</h6>
+      <p>:3000</p>
+    </div>
+    <img class="arrow-img" src="arrow-right-blue.png">
+    <div class="node-box node-backend">
+      <h6>FastAPI Backend</h6>
+      <p>:8000</p>
+    </div>
+  </div>
+
+  <!-- Arrow down from Backend -->
+  <img class="arrow-down-img" src="arrow-down-blue.png">
+
+  <!-- Row 2: DB / Redis / n8n -->
+  <div class="flow-bottom">
+    <div class="node-box node-db">
+      <h6>PostgreSQL</h6>
+      <p>:5432 데이터 저장</p>
+    </div>
+    <div class="node-box node-redis">
+      <h6>Redis</h6>
+      <p>:6379 캐시/큐</p>
+    </div>
+    <div class="node-box node-n8n">
+      <h6>n8n Engine</h6>
+      <p>:5678 워크플로우</p>
+    </div>
+  </div>
+</div>
+
+<div class="net-labels">
+  <div class="net-label">
+    <p><b>frontend-net</b>  Frontend ↔ Backend</p>
+  </div>
+  <div class="net-label">
+    <p><b>backend-net</b>  Backend ↔ DB / Redis / n8n</p>
+  </div>
+</div>
+
+<div class="tech-section">
+  <div class="tech-card">
+    <h6>FRONTEND</h6>
+    <p><b>Next.js 15</b> App Router<br>React Query, TailwindCSS<br>TypeScript</p>
+  </div>
+  <div class="tech-card purple">
+    <h6>BACKEND</h6>
+    <p><b>FastAPI</b><br>SQLAlchemy 2.0 async<br>Pydantic v2, Alembic</p>
+  </div>
+  <div class="tech-card amber">
+    <h6>INFRA</h6>
+    <p><b>Docker Compose</b><br>PostgreSQL 16, Redis 7<br>n8n 1.76</p>
+  </div>
+  <div class="tech-card green">
+    <h6>AI / ML</h6>
+    <p><b>Gemini API</b>, OpenAI<br>Pinecone 벡터DB<br>RAG Pipeline</p>
+  </div>
+</div>
+
+<div class="footer">
+  <p>Unified Workspace v1.0.0</p>
+  <p>Docker Compose Orchestration</p>
+</div>
+
+</body>
+</html>

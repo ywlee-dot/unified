@@ -1,14 +1,17 @@
 """API router for Bid Monitor project."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db_session
 from app.projects.bid_monitor.schemas import (
+    BackfillRequest,
     CheckTriggerRequest,
     ConfigUpdate,
+    FilterConditions,
     KeywordCreate,
     KeywordUpdate,
+    ScoringConfigUpdate,
 )
 from app.projects.bid_monitor.service import BidMonitorService
 
@@ -65,10 +68,18 @@ async def search_notices(
     sort: str = "date",
     page: int = 1,
     page_size: int = 20,
-    filter_status: str | None = None,
+    grade: list[str] = Query(default=[]),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return await _service.search_notices(db, keyword=keyword, bid_type=bid_type, sort=sort, page=page, page_size=page_size, filter_status=filter_status)
+    return await _service.search_notices(
+        db,
+        keyword=keyword,
+        bid_type=bid_type,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+        grade=grade,
+    )
 
 
 @router.get("/notices/{notice_id}")
@@ -79,13 +90,27 @@ async def get_notice(notice_id: str, db: AsyncSession = Depends(get_db_session))
     return notice
 
 
+@router.get("/notices/{notice_id}/similar-past")
+async def get_similar_past(
+    notice_id: str,
+    min_overlap: int = 2,
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await _service.get_similar_past_notices(db, notice_id, min_overlap=min_overlap, limit=limit)
+
+
 # ---------------------------------------------------------------------------
 # Alerts
 # ---------------------------------------------------------------------------
 
 @router.get("/alerts")
-async def list_alerts(limit: int = 50, db: AsyncSession = Depends(get_db_session)):
-    return await _service.get_alerts(db, limit=limit)
+async def list_alerts(
+    limit: int = 50,
+    grade: str | None = None,
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await _service.get_alerts(db, limit=limit, grade=grade)
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +120,11 @@ async def list_alerts(limit: int = 50, db: AsyncSession = Depends(get_db_session
 @router.post("/check/trigger")
 async def trigger_check(request: CheckTriggerRequest | None = None, db: AsyncSession = Depends(get_db_session)):
     return await _service.trigger_check(db, trigger_type="manual")
+
+
+@router.post("/check/backfill")
+async def trigger_backfill(request: BackfillRequest, db: AsyncSession = Depends(get_db_session)):
+    return await _service.trigger_backfill(db, hours=request.hours)
 
 
 @router.get("/check/runs")
@@ -114,6 +144,20 @@ async def get_config(db: AsyncSession = Depends(get_db_session)):
 @router.put("/config")
 async def update_config(data: ConfigUpdate, db: AsyncSession = Depends(get_db_session)):
     return await _service.update_config(db, data)
+
+
+# ---------------------------------------------------------------------------
+# Scoring Config (전역 스코어링 설정)
+# ---------------------------------------------------------------------------
+
+@router.get("/scoring-config")
+async def get_scoring_config(db: AsyncSession = Depends(get_db_session)):
+    return await _service.get_scoring_config(db)
+
+
+@router.put("/scoring-config")
+async def update_scoring_config(data: ScoringConfigUpdate, db: AsyncSession = Depends(get_db_session)):
+    return await _service.update_scoring_config(db, data.filter_conditions)
 
 
 # ---------------------------------------------------------------------------

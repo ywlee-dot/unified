@@ -1,0 +1,905 @@
+{
+  "name": "업무규칙 자동 생성_0202",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business_rule_gen",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        1024
+      ],
+      "id": "b2cc5b08-5cd5-49c4-a7c6-15e56d03da27",
+      "name": "Webhook",
+      "webhookId": "여기에-webhook-경로"
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhook = $('Webhook').first().json;\nconst body = webhook.body || webhook;\n\nreturn [{\n  json: {\n    tracking_id: body.tracking_id || \"\"\n  },\n  binary: $input.item.binary\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4304,
+        1008
+      ],
+      "id": "c25b3c82-3312-4c67-bfc4-2422b1cbfdb9",
+      "name": "결과 준비"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:8000/api/webhooks/n8n/upload/{{ $json.tracking_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-Callback-Secret",
+              "value": "tucon-n8n"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4528,
+        1008
+      ],
+      "id": "1047af6a-c58b-4eb4-84c7-8a0f2e84c4ef",
+      "name": "파일 업로드"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/webhooks/n8n/callback",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-Callback-Secret",
+              "value": "tucon-n8n"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"execution_id\": \"{{ $('결과 준비').first().json.tracking_id }}\",\n  \"status\":\"completed\",\n  \"result_data\": {\n    \"download_url\": \"{{ $json.download_url }}\",\n    \"filename\": \"{{      $json.filename }}\",\n    \"size\": {{ $json.size || 0 }},\n    \"message\": \"작업 완료\"\n  },\n  \"finished_at\":   \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4752,
+        1008
+      ],
+      "id": "dab4ff98-8fd3-42b0-8db3-e614d7dafc9b",
+      "name": "콜백 전송"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "==다음 테이블(들)의 컬럼 정보를 분석하여 업무규칙을 생성해주세요.\n\n## (중요) 생성 개수 제한\n- 전체 출력 업무규칙 수는 최대 30개로 제한하세요.\n- 각 테이블별로 1~2개의 업무규칙만 생성하세요.\n- 가능한 한 많은 테이블을 커버하도록 분산 생성하세요(특정 테이블에 편중 금지).\n\n## 입력 형식\n아래에는 여러 테이블이 포함될 수 있습니다. 각 테이블의 DBMS명/스키마명/테이블명/컬럼 정보가 주어집니다.\n\n## (중요) 업무규칙명 생성 규칙 (절대 준수)\n- 업무규칙명은 아래 둘 중 하나의 형식으로만 작성하세요.\n  1) \"컬럼명\" \"품질지표명\"\n  2) \"컬럼명\"와/과 \"컬럼명\" \"품질지표명\"\n- 예시\n  - \"A310_MOD_DTTM\" \"시간순서 일관성\"\n  - \"A310_MOD_DTTM\"와/과 \"A310_REG_DTTM\" \"시간순서 일관성\"\n  - \"C011_UPR_CMN_CD\"와/과 \"C011_CMN_CD\" \"논리관계 일관성\"\n\n## 규칙 생성 원칙\n- 각 업무규칙은 반드시 **하나의 기준 컬럼(컬럼명)** 을 지정해야 합니다.\n  - 기준 컬럼은 해당 규칙에서 핵심적으로 검증하는 컬럼 1개를 의미합니다.\n  - \"컬럼명\" 필드에는 기준 컬럼 1개만 기입합니다.\n- 품질지표명은 반드시 다음 중 하나만 사용:\n  - 논리관계 일관성 | 시간순서 일관성 | 계산식\n- 분석SQL은 반드시 “오류 데이터만” 조회하도록 작성하세요.\n- 건수SQL은 반드시 해당 테이블의 전체 건수를 집계하는 형태로 작성하세요.\n- DBMS명/스키마명/테이블명/컬럼명은 반드시 입력에서 제공된 값(테이블 정보/컬럼 정보)을 사용하세요.\n\n## (중요) 계산식 규칙 생성 제한 (반드시 지킬 것)\n아래 유형의 규칙은 \"계산식\" 뿐만 아니라 어떤 품질지표명으로도 절대 생성하지 마세요.\n1) 필수값/누락 검사(예: \"필수적으로 존재해야 합니다\", IS NULL, 공백 체크 등)\n2) 연도 허용범위(예: 현재년도+5, 1900년 이후, YEAR 기준 범위)\n3) 형식/패턴 검증(예: YYYYMMDD 8자리, REGEXP_LIKE로 형식 확인, URL/IP 형식 등)\n\n- 즉, 계산식은 아래처럼 \"값의 논리적 범위/상한/하한/서로의 산술관계\"에 해당하는 규칙만 생성하세요.\n  - 예: 퍼센트/비율은 0~100\n  - 예: 금액/수량/건수는 0 이상\n  - 예: 시작값 ≤ 종료값 형태의 수치 범위\n  - 예: A = B + C 처럼 산술관계가 업무적으로 타당해야 하는 경우(입력 컬럼이 실제로 그런 구조일 때만)\n\n## 출력 형식 (절대 준수)\n- 반드시 **유효한 JSON 배열만** 출력하세요.\n- 마크다운, 설명 문장, 코드블록(```)을 포함하지 마세요.\n- 각 요소는 아래 스키마를 정확히 따르세요.\n\n[\n  {\n    \"업무규칙명\": \"규칙 이름\",\n    \"DBMS명\": \"사용된 DBMS명\",\n    \"스키마명\": \"사용된 스키마명\",\n    \"테이블명\": \"사용된 테이블명\",\n    \"컬럼명\": \"사용된 컬럼명(기준컬럼명)\",\n    \"품질지표명\": \"논리관계 일관성|시간순서 일관성|계산식\",\n    \"설명\": \"규칙에 대한 설명\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM 스키마명.테이블명\",\n    \"분석SQL\": \"오류를 검출하는 SQL문\"\n  }\n]\n\n## 테이블 정보/컬럼 정보\n{{ $json.chatInput }}\n",
+        "options": {
+          "systemMessage": "==당신은 데이터 품질 관리 전문가입니다.\n\n## 역할\n- 입력으로 제공된 테이블/컬럼 정의를 바탕으로, 실무에서 바로 사용할 수 있는 데이터 품질 업무규칙을 생성합니다.\n\n## (중요) 생성 개수 제한\n- 전체 출력 업무규칙 수는 최대 30개입니다.\n- 각 테이블별로 1~2개만 생성합니다.\n- 가능한 많은 테이블을 골고루 커버합니다(특정 테이블 편중 금지).\n\n## 품질지표 유형 (3개 중 택1)\n1) 논리관계 일관성\n- 항목 간 논리 조건/의존 관계가 올바른지 검증\n- 예: 상태값에 따른 다른 컬럼 조건, 상위/하위 코드 관계 등\n- 단, \"필수값 존재\" 단독 규칙은 금지\n\n2) 시간순서 일관성\n- 시간/날짜 데이터의 선후 관계가 업무 흐름과 일치하는지 검증\n- 날짜/시간 컬럼이 문자열일 수도 있으므로 CAST/TO_DATE/TO_TIMESTAMP 등을 활용할 수 있음\n- 단, \"형식 검증(YYYYMMDD 등)\" 자체는 금지이며, 선후관계 검증을 위해 최소한의 변환만 허용\n\n3) 계산식\n- 값의 논리적 범위/상한/하한/산술관계를 검증\n- 예: 퍼센트 0~100, 수량 0 이상, 금액 0 이상, 시작값≤종료값(수치), A=B+C 등\n\n## (절대 규칙) 업무규칙명 생성 형식\n- 업무규칙명은 아래 둘 중 하나의 형식으로만 출력합니다.\n  1) \"컬럼명\" \"품질지표명\"\n  2) \"컬럼명\"와/과 \"컬럼명\" \"품질지표명\"\n- \"컬럼명\" 부분은 실제 컬럼명을 그대로 사용합니다(한글명/설명으로 대체 금지).\n\n## (절대 금지) 생성하면 안 되는 규칙 유형\n아래 유형은 어떤 품질지표명으로도 절대 생성하지 마세요.\n1) 필수값/누락 검사\n- 예: \"필수적으로 존재\", IS NULL, TRIM(...)= '' 등 단독/단순 누락 검증\n\n2) 연도 허용범위 규칙\n- 예: 현재년도+5, 1900년 이후, YEAR 기준 범위 등\n\n3) 형식/패턴 검증 규칙\n- 예: YYYYMMDD 8자리, 정규표현식 기반 패턴 검증, URL/IP 형식 검증 등\n\n## 생성 가이드라인\n- 각 규칙은 반드시 “기준 컬럼(컬럼명)” 1개를 지정해야 합니다.\n  - \"컬럼명\" 필드에는 기준 컬럼 1개만 기입합니다.\n  - 필요 시 분석SQL에서 비교 컬럼을 추가로 사용할 수 있습니다.\n- DBMS명/스키마명/테이블명/컬럼명은 반드시 입력에 존재하는 값만 사용합니다.\n- 분석SQL은 반드시 오류 데이터만 조회합니다.\n\n## 출력 규칙 (절대 준수)\n- 반드시 JSON 배열만 출력합니다.\n- 마크다운/코드블록/설명 문장 금지\n- 각 요소는 다음 키를 반드시 포함해야 합니다:\n  \"업무규칙명\",\"DBMS명\",\"스키마명\",\"테이블명\",\"컬럼명\",\"품질지표명\",\"설명\",\"건수SQL\",\"분석SQL\"\n- 품질지표명은 반드시 다음 중 하나:\n  \"논리관계 일관성\" 또는 \"시간순서 일관성\" 또는 \"계산식\"\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        976,
+        1024
+      ],
+      "id": "d13c1134-dd94-47cf-9fe7-b7df8837aa5f",
+      "name": "3. AI Agent - 업무규칙 생성1"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-pro-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1424,
+        1200
+      ],
+      "id": "bc8e6996-9524-46e3-8ad3-7c65ae07a233",
+      "name": "Google Gemini Chat Model1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 필수 컬럼 목록 (여러 변형 포함)\nconst requiredColumnsVariants = {\n  'DBMS명': ['DBMS명', 'DBMS 명', 'dbms명', 'dbms 명'],\n  '스키마명': ['스키마명', '스키마 명', 'schema명', 'schema 명'],\n  '영문테이블명': ['영문테이블명', '영문 테이블명', '영문테이블명*', '영문 테이블명*', '테이블명', '테이블 명'],\n  '한글컬럼명': ['한글컬럼명', '한글 컬럼명', '한글컬럼명*', '한글 컬럼명*', '컬럼명', '컬럼 명'],\n  '영문컬럼명': ['영문컬럼명', '영문 컬럼명', '영문컬럼명*', '영문 컬럼명*'],\n  '데이터타입': ['데이터타입', '데이터 타입', '데이터타입*', '데이터 타입*', 'data type', 'datatype']\n};\n\n// 입력 데이터 가져오기\nconst items = $input.all();\n\nconsole.log('=== 입력 데이터 확인 ===');\nconsole.log('총 아이템 수:', items.length);\n\nif (items.length > 0) {\n  console.log('첫 번째 아이템의 컬럼명:', Object.keys(items[0].json));\n}\n\n// 실제 컬럼명 매핑 함수\nfunction findActualColumnName(itemKeys, targetColumn) {\n  const variants = requiredColumnsVariants[targetColumn];\n  \n  for (const variant of variants) {\n    // 정확히 일치하는 경우\n    if (itemKeys.includes(variant)) {\n      return variant;\n    }\n    \n    // 대소문자 무시하고 일치하는 경우\n    const found = itemKeys.find(key => \n      key.toLowerCase().replace(/\\s+/g, '') === variant.toLowerCase().replace(/\\s+/g, '')\n    );\n    if (found) {\n      return found;\n    }\n  }\n  \n  return null;\n}\n\n// 첫 번째 아이템에서 실제 컬럼명 매핑 찾기\nconst columnMapping = {};\nif (items.length > 0) {\n  const itemKeys = Object.keys(items[0].json);\n  \n  for (const [standardName, variants] of Object.entries(requiredColumnsVariants)) {\n    const actualName = findActualColumnName(itemKeys, standardName);\n    if (actualName) {\n      columnMapping[standardName] = actualName;\n      console.log(`매핑 발견: ${standardName} -> ${actualName}`);\n    }\n  }\n}\n\n// 필수 컬럼 확인\nconst requiredColumns = Object.keys(requiredColumnsVariants);\nconst missingMappings = requiredColumns.filter(col => !columnMapping[col]);\n\nif (missingMappings.length > 0) {\n  console.error('매핑을 찾을 수 없는 필수 컬럼:', missingMappings);\n  throw new Error(`필수 컬럼 매핑을 찾을 수 없습니다: ${missingMappings.join(', ')}. 실제 컬럼명을 확인해주세요.`);\n}\n\n// 컬럼 정보 수집\nconst columnData = [];\n\nfor (const item of items) {\n  // 필수 컬럼 검증 (매핑된 이름 사용)\n  const missingColumns = requiredColumns.filter(col => {\n    const actualCol = columnMapping[col];\n    return !item.json[actualCol] || item.json[actualCol].toString().trim() === '';\n  });\n  \n  if (missingColumns.length > 0) {\n    console.log(`행 건너뜀 - 필수컬럼 누락: ${missingColumns.join(', ')}`);\n    continue;\n  }\n  \n  columnData.push({\n    DBMS명: item.json[columnMapping['DBMS명']],\n    스키마명: item.json[columnMapping['스키마명']],\n    영문테이블명: item.json[columnMapping['영문테이블명']],\n    한글컬럼명: item.json[columnMapping['한글컬럼명']],\n    영문컬럼명: item.json[columnMapping['영문컬럼명']],\n    데이터타입: item.json[columnMapping['데이터타입']],\n    컬럼설명: item.json['컬럼설명'] || item.json['컬럼 설명'] || '',\n    NotNull여부: item.json['Not Null 여부'] || item.json['NotNull여부'] || item.json['NotNull 여부'] || '',\n    PK정보: item.json['PK정보(Primary key)'] || item.json['PK정보'] || item.json['PK 정보'] || '',\n    FK정보: item.json['FK정보(Foreign Key)'] || item.json['FK정보'] || item.json['FK 정보'] || ''\n  });\n}\n\nconsole.log('=== 수집된 컬럼 데이터 ===');\nconsole.log('유효한 컬럼 수:', columnData.length);\n\nif (columnData.length === 0) {\n  throw new Error('유효한 컬럼 데이터가 없습니다. 필수 컬럼을 확인해주세요.');\n}\n\n// 테이블별로 그룹화\nconst tableGroups = {};\n\nfor (const col of columnData) {\n  const tableKey = `${col.DBMS명}_${col.스키마명}_${col.영문테이블명}`;\n  \n  if (!tableGroups[tableKey]) {\n    tableGroups[tableKey] = {\n      DBMS명: col.DBMS명,\n      스키마명: col.스키마명,\n      영문테이블명: col.영문테이블명,\n      columns: []\n    };\n  }\n  \n  tableGroups[tableKey].columns.push({\n    한글컬럼명: col.한글컬럼명,\n    영문컬럼명: col.영문컬럼명,\n    데이터타입: col.데이터타입,\n    컬럼설명: col.컬럼설명,\n    NotNull여부: col.NotNull여부,\n    PK정보: col.PK정보,\n    FK정보: col.FK정보\n  });\n}\n\n// 모든 컬럼 정보를 하나의 아이템으로 통합\nconst allTables = Object.values(tableGroups);\n\nconsole.log('=== 테이블 그룹화 결과 ===');\nconsole.log('총 테이블 수:', allTables.length);\nallTables.forEach((table, idx) => {\n  console.log(`테이블 ${idx + 1}: ${table.DBMS명}.${table.스키마명}.${table.영문테이블명} (컬럼 ${table.columns.length}개)`);\n});\n\n// AI Agent용 프롬프트 생성\nconst prompt = `다음 테이블들의 컬럼 정보를 분석하여 각 테이블별로 업무규칙을 생성해주세요.\n\n${allTables.map((table, idx) => `\n## 테이블 ${idx + 1}\n- DBMS명: ${table.DBMS명}\n- 스키마명: ${table.스키마명}\n- 테이블명: ${table.영문테이블명}\n\n### 컬럼 정보\n${JSON.stringify(table.columns, null, 2)}\n`).join('\\n')}\n\n## 요청사항\n위 모든 테이블에 대해 각각 최소 3개 이상의 업무규칙을 생성해주세요.\n각 규칙은 다음 형식의 JSON 배열로 응답해주세요:\n\n[\n  {\n    \"DBMS명\": \"테이블의 DBMS명\",\n    \"스키마명\": \"테이블의 스키마명\",\n    \"테이블명\": \"테이블의 영문테이블명\",\n    \"업무규칙명\": \"규칙 이름\",\n    \"품질지표명\": \"논리관계 일관성|시간순서 일관성|계산식\",\n    \"설명\": \"규칙에 대한 설명\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM 스키마명.테이블명\",\n    \"분석SQL\": \"오류를 검출하는 SQL문\"\n  }\n]\n\n**중요**: 반드시 유효한 JSON 배열만 응답하고, 다른 설명이나 마크다운은 포함하지 마세요.`;\n\nreturn [{\n  json: {\n    chatInput: prompt,\n    allTableData: allTables,\n    totalTables: allTables.length,\n    totalColumns: columnData.length\n  }\n}];"
+      },
+      "id": "dc4af9b2-876f-427a-acac-fc6a987a18f0",
+      "name": "2. 데이터 전처리 및 프롬프트 생성1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI Agent 응답 가져오기\nconst items = $input.all();\nconst agentResponse = items[0].json.output;\nconst tableData = items[0].json.allTableData;\n\nconsole.log('=== AI Agent 응답 파싱 ===');\nconsole.log('원본 응답 길이:', agentResponse.length);\n\n// JSON 파싱 (마크다운 코드블록 제거)\nlet rules;\ntry {\n  // ```json 과 ``` 제거\n  const cleanResponse = agentResponse\n    .replace(/```json\\s*/g, '')\n    .replace(/```\\s*/g, '')\n    .trim();\n  \n  console.log('정제된 응답:', cleanResponse.substring(0, 200) + '...');\n  \n  rules = JSON.parse(cleanResponse);\n  console.log('파싱 성공: 규칙 개수 =', rules.length);\n} catch (error) {\n  console.error('JSON 파싱 오류:', error.message);\n  console.log('원본 응답:', agentResponse);\n  throw new Error('AI 응답을 JSON으로 파싱할 수 없습니다: ' + error.message);\n}\n\nif (!Array.isArray(rules)) {\n  console.error('규칙이 배열 형식이 아닙니다:', typeof rules);\n  throw new Error('AI 응답이 배열 형식이 아닙니다.');\n}\n\n// 필수 필드 검증 (컬럼명 추가)\nconst requiredFields = ['업무규칙명', '컬럼명', '품질지표명', '설명', '건수SQL', '분석SQL'];\nconst validRules = [];\nconst invalidRules = [];\n\nrules.forEach((rule, index) => {\n  const missingFields = requiredFields.filter(field => !rule[field]);\n  \n  if (missingFields.length > 0) {\n    console.log(`규칙 ${index + 1} 건너뜀 - 필수 필드 누락: ${missingFields.join(', ')}`);\n    invalidRules.push({ index: index + 1, reason: `필수 필드 누락: ${missingFields.join(', ')}`, rule });\n  } else {\n    validRules.push(rule);\n  }\n});\n\nconsole.log(`총 ${rules.length}개 규칙 중 ${validRules.length}개 유효, ${invalidRules.length}개 무효`);\n\nif (validRules.length === 0) {\n  throw new Error('유효한 업무규칙이 없습니다.');\n}\n\n// 각 규칙을 개별 아이템으로 변환하고 원본 테이블 데이터 포함\nconst output = validRules.map((rule, index) => ({\n  json: {\n    규칙번호: index + 1,\n    업무규칙명: rule.업무규칙명,\n    DBMS명: rule.DBMS명 || '',\n    스키마명: rule.스키마명 || '',\n    테이블명: rule.테이블명 || rule.영문테이블명 || '',\n    컬럼명: rule.컬럼명 || '',\n    품질지표명: rule.품질지표명,\n    설명: rule.설명,\n    건수SQL: rule.건수SQL,\n    분석SQL: rule.분석SQL,\n    원본테이블데이터: tableData\n  }\n}));\n\nreturn output;"
+      },
+      "id": "751f0f35-6cf8-4ae7-afb9-925a0d6309b9",
+      "name": "4. 생성된 규칙 파싱1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 5. 검토 프롬프트 생성 - 여러 규칙(여러 아이템) 모두 처리\n\nconst items = $input.all();\n\nif (!items || items.length === 0) {\n  throw new Error('입력된 업무규칙 아이템이 없습니다.');\n}\n\nfunction asText(v) {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  try { return JSON.stringify(v); } catch (e) { return String(v); }\n}\n\nconst output = items.map((item, idx) => {\n  const rule = item.json || {};\n  const tableData = rule.원본테이블데이터 || [];\n\n  // 원본 테이블 데이터에서 해당 테이블 찾기\n  const targetTable = tableData.find(t =>\n    asText(t.DBMS명) === asText(rule.DBMS명) &&\n    asText(t.스키마명) === asText(rule.스키마명) &&\n    asText(t.영문테이블명) === asText(rule.테이블명)\n  );\n\n  const columnInfo = targetTable ? JSON.stringify(targetTable.columns, null, 2) : '정보 없음';\n\n  // 규칙별 검토 프롬프트 생성\n  const prompt = `다음 업무규칙의 정확성을 검토하고 결과를 JSON 형식으로 응답해주세요.\n\n## 테이블 정보\n- DBMS명: ${asText(rule.DBMS명)}\n- 스키마명: ${asText(rule.스키마명)}\n- 테이블명: ${asText(rule.테이블명)}\n\n## 컬럼 정보\n${columnInfo}\n\n## 생성된 업무규칙\n- 업무규칙명: ${asText(rule.업무규칙명)}\n- 품질지표명: ${asText(rule.품질지표명)}\n- 설명: ${asText(rule.설명)}\n- 건수SQL: ${asText(rule.건수SQL)}\n- 분석SQL: ${asText(rule.분석SQL)}\n\n## 검토 요청\n위 업무규칙을 품질지표명(${asText(rule.품질지표명)})에 해당하는 검토 기준으로 평가하세요.\n\n다음 JSON 형식으로만 응답하세요:\n\n{\n  \"검토결과\": \"적합|부적합\",\n  \"검토의견\": \"검토 기준별 평가 내용 (적합한 경우 간단히, 부적합한 경우 상세히)\",\n  \"문제점\": \"부적합한 경우 구체적인 문제점 (적합한 경우 빈 문자열)\",\n  \"수정제안\": \"부적합한 경우 수정 방안 (적합한 경우 빈 문자열)\"\n}\n\n**중요**: 반드시 유효한 JSON만 응답하고, 다른 설명은 포함하지 마세요.`;\n\n  return {\n    json: {\n      chatInput: prompt,\n      originalRule: rule,       // 규칙 원본을 그대로 다음 노드로 전달\n      _ruleIndex: idx + 1        // 디버깅용 (선택)\n    }\n  };\n});\n\nreturn output;\n"
+      },
+      "id": "ff02082a-efcf-40a5-8f8c-8b10abc336d5",
+      "name": "5. 검토 프롬프트 생성1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 7. 검토 결과 파싱 (Robust JSON Parser)\n// - Handles: ```json fences, extra text, stray quotes, multiple blocks, etc.\n// - Extracts the FIRST valid JSON object and parses it\n// - Never throws: returns parse_ok=false with raw_output + parse_error\n\nconst items = $input.all();\n\nfunction stripCodeFences(s) {\n  if (s == null) return '';\n  let t = String(s).trim();\n\n  // Remove leading/trailing quotes wrapping the whole content (e.g. \"```json ...```\")\n  if (\n    (t.startsWith('\"') && t.endsWith('\"')) ||\n    (t.startsWith(\"'\") && t.endsWith(\"'\"))\n  ) {\n    t = t.slice(1, -1).trim();\n  }\n\n  // Remove ```json ... ``` fences\n  // Allow variations: ```json, ```JSON, ``` etc\n  t = t.replace(/^\\s*```(?:json|JSON)?\\s*/m, '');\n  t = t.replace(/\\s*```\\s*$/m, '');\n\n  // Also remove any remaining standalone fences (sometimes model repeats)\n  t = t.replace(/```(?:json|JSON)?/g, '').replace(/```/g, '');\n\n  return t.trim();\n}\n\n// Extract first balanced JSON object from text, respecting strings/escapes\nfunction extractFirstJsonObject(text) {\n  const s = stripCodeFences(text);\n\n  const start = s.indexOf('{');\n  if (start === -1) return null;\n\n  let depth = 0;\n  let inStr = false;\n  let strQuote = '';\n  let escape = false;\n\n  for (let i = start; i < s.length; i++) {\n    const ch = s[i];\n\n    if (inStr) {\n      if (escape) {\n        escape = false;\n      } else if (ch === '\\\\') {\n        escape = true;\n      } else if (ch === strQuote) {\n        inStr = false;\n        strQuote = '';\n      }\n      continue;\n    }\n\n    // not in string\n    if (ch === '\"' || ch === \"'\") {\n      inStr = true;\n      strQuote = ch;\n      continue;\n    }\n\n    if (ch === '{') depth++;\n    if (ch === '}') depth--;\n\n    if (depth === 0) {\n      // candidate substring\n      const candidate = s.slice(start, i + 1).trim();\n      return candidate.length ? candidate : null;\n    }\n  }\n  return null;\n}\n\nfunction tryParseJson(text) {\n  const objText = extractFirstJsonObject(text);\n  if (!objText) {\n    return { ok: false, error: 'No JSON object found', jsonText: null, parsed: null };\n  }\n\n  // 1st attempt: direct parse\n  try {\n    return { ok: true, error: null, jsonText: objText, parsed: JSON.parse(objText) };\n  } catch (e1) {\n    // 2nd attempt: light repairs\n    let repaired = objText;\n\n    // Replace smart quotes\n    repaired = repaired\n      .replace(/[“”]/g, '\"')\n      .replace(/[‘’]/g, \"'\");\n\n    // Remove trailing commas before } or ]\n    repaired = repaired.replace(/,\\s*([}\\]])/g, '$1');\n\n    // If the model used single quotes for keys/strings (rare), convert cautiously:\n    // Only do this if it looks like JSON-ish but with single quotes.\n    // (Avoid over-aggressive replacements.)\n    const looksSingleQuoted =\n      repaired.includes(\"':\") || repaired.includes(\"',\") || repaired.includes(\"'{\") || repaired.includes(\"'}\");\n\n    if (looksSingleQuoted && !repaired.includes('\\\\\"')) {\n      // Convert keys 'key': to \"key\":\n      repaired = repaired.replace(/'([^']+?)'\\s*:/g, '\"$1\":');\n      // Convert values: : 'value' to : \"value\"\n      repaired = repaired.replace(/:\\s*'([^']*?)'/g, ': \"$1\"');\n    }\n\n    try {\n      return { ok: true, error: null, jsonText: repaired, parsed: JSON.parse(repaired) };\n    } catch (e2) {\n      return {\n        ok: false,\n        error: `JSON.parse failed: ${e2.message}`,\n        jsonText: repaired,\n        parsed: null,\n      };\n    }\n  }\n}\n\nreturn items.map((item, idx) => {\n  const raw =\n    item?.json?.output ??\n    item?.json?.text ??\n    item?.json?.response ??\n    item?.json?.data ??\n    '';\n\n  const result = tryParseJson(raw);\n\n  // Keep workflow alive: always return something\n  const out = {\n    ...item.json,\n    parse_ok: result.ok,\n    parse_error: result.ok ? null : `index ${idx}: ${result.error}`,\n    raw_output: result.ok ? null : String(raw),\n  };\n\n  if (result.ok && result.parsed && typeof result.parsed === 'object') {\n    // Flatten parsed fields at top-level (so 다음 노드에서 바로 쓰기 쉬움)\n    // + 원본도 같이 보관\n    out.review = result.parsed;\n\n    // If parsed schema is exactly the 10 keys, copy them up too\n    // (safe even if extra keys exist)\n    for (const [k, v] of Object.entries(result.parsed)) {\n      // prevent overwriting existing critical fields unless you want it\n      out[k] = v;\n    }\n  }\n\n  return { json: out };\n});\n"
+      },
+      "id": "741d0add-c600-4c96-92d9-02df429a69dd",
+      "name": "7. 검토 결과 파싱1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2128,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "==다음 업무규칙의 정확성을 검토하고, 아래 출력 스키마에 맞춰 JSON으로만 응답해주세요.\n\n## 입력 (반드시 그대로 사용)\n### 테이블 정보\n- DBMS명: {{$json.originalRule['DBMS명']}}\n- 스키마명: {{$json.originalRule['스키마명']}}\n- 테이블명: {{$json.originalRule['테이블명']}}\n- 컬럼명: {{ $json.originalRule['컬럼명'] }}\n\n### 생성된 업무규칙(원문)\n- 업무규칙명: {{$json.originalRule['업무규칙명']}}\n- 품질지표명: {{$json.originalRule['품질지표명']}}\n- 설명: {{$json.originalRule['설명']}}\n- 건수SQL: {{$json.originalRule['건수SQL']}}\n- 분석SQL: {{$json.originalRule['분석SQL']}}\n\n### 컬럼 정보\n${columnInfo}\n\n## 검토 요청\n- 위 업무규칙을 품질지표명({{$json.originalRule['품질지표명']}}) 기준으로 검토하고, 적합/부적합을 판정하세요.\n- 아래 출력 JSON에 포함되는 \"업무규칙명/DBMS명/스키마명/테이블명/품질지표명/설명/건수SQL/분석SQL\" 값은 반드시 입력 원문을 그대로 복사하여 넣으세요.\n- 어떤 경우에도 키를 누락하지 마세요(빈 값이어도 키는 반드시 포함).\n\n## 출력 형식 (절대 준수)\n- 반드시 마크다운/설명 없이 JSON 객체 1개만 출력하세요.\n- 최상위 키는 아래 10개를 항상 모두 포함해야 합니다.\n\n{\n  \"업무규칙명\": \"{{$json.originalRule['업무규칙명']}}\",\n  \"DBMS명\": \"{{$json.originalRule['DBMS명']}}\",\n  \"스키마명\": \"{{$json.originalRule['스키마명']}}\",\n  \"테이블명\": \"{{$json.originalRule['테이블명']}}\",\n  \"컬럼명\": \"{{$json.originalRule['컬럼명']}}\",\n  \"품질지표명\": \"{{$json.originalRule['품질지표명']}}\",\n  \"설명\": \"{{$json.originalRule['설명']}}\",\n  \"건수SQL\": \"{{$json.originalRule['건수SQL']}}\",\n  \"분석SQL\": \"{{$json.originalRule['분석SQL']}}\",\n  \"검토결과\": \"적합|부적합\",\n  \"검토의견\": \"적합이면 1~2문장으로 간단히, 부적합이면 문제점+수정방안을 2~5문장으로 구체적으로\"\n}\n\n## 판정 규칙\n- 적합: 규칙 논리/컬럼 사용/SQL 조건이 타당하며 분석SQL이 위반 데이터만 조회\n- 부적합: 아래 중 하나라도 해당\n  1) 테이블/컬럼 정보와 불일치(존재하지 않는 컬럼 사용 등)\n  2) 품질지표 유형과 규칙 내용 불일치\n  3) 분석SQL이 위반 데이터만 조회하지 못함(조건 반대/누락/괄호 오류/NULL 처리 미흡 포함)\n  4) 시간 선후관계 방향이 반대거나 비합리적\n  5) 계산식 범위가 근거 없이 비상식적\n",
+        "options": {
+          "systemMessage": "당신은 데이터 품질 검증 전문가입니다.\n\n## 역할\n입력된 테이블/컬럼 정보와 생성된 업무규칙을 비교하여 규칙의 정확성과 타당성을 검토합니다.\n\n## 가장 중요한 출력 규칙 (절대 준수)\n1) 반드시 JSON 객체 1개만 출력합니다. (마크다운/코드블록/설명문 금지)\n2) 출력 JSON은 항상 아래 10개 키를 모두 포함해야 합니다. (누락 금지)\n   - \"업무규칙명\",\"DBMS명\",\"스키마명\",\"테이블명\",“컬럼명”,\"품질지표명\",\"설명\",\"건수SQL\",\"분석SQL\",\"검토결과\",\"검토의견\"\n3) \"업무규칙명/DBMS명/스키마명/테이블명/품질지표명/설명/건수SQL/분석SQL\" 값은 입력으로 받은 원문을 그대로 복사해 넣습니다. (요약/수정/재작성 금지)\n4) \"검토결과\"는 반드시 \"적합\" 또는 \"부적합\" 중 하나입니다.\n5) \"검토의견\"\n   - 적합: 1~2문장으로 간단히\n   - 부적합: 문제점 + 수정방안을 2~5문장으로 구체적으로\n\n6) DBMS명/스키마명/테이블명은 절대 새로 작성(추측)하지 마십시오.\n   - 반드시 입력의 '테이블 정보(확정값)'에 있는 문자열을 그대로 복사해 넣으세요.\n   - 입력 값이 비어있으면 빈 문자열(\"\")로 두고 임의 값 생성 금지.\n\n## 검토 기준\n### 논리관계 일관성\n- 컬럼 존재/의미 적합성\n- A이면 B 관계 방향성\n- NULL 처리 타당성(NotNull/PK/FK와 충돌 여부)\n- 분석SQL이 위반 데이터만 조회하는지(조건/괄호/AND-OR 포함)\n\n### 시간순서 일관성\n- 날짜/시간 의미 컬럼인지 타당성(문자형일 수 있음)\n- 선후 관계가 업무 흐름과 일치하는지\n- < vs <= 선택 적정성\n- 분석SQL이 위반 데이터만 조회 + NULL 처리 포함\n\n### 계산식\n- 수치형 적합성\n- 범위/상한/하한/산술관계의 합리성\n- 경계값 처리\n- 분석SQL이 위반값만 조회 + NULL 처리\n\n## 최종 판정 규칙\n- 아래 중 하나라도 해당되면 \"부적합\"\n  - 테이블/컬럼 불일치\n  - 품질지표-규칙 내용 불일치\n  - 분석SQL이 위반 데이터만 조회하지 못함(조건 반대/누락/NULL 처리 미흡 포함)\n  - 시간 선후관계 비합리/역방향\n  - 계산식 범위 비상식\n\n## 출력 스키마 (반드시 이 형태)\n{\n  \"업무규칙명\": \"<입력 그대로>\",\n  \"DBMS명\": \"<입력 그대로>\",\n  \"스키마명\": \"<입력 그대로>\",\n  \"테이블명\": \"<입력 그대로>\",\n  \"품질지표명\": \"<입력 그대로>\",\n  \"설명\": \"<입력 그대로>\",\n  \"건수SQL\": \"<입력 그대로>\",\n  \"분석SQL\": \"<입력 그대로>\",\n  \"검토결과\": \"적합|부적합\",\n  \"검토의견\": \"<문장>\"\n}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        1776,
+        1024
+      ],
+      "id": "e794f1ef-e96e-4771-b6f2-03fce9bfa69c",
+      "name": "6. AI Agent - 업무규칙 검토1"
+    },
+    {
+      "parameters": {
+        "content": "## 1. 데이터 업로드\n### [관련 정보]\n1) 입력 파일 형식 : XLSX\n- 품질표준관리통합시스템(https://std.sharedata.go.kr/std/) > DB산출물 > 컬럼정의서 양식 사용\n※ 양식 다운로드시 DBMS명은 양식 내에 없음. 해당 서비스 사용시 DBMS 컬럼 추가 필요 \n- 필수 컬럼 (*표시): DBMS명*,스키마명*,영문테이블명*,한글컬럼명*,영문컬럼명*,데이터타입*\n- 선택 컬럼:컬럼설명, NotNull여부, PK정보, FK정보 등",
+        "height": 544,
+        "width": 672
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        784
+      ],
+      "id": "5e51f0f4-3f97-451a-b0c4-5a142f09e9fd",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## 2. 데이터 전처리\n### [관련정보]\n1. 컬럼명 매핑\n- 띄어쓰기, 컬럼 누락 등에 대비하기 위한 컬럼명 매핑 과정",
+        "height": 544,
+        "width": 192
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        704,
+        784
+      ],
+      "id": "f789fd1c-4adf-43fa-b292-1841241f6192",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Form Trigger에서 온 데이터 확인\nconst items = $input.all();\n\nif (items.length === 0) {\n  throw new Error('입력 데이터가 없습니다.');\n}\n\nconst item = items[0];\n\nconsole.log('=== Form Trigger 출력 데이터 구조 ===');\nconsole.log('JSON keys:', Object.keys(item.json));\nconsole.log('Binary keys:', Object.keys(item.binary || {}));\n\n// Binary 데이터가 있는지 확인\nif (!item.binary || Object.keys(item.binary).length === 0) {\n  throw new Error('업로드된 파일이 없습니다. Form에서 파일을 업로드해주세요.');\n}\n\n// 첫 번째 binary 필드 이름 가져오기\nconst binaryFieldName = Object.keys(item.binary)[0];\nconsole.log('Binary field name:', binaryFieldName);\n\n// Binary 데이터를 그대로 전달하되, 표준 이름으로 변경\nreturn [{\n  json: item.json,\n  binary: {\n    'data': item.binary[binaryFieldName]\n  }\n}];"
+      },
+      "id": "1d0e2ab7-da5e-48ab-af53-d4feceeafd39",
+      "name": "0. Binary 데이터 확인 및 변환1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "fileFormat": "xlsx",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "7e619bd0-c32c-49d2-8e8c-6de43c6203e0",
+      "name": "1. 컬럼정의서 읽기1",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [
+        528,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. 업무규칙 생성\n### [관련 정보]\n1. 업무 규칙 종류\n- 시간관계 일관성/논리관계 일관성/계산식\n\n\n2. 최대 생성 개수 : 30개\n- 공공데이터 품질 : 평가편람 상 DB별 A기관 8개 이상, B기관 2개 이상 정의시 만점\n- 품질 인증 : DB별 20개 이상 정의시 만점",
+        "height": 544,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        912,
+        784
+      ],
+      "id": "4ca27f76-df20-45fb-bbae-ee0edfd2fbdd",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## 4. 업무규칙 검토 및 수정\n### [관련 정보]\n1. 업무규칙 정의서 필수 입력 정보\n- 업무규칙명, DBMS명, 스키마명, 테이블명, 컬럼명, 품질지표명, 설명, 건수SQL, 분석SQL, (근거규정)\n- 근거규정의 경우 기관별로 직접 찾아서 작성\n",
+        "height": 544,
+        "width": 2048
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1488,
+        784
+      ],
+      "id": "6f98e86f-d9e6-41ef-8e1d-57d5c9003b6d",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "===검토의견을 반영하여 분석SQL만 수정하세요.\n\n## 입력\n- 검토의견: {{$json.reviewOpinion}}\n\n## 수정 대상 업무규칙(원문 그대로)\n- 업무규칙명: {{$json.originalRule['업무규칙명']}}\n- DBMS명: {{$json.originalRule['DBMS명']}}\n- 스키마명: {{$json.originalRule['스키마명']}}\n- 테이블명: {{$json.originalRule['테이블명']}}\n- 컬럼명: {{$json.originalRule['컬럼명']}}\n- 품질지표명: {{$json.originalRule['품질지표명']}}\n- 설명: {{$json.originalRule['설명']}}\n- 건수SQL: {{$json.originalRule['건수SQL']}}\n- 분석SQL(기존): {{$json.originalRule['분석SQL']}}\n\n## 작업 지시\n- \"분석SQL\"만 수정하세요.\n- 나머지 필드는 원문을 그대로 복사하세요.\n- 분석SQL은 반드시 **오류 데이터만** 조회해야 합니다.\n- 검토의견에서 지적한 문제(논리 방향 오류, 조건 누락, NULL 처리 미흡, 컬럼 불일치, 잘못된 AND/OR, 불필요한 UNION ALL 등)를 모두 해결해야 합니다.\n\n## 출력 형식 (절대 준수)\n- 마크다운, 설명 문장 없이 JSON 객체 1개만 출력하세요.\n\n{\n  \"업무규칙명\": \"{{$json.originalRule['업무규칙명']}}\",\n  \"DBMS명\": \"{{$json.originalRule['DBMS명']}}\",\n  \"스키마명\": \"{{$json.originalRule['스키마명']}}\",\n  \"테이블명\": \"{{$json.originalRule['테이블명']}}\",\n  \"컬럼명\": \"{{$json.originalRule['컬럼명']}}\",\n  \"품질지표명\": \"{{$json.originalRule['품질지표명']}}\",\n  \"설명\": \"{{$json.originalRule['설명']}}\",\n  \"건수SQL\": \"{{$json.originalRule['건수SQL']}}\",\n  \"분석SQL\": \"수정된 분석SQL\"\n}\n",
+        "options": {
+          "systemMessage": "당신은 데이터 품질(SQL) 규칙 수정 전문가입니다.\n\n## 역할\n- 검토의견을 근거로 기존 업무규칙의 분석SQL을 수정합니다.\n\n## 절대 규칙\n1) 출력은 반드시 JSON 객체 1개만 출력합니다. (마크다운/코드블록/설명문 금지)\n2) 아래 필드는 입력 원문을 그대로 복사해 출력합니다. (수정/요약/재작성 금지)\n   - 업무규칙명\n   - DBMS명\n   - 스키마명\n   - 테이블명\n   - 컬럼명\n   - 품질지표명\n   - 설명\n   - 건수SQL\n3) 오직 \"분석SQL\"만 수정합니다.\n4) 분석SQL은 반드시 오류 데이터만 조회해야 합니다.\n5) 검토의견에서 지적된 모든 문제를 해결해야 합니다.\n\n## 품질지표별 기준\n### 시간순서 일관성\n- 선후관계 방향이 올바를 것\n- 문자형 날짜일 경우 명시적 형변환 사용\n- NULL 값에 대한 위반 여부를 명확히 처리\n\n### 논리관계 일관성\n- 조건 방향(A이면 B) 정확\n- 잘못된 AND/OR 제거\n- NOT IN 사용 시 NULL 누락 방지\n\n### 계산식\n- 범위/산술관계가 업무적으로 타당할 것\n- 비교 연산자는 위반 데이터 기준으로 작성\n- NULL 값이 위반인지 여부를 명확히 처리\n\n## 최종 출력 스키마 (반드시 준수)\n{\n  \"업무규칙명\": \"<입력 그대로>\",\n  \"DBMS명\": \"<입력 그대로>\",\n  \"스키마명\": \"<입력 그대로>\",\n  \"테이블명\": \"<입력 그대로>\",\n  \"컬럼명\": \"<입력 그대로>\",\n  \"품질지표명\": \"<입력 그대로>\",\n  \"설명\": \"<입력 그대로>\",\n  \"건수SQL\": \"<입력 그대로>\",\n  \"분석SQL\": \"<수정된 SQL>\"\n}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        3104,
+        1072
+      ],
+      "id": "17867704-4ccb-4977-a049-eb56660b603b",
+      "name": "10. AI Agent - 규칙 수정1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 9. 수정 프롬프트 생성 (10번 AI Agent용 입력 구성)\n// - 부적합 판정된 규칙만 들어온다고 가정 (IF 분기 이후)\n// - 10번에서 사용할: originalRule, reviewOpinion, chatInput 생성\n\nconst items = $input.all();\n\nfunction asText(v) {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  try { return JSON.stringify(v); } catch (e) { return String(v); }\n}\n\nconst output = items.map((item, idx) => {\n  const rule = item.json || {};\n\n  // 7번에서 out.review 로 들어오거나, 최상위 검토의견으로 들어올 수 있음\n  const reviewOpinion =\n    asText(rule?.review?.검토의견) ||\n    asText(rule?.검토의견) ||\n    '';\n\n  const prompt = `다음 업무규칙은 검토 결과 \"부적합\" 판정을 받았습니다.\n검토의견을 반영하여 \"분석SQL\"만 수정하세요.\n\n## 수정 대상 업무규칙(원문 그대로)\n- 업무규칙명: ${asText(rule.업무규칙명)}\n- DBMS명: ${asText(rule.DBMS명)}\n- 스키마명: ${asText(rule.스키마명)}\n- 테이블명: ${asText(rule.테이블명)}\n- 컬럼명: ${asText(rule.컬럼명)}\n- 품질지표명: ${asText(rule.품질지표명)}\n- 설명: ${asText(rule.설명)}\n- 건수SQL: ${asText(rule.건수SQL)}\n- 분석SQL(기존): ${asText(rule.분석SQL)}\n\n## 검토의견(문제점/수정방향)\n${reviewOpinion}\n\n## 반드시 지킬 것\n1) 아래 출력 JSON에서 \"분석SQL\"만 수정하고, 나머지 필드는 원문 그대로 복사하세요.\n2) 분석SQL은 반드시 \"오류 데이터만\" 조회해야 합니다.\n3) 검토의견에서 지적된 문제(컬럼/형변환/NULL 처리/조건 방향/논리 모순 등)를 모두 해결하세요.\n4) 어떤 경우에도 마크다운/설명 문장 없이 JSON 객체 1개만 출력하세요.`;\n\n  return {\n    json: {\n      originalRule: {\n        업무규칙명: asText(rule.업무규칙명),\n        DBMS명: asText(rule.DBMS명),\n        스키마명: asText(rule.스키마명),\n        테이블명: asText(rule.테이블명),\n        컬럼명: asText(rule.컬럼명),\n        품질지표명: asText(rule.품질지표명),\n        설명: asText(rule.설명),\n        건수SQL: asText(rule.건수SQL),\n        분석SQL: asText(rule.분석SQL),\n      },\n      reviewOpinion,\n      chatInput: prompt,\n      _ruleIndex: idx + 1, // 디버깅용\n    }\n  };\n});\n\nreturn output;\n"
+      },
+      "id": "ead08387-8e56-4c00-a989-e3105b918e15",
+      "name": "9. 수정 프롬프트 생성1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2864,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 11. 수정된 규칙 파싱 (Output JSON Parser + Robust Mapper)\n// - 10번 AI Agent 출력이 item.json.output (```json ... ```) 문자열로 올 때 JSON 추출/파싱\n// - 이미 object로 올 때도 지원\n// - originalRule(원문) 보존 흐름도 그대로 지원\n// - 어떤 경우에도 죽지 않게 방어 + 디버깅용 raw_output/parse_error 제공\n\nconst items = $input.all();\n\nfunction asText(v) {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  try { return JSON.stringify(v); } catch (e) { return String(v); }\n}\n\nfunction stripCodeFences(s) {\n  if (s === null || s === undefined) return '';\n  let t = String(s).trim();\n\n  // ```json / ``` 제거\n  t = t.replace(/```(?:json|JSON)?/g, '').replace(/```/g, '').trim();\n\n  // 전체를 감싸는 따옴표 제거\n  if (\n    (t.startsWith('\"') && t.endsWith('\"')) ||\n    (t.startsWith(\"'\") && t.endsWith(\"'\"))\n  ) t = t.slice(1, -1).trim();\n\n  return t.trim();\n}\n\n// 문자열에서 첫 JSON(객체/배열) 덩어리 추출\nfunction extractFirstJson(text) {\n  const s = stripCodeFences(text);\n  const objStart = s.indexOf('{');\n  const arrStart = s.indexOf('[');\n  if (objStart === -1 && arrStart === -1) return null;\n\n  let start, openCh, closeCh;\n  if (objStart !== -1 && (arrStart === -1 || objStart < arrStart)) {\n    start = objStart; openCh = '{'; closeCh = '}';\n  } else {\n    start = arrStart; openCh = '['; closeCh = ']';\n  }\n\n  let depth = 0;\n  let inStr = false;\n  let quote = '';\n  let esc = false;\n\n  for (let i = start; i < s.length; i++) {\n    const ch = s[i];\n\n    if (inStr) {\n      if (esc) esc = false;\n      else if (ch === '\\\\') esc = true;\n      else if (ch === quote) { inStr = false; quote = ''; }\n      continue;\n    } else {\n      if (ch === '\"' || ch === \"'\") { inStr = true; quote = ch; continue; }\n      if (ch === openCh) depth++;\n      if (ch === closeCh) depth--;\n      if (depth === 0) return s.slice(start, i + 1).trim();\n    }\n  }\n  return null;\n}\n\nfunction tryParseJson(raw) {\n  // 이미 object로 들어온 경우\n  if (raw && typeof raw === 'object') return { ok: true, parsed: raw, error: null };\n\n  const rawText = asText(raw);\n  const jsonText = extractFirstJson(rawText);\n  if (!jsonText) return { ok: false, parsed: null, error: 'No JSON found in output' };\n\n  try {\n    return { ok: true, parsed: JSON.parse(jsonText), error: null };\n  } catch (e1) {\n    // 간단 수리(스마트쿼트/트레일링 콤마)\n    const repaired = jsonText\n      .replace(/[“”]/g, '\"')\n      .replace(/[‘’]/g, \"'\")\n      .replace(/,\\s*([}\\]])/g, '$1');\n\n    try {\n      return { ok: true, parsed: JSON.parse(repaired), error: null };\n    } catch (e2) {\n      return { ok: false, parsed: null, error: e2.message };\n    }\n  }\n}\n\nfunction pick(obj, keys) {\n  for (const k of keys) {\n    if (obj && obj[k] !== undefined && obj[k] !== null && asText(obj[k]).trim() !== '') {\n      return obj[k];\n    }\n  }\n  return '';\n}\n\nreturn items.map((item, idx) => {\n  const rule = (item && item.json) ? item.json : {};\n\n  // ✅ 10번 출력은 보통 rule.output에 들어있음\n  const rawOutput =\n    rule.output ??\n    rule.text ??\n    rule.response ??\n    rule.content ??\n    '';\n\n  const parsed = tryParseJson(rawOutput);\n\n  // ✅ src 후보: 1) originalRule 있으면 원문 유지용 / 2) parsed된 결과 / 3) 현재 rule\n  const originalRule = (rule.originalRule && typeof rule.originalRule === 'object') ? rule.originalRule : null;\n\n  // 10번 결과(JSON)는 “수정된 규칙”이므로 우선 사용\n  const revisedRule = (parsed.ok && parsed.parsed && typeof parsed.parsed === 'object')\n    ? parsed.parsed\n    : null;\n\n  // 매핑은 revisedRule 우선, 없으면 originalRule, 없으면 rule\n  const src = revisedRule || originalRule || rule;\n\n  const ruleNo =\n    pick(rule, ['규칙번호', 'ruleNo', '_ruleIndex']) ||\n    pick(src,  ['규칙번호', 'ruleNo', '_ruleIndex']) ||\n    (idx + 1);\n\n  const 업무규칙명 = pick(src, ['업무규칙명', 'ruleName']);\n  const DBMS명     = pick(src, ['DBMS명']);\n  const 스키마명   = pick(src, ['스키마명']);\n  const 테이블명   = pick(src, ['테이블명', '영문테이블명', 'tableName', '테이블명*']);\n  const 컬럼명     = pick(src, ['컬럼명', 'columnName', '컬럼명*']);\n  const 품질지표명 = pick(src, ['품질지표명', '품질지표명*']);\n  const 설명       = pick(src, ['설명', '설명*']);\n  const 건수SQL    = pick(src, ['건수SQL', '건수SQL*']);\n  const 분석SQL    = pick(src, ['분석SQL', '분석SQL*']);\n\n  // 디버깅용: 왜 비었는지 바로 보이게\n  const missing = [];\n  if (asText(업무규칙명).trim() === '') missing.push('업무규칙명');\n  if (asText(테이블명).trim() === '') missing.push('테이블명');\n  if (asText(컬럼명).trim() === '') missing.push('컬럼명');\n  if (asText(품질지표명).trim() === '') missing.push('품질지표명');\n  if (asText(설명).trim() === '') missing.push('설명');\n  if (asText(건수SQL).trim() === '') missing.push('건수SQL');\n  if (asText(분석SQL).trim() === '') missing.push('분석SQL');\n\n  if (missing.length) {\n    console.warn(`규칙 ${ruleNo}: 매핑 누락 필드 = ${missing.join(', ')}`);\n    if (!parsed.ok) console.warn(`규칙 ${ruleNo}: output parse 실패 = ${parsed.error}`);\n  }\n\n  return {\n    json: {\n      규칙번호: ruleNo,\n      업무규칙명: asText(업무규칙명),\n      DBMS명: asText(DBMS명),\n      스키마명: asText(스키마명),\n      '테이블명*': asText(테이블명),\n      '컬럼명*': asText(컬럼명),\n      '품질지표명*': asText(품질지표명),\n      근거규정: '',\n      '설명*': asText(설명),\n      '건수SQL*': asText(건수SQL),\n      '분석SQL*': asText(분석SQL),\n\n      // ✅ 필요하면 나중에 지워도 됨 (원인 추적용)\n      _raw_output: asText(rawOutput).slice(0, 5000),\n      _parse_ok: !!parsed.ok,\n      _parse_error: parsed.ok ? null : parsed.error,\n    }\n  };\n});\n"
+      },
+      "id": "af6415ee-1095-46a8-b74d-d56d36ead198",
+      "name": "11. 수정된 규칙 파싱1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3408,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.parse_ok }}",
+              "operation": "contains",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "d31aebd1-c011-451b-9a8e-38461ce2d655",
+      "name": "8-1. IF - 파싱 성공 여부1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2336,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.review['검토결과'] }}",
+              "value2": "적합"
+            }
+          ]
+        }
+      },
+      "id": "1aa9c1c6-3d51-46a2-906d-f85a2770b313",
+      "name": "8-2. IF - 검토결과 분기1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2592,
+        1008
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "58330d88-314a-444a-8ae2-6e277a2acf7e",
+      "name": "11. Merge - 적합+수정완료 합치기1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [
+        3648,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 최종 산출물 형식에 맞게 필드 매핑 및 검증 + 중복 제거\nconst items = $input.all();\n\n// 중복 제거를 위한 Map (key: 고유 식별자)\nconst uniqueRules = new Map();\n\nitems.forEach((item, idx) => {\n  const rule = item.json;\n  \n  // 고유 식별자 생성 (DBMS명 + 스키마명 + 테이블명 + 컬럼명 + 품질지표명)\n  const uniqueKey = [\n    rule.DBMS명 || '',\n    rule.스키마명 || '',\n    rule.테이블명 || rule['테이블명*'] || '',\n    rule.컬럼명 || rule['컬럼명*'] || '',\n    rule.품질지표명 || rule['품질지표명*'] || ''\n  ].join('||').toLowerCase();\n  \n  // 이미 존재하는 경우 건너뛰기\n  if (uniqueRules.has(uniqueKey)) {\n    console.log(`중복 제거: ${rule.업무규칙명 || 'unnamed'} (${uniqueKey})`);\n    return;\n  }\n  \n  // 필수 필드 검증 (*표시 필드)\n  const requiredFields = {\n    '테이블명': rule.테이블명 || rule['테이블명*'],\n    '컬럼명': rule.컬럼명 || rule['컬럼명*'],\n    '품질지표명': rule.품질지표명 || rule['품질지표명*'],\n    '설명': rule.설명 || rule['설명*'],\n    '건수SQL': rule.건수SQL || rule['건수SQL*'],\n    '분석SQL': rule.분석SQL || rule['분석SQL*']\n  };\n  \n  const missingFields = [];\n  for (const [fieldName, value] of Object.entries(requiredFields)) {\n    if (!value || value.toString().trim() === '') {\n      missingFields.push(fieldName);\n    }\n  }\n  \n  if (missingFields.length > 0) {\n    console.warn(`규칙 ${idx + 1} (${rule.업무규칙명 || 'unnamed'}): 필수 필드 누락 - ${missingFields.join(', ')}`);\n  }\n  \n  // 최종 산출물 형식으로 매핑\n  const mappedRule = {\n    업무규칙명: rule.업무규칙명 || '',\n    DBMS명: rule.DBMS명 || '',\n    스키마명: rule.스키마명 || '',\n    '테이블명*': rule.테이블명 || rule['테이블명*'] || '',\n    '컬럼명*': rule.컬럼명 || rule['컬럼명*'] || '',\n    '품질지표명*': rule.품질지표명 || rule['품질지표명*'] || '',\n    근거규정: rule.근거규정 || '',\n    '설명*': rule.설명 || rule['설명*'] || '',\n    '건수SQL*': rule.건수SQL || rule['건수SQL*'] || '',\n    '분석SQL*': rule.분석SQL || rule['분석SQL*'] || ''\n  };\n  \n  // Map에 추가\n  uniqueRules.set(uniqueKey, mappedRule);\n});\n\n// Map을 배열로 변환\nconst output = Array.from(uniqueRules.values()).map(rule => ({\n  json: rule\n}));\n\nconsole.log(`입력: ${items.length}개 → 중복 제거 후: ${output.length}개 규칙`);\nconsole.log(`총 ${uniqueRules.size}개 고유 규칙을 최종 산출물 형식으로 변환 완료`);\n\nreturn output;"
+      },
+      "id": "05c7576f-91c5-4a14-b93c-37d57dfbc635",
+      "name": "11-1. 최종 산출물 형식 매핑1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3872,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toFile",
+        "fileFormat": "xlsx",
+        "options": {
+          "fileName": "업무규칙"
+        }
+      },
+      "id": "0254b612-4bc6-4a56-a7f9-1957057b8bff",
+      "name": "12. 최종 엑셀 저장1",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. 데이터 취합 및 저장\n",
+        "height": 544,
+        "width": 784
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3552,
+        784
+      ],
+      "id": "2b69970b-3ebf-487a-a1fe-19385e589138",
+      "name": "Sticky Note9"
+    }
+  ],
+  "pinData": {
+    "3. AI Agent - 업무규칙 생성1": [
+      {
+        "json": {
+          "output": "```json\n[\n  {\n    \"업무규칙명\": \"A310_MOD_DTTM와/과 A310_REG_DTTM 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"ACDM310\",\n    \"컬럼명\": \"A310_MOD_DTTM\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"데이터 수정일시(A310_MOD_DTTM)는 최초 등록일시(A310_REG_DTTM)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.ACDM310\",\n    \"분석SQL\": \"SELECT A310_ACP_SBJT_NO, A310_BIZ_CD, A310_BIZ_NGR, A310_BIZ_YR, A310_TPI_HR_SNO FROM KSPS.ACDM310 WHERE A310_MOD_DTTM IS NOT NULL AND A310_REG_DTTM IS NOT NULL AND A310_MOD_DTTM < A310_REG_DTTM\"\n  },\n  {\n    \"업무규칙명\": \"C011_UPR_CMN_CD와/과 C011_CMN_CD 논리관계 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"CIDC011\",\n    \"컬럼명\": \"C011_UPR_CMN_CD\",\n    \"품질지표명\": \"논리관계 일관성\",\n    \"설명\": \"상위 공통코드(C011_UPR_CMN_CD)는 자신의 공통코드(C011_CMN_CD)와 동일할 수 없습니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC011\",\n    \"분석SQL\": \"SELECT C011_CMN_CD, C011_CMN_CLS_CD FROM KSPS.CIDC011 WHERE C011_UPR_CMN_CD IS NOT NULL AND C011_UPR_CMN_CD = C011_CMN_CD\"\n  },\n  {\n    \"업무규칙명\": \"C023_PWD_FALSE_USE_RSRT_YN와/과 C023_PWD_FALSE_USE_RSRT_CNT 논리관계 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"CIDC023\",\n    \"컬럼명\": \"C023_PWD_FALSE_USE_RSRT_YN\",\n    \"품질지표명\": \"논리관계 일관성\",\n    \"설명\": \"비밀번호 사용제한 여부(C023_PWD_FALSE_USE_RSRT_YN)가 'Y'인 경우, 제한 횟수(C023_PWD_FALSE_USE_RSRT_CNT)는 0보다 커야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC023\",\n    \"분석SQL\": \"SELECT C023_NO FROM KSPS.CIDC023 WHERE C023_PWD_FALSE_USE_RSRT_YN = 'Y' AND (C023_PWD_FALSE_USE_RSRT_CNT IS NULL OR TO_NUMBER(REGEXP_REPLACE(C023_PWD_FALSE_USE_RSRT_CNT, '[^0-9]', '')) <= 0)\"\n  },\n  {\n    \"업무규칙명\": \"C024_UPD_DATE와/과 C024_REG_DTTM 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"CIDC024\",\n    \"컬럼명\": \"C024_UPD_DATE\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"수정날짜(C024_UPD_DATE)는 등록일자(C024_REG_DTTM)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC024\",\n    \"분석SQL\": \"SELECT C024_NO, C024_USER_ID FROM KSPS.CIDC024 WHERE C024_UPD_DATE IS NOT NULL AND C024_REG_DTTM IS NOT NULL AND TO_DATE(C024_UPD_DATE, 'YYYY-MM-DD HH24:MI:SS') < C024_REG_DTTM\"\n  },\n  {\n    \"업무규칙명\": \"C310_FILE_SZ_MBYT 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"CIDC310\",\n    \"컬럼명\": \"C310_FILE_SZ_MBYT\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"파일 크기(C310_FILE_SZ_MBYT)는 0 이상이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC310\",\n    \"분석SQL\": \"SELECT C310_FILE_NO, C310_FILE_SNO FROM KSPS.CIDC310 WHERE C310_FILE_SZ_MBYT < 0\"\n  },\n  {\n    \"업무규칙명\": \"E320_10_10 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"ETCDM320\",\n    \"컬럼명\": \"E320_10_10\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"강의 이해도 퍼센트(E320_10_10) 값은 0과 100 사이여야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.ETCDM320\",\n    \"분석SQL\": \"SELECT E320_SVY_NO FROM KSPS.ETCDM320 WHERE E320_10_10 IS NOT NULL AND CASE WHEN REGEXP_LIKE(E320_10_10, '^[0-9]+(\\\\.[0-9]+)?$') THEN TO_NUMBER(E320_10_10) ELSE NULL END NOT BETWEEN 0 AND 100\"\n  },\n  {\n    \"업무규칙명\": \"H100_NEW_END_DATE와/과 H100_NEW_STT_DATE 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"HPDM100\",\n    \"컬럼명\": \"H100_NEW_END_DATE\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"공지 NEW 종료일자(H100_NEW_END_DATE)는 시작일자(H100_NEW_STT_DATE)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM100\",\n    \"분석SQL\": \"SELECT H100_NO FROM KSPS.HPDM100 WHERE H100_NEW_YN = 'Y' AND H100_NEW_END_DATE IS NOT NULL AND H100_NEW_STT_DATE IS NOT NULL AND TO_DATE(H100_NEW_END_DATE, 'YYYY-MM-DD') < TO_DATE(H100_NEW_STT_DATE, 'YYYY-MM-DD')\"\n  },\n  {\n    \"업무규칙명\": \"C100_OVRS_LATITUDE 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"HPDM100_MN\",\n    \"컬럼명\": \"C100_OVRS_LATITUDE\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"해외 기관의 위도(C100_OVRS_LATITUDE) 값은 -90과 90 사이여야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM100_MN\",\n    \"분석SQL\": \"SELECT M100_SBJT_NO FROM KSPS.HPDM100_MN WHERE C100_OVRS_LATITUDE IS NOT NULL AND CASE WHEN REGEXP_LIKE(C100_OVRS_LATITUDE, '^-?[0-9]+(\\\\.[0-9]+)?$') THEN TO_NUMBER(C100_OVRS_LATITUDE) ELSE NULL END NOT BETWEEN -90 AND 90\"\n  },\n  {\n    \"업무규칙명\": \"H180_UPR_BIZ_CD와/과 H180_BIZ_CD 논리관계 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"HPDM180\",\n    \"컬럼명\": \"H180_UPR_BIZ_CD\",\n    \"품질지표명\": \"논리관계 일관성\",\n    \"설명\": \"상위사업코드(H180_UPR_BIZ_CD)는 자신의 사업코드(H180_BIZ_CD)와 동일할 수 없습니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM180\",\n    \"분석SQL\": \"SELECT H180_BIZ_CD FROM KSPS.HPDM180 WHERE H180_UPR_BIZ_CD IS NOT NULL AND H180_UPR_BIZ_CD = H180_BIZ_CD\"\n  },\n  {\n    \"업무규칙명\": \"H181_MOD_DTTM와/과 H181_REG_DTTM 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"HPDM181\",\n    \"컬럼명\": \"H181_MOD_DTTM\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"수정일시(H181_MOD_DTTM)는 등록일시(H181_REG_DTTM)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM181\",\n    \"분석SQL\": \"SELECT H181_BIZ_CD, H181_RSCH_TYP_CD FROM KSPS.HPDM181 WHERE H181_MOD_DTTM IS NOT NULL AND H181_REG_DTTM IS NOT NULL AND H181_MOD_DTTM < H181_REG_DTTM\"\n  },\n  {\n    \"업무규칙명\": \"H400_MM 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"HPDM400\",\n    \"컬럼명\": \"H400_MM\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"사업월(H400_MM)은 1과 12 사이의 값이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM400\",\n    \"분석SQL\": \"SELECT H400_NO FROM KSPS.HPDM400 WHERE H400_MM IS NOT NULL AND (H400_MM < 1 OR H400_MM > 12)\"\n  },\n  {\n    \"업무규칙명\": \"H410_NEW_REQST_END_DATE와/과 H410_NEW_REQST_STT_DATE 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"HPDM410\",\n    \"컬럼명\": \"H410_NEW_REQST_END_DATE\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"신규과제 신청종료일(H410_NEW_REQST_END_DATE)은 신청시작일(H410_NEW_REQST_STT_DATE)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM410\",\n    \"분석SQL\": \"SELECT H410_NO FROM KSPS.HPDM410 WHERE H410_NEW_REQST_END_DATE IS NOT NULL AND H410_NEW_REQST_STT_DATE IS NOT NULL AND TO_DATE(H410_NEW_REQST_END_DATE, 'YYYYMMDD') < TO_DATE(H410_NEW_REQST_STT_DATE, 'YYYYMMDD')\"\n  },\n  {\n    \"업무규칙명\": \"H700_LOG_DTTM와/과 H700_REG_DTTM 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"HPDM700\",\n    \"컬럼명\": \"H700_LOG_DTTM\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"실제 등록일(H700_LOG_DTTM)은 게시판에 표시되는 등록일자(H700_REG_DTTM)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM700\",\n    \"분석SQL\": \"SELECT H700_NO FROM KSPS.HPDM700 WHERE H700_LOG_DTTM IS NOT NULL AND H700_REG_DTTM IS NOT NULL AND H700_LOG_DTTM < H700_REG_DTTM\"\n  },\n  {\n    \"업무규칙명\": \"M141A_MOD_DTTM와/과 M141A_REG_DTTM 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141A\",\n    \"컬럼명\": \"M141A_MOD_DTTM\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"수정일시(M141A_MOD_DTTM)는 등록일시(M141A_REG_DTTM)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141A\",\n    \"분석SQL\": \"SELECT M141A_SBJT_NO, M141A_REPT_DVS_CD, M141A_REPT_SMT_SNO FROM KSPS.MNDM141A WHERE M141A_MOD_DTTM IS NOT NULL AND M141A_REG_DTTM IS NOT NULL AND M141A_MOD_DTTM < M141A_REG_DTTM\"\n  },\n  {\n    \"업무규칙명\": \"M141D_DB_CNST_CNT 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141D\",\n    \"컬럼명\": \"M141D_DB_CNST_CNT\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"DB 구축 건수(M141D_DB_CNST_CNT)는 0 이상이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141D\",\n    \"분석SQL\": \"SELECT M141D_SBJT_NO, M141D_REPT_DVS_CD, M141D_REPT_SMT_SNO FROM KSPS.MNDM141D WHERE M141D_DB_CNST_CNT < 0\"\n  },\n  {\n    \"업무규칙명\": \"M141E_EVENT_PRTCPNT_NUM 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141E\",\n    \"컬럼명\": \"M141E_EVENT_PRTCPNT_NUM\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"행사 참가자 수(M141E_EVENT_PRTCPNT_NUM)는 0 이상이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141E\",\n    \"분석SQL\": \"SELECT M141E_SBJT_NO, M141E_REPT_DVS_CD, M141E_REPT_SMT_SNO FROM KSPS.MNDM141E WHERE M141E_EVENT_PRTCPNT_NUM IS NOT NULL AND REGEXP_LIKE(M141E_EVENT_PRTCPNT_NUM, '^[0-9]+$') AND TO_NUMBER(M141E_EVENT_PRTCPNT_NUM) < 0\"\n  },\n  {\n    \"업무규칙명\": \"M141K_DLGT_OTC_CNT 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141K\",\n    \"컬럼명\": \"M141K_DLGT_OTC_CNT\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"대표 성과 건수(M141K_DLGT_OTC_CNT)는 0 이상이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141K\",\n    \"분석SQL\": \"SELECT M141K_SBJT_NO, M141K_REPT_DVS_CD, M141K_REPT_SMT_SNO FROM KSPS.MNDM141K WHERE M141K_DLGT_OTC_CNT < 0\"\n  },\n  {\n    \"업무규칙명\": \"M141Z_ETC_CNST_CNT 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141Z\",\n    \"컬럼명\": \"M141Z_ETC_CNST_CNT\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"기타 구축 건수(M141Z_ETC_CNST_CNT)는 0 이상이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141Z\",\n    \"분석SQL\": \"SELECT M141Z_SBJT_NO, M141Z_REPT_DVS_CD, M141Z_REPT_SMT_SNO FROM KSPS.MNDM141Z WHERE M141Z_ETC_CNST_CNT < 0\"\n  },\n  {\n    \"업무규칙명\": \"M141_CDM_DB_PUS_REPT_FILE_NO와/과 M141_CDM_DBRPT_NO_REG_RSN 논리관계 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_CDM\",\n    \"컬럼명\": \"M141_CDM_DB_PUS_REPT_FILE_NO\",\n    \"품질지표명\": \"논리관계 일관성\",\n    \"설명\": \"DB활용보고서 파일(M141_CDM_DB_PUS_REPT_FILE_NO)이 등록된 경우, 미등록 사유(M141_CDM_DBRPT_NO_REG_RSN)는 없어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_CDM\",\n    \"분석SQL\": \"SELECT M141_CDM_SBJT_NO FROM KSPS.MNDM141_CDM WHERE (M141_CDM_DB_PUS_REPT_FILE_NO IS NOT NULL AND M141_CDM_DB_PUS_REPT_FILE_NO > 0) AND M141_CDM_DBRPT_NO_REG_RSN IS NOT NULL\"\n  },\n  {\n    \"업무규칙명\": \"M141_CKD_BEF_CNT와/과 M141_CKD_BEF_NO_REG_RSN 논리관계 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_CKD\",\n    \"컬럼명\": \"M141_CKD_BEF_CNT\",\n    \"품질지표명\": \"논리관계 일관성\",\n    \"설명\": \"표제어 개수(M141_CKD_BEF_CNT)가 0보다 큰 경우, 미등록 사유(M141_CKD_BEF_NO_REG_RSN)는 없어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_CKD\",\n    \"분석SQL\": \"SELECT M141_CKD_SBJT_NO FROM KSPS.MNDM141_CKD WHERE (M141_CKD_BEF_CNT IS NOT NULL AND M141_CKD_BEF_CNT > 0) AND M141_CKD_BEF_NO_REG_RSN IS NOT NULL\"\n  },\n  {\n    \"업무규칙명\": \"M141_INC_ETC_SLSP_NUM 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_INC\",\n    \"컬럼명\": \"M141_INC_ETC_SLSP_NUM\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"기타 장학금 수혜 인원(M141_INC_ETC_SLSP_NUM)은 0 이상이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_INC\",\n    \"분석SQL\": \"SELECT M141_INC_SBJT_NO FROM KSPS.MNDM141_INC WHERE M141_INC_ETC_SLSP_NUM < 0\"\n  },\n  {\n    \"업무규칙명\": \"M141_KCL_MOD_DTTM와/과 M141_KCL_REG_DTTM 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_KCL\",\n    \"컬럼명\": \"M141_KCL_MOD_DTTM\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"수정일시(M141_KCL_MOD_DTTM)는 등록일시(M141_KCL_REG_DTTM)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_KCL\",\n    \"분석SQL\": \"SELECT M141_KCL_SBJT_NO FROM KSPS.MNDM141_KCL WHERE M141_KCL_MOD_DTTM IS NOT NULL AND M141_KCL_REG_DTTM IS NOT NULL AND M141_KCL_MOD_DTTM < M141_KCL_REG_DTTM\"\n  },\n  {\n    \"업무규칙명\": \"M141_KDA_LECT_OPN_CNT 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_KDA\",\n    \"컬럼명\": \"M141_KDA_LECT_OPN_CNT\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"동영상 강좌 제작 건수(M141_KDA_LECT_OPN_CNT)는 0 이상이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_KDA\",\n    \"분석SQL\": \"SELECT M141_KDA_SBJT_NO FROM KSPS.MNDM141_KDA WHERE M141_KDA_LECT_OPN_CNT < 0\"\n  },\n  {\n    \"업무규칙명\": \"M141_KSS_MOD_DTTM와/과 M141_KSS_REG_DTTM 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_KSS\",\n    \"컬럼명\": \"M141_KSS_MOD_DTTM\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"수정일시(M141_KSS_MOD_DTTM)는 등록일시(M141_KSS_REG_DTTM)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_KSS\",\n    \"분석SQL\": \"SELECT M141_KSS_SBJT_NO FROM KSPS.MNDM141_KSS WHERE M141_KSS_MOD_DTTM IS NOT NULL AND M141_KSS_REG_DTTM IS NOT NULL AND M141_KSS_MOD_DTTM < M141_KSS_REG_DTTM\"\n  },\n  {\n    \"업무규칙명\": \"M141_OLU_GRDE_SLSP_DR_NUM 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_OLU\",\n    \"컬럼명\": \"M141_OLU_GRDE_SLSP_DR_NUM\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"성적 장학금 박사과정생 수(M141_OLU_GRDE_SLSP_DR_NUM)는 0 이상이어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_OLU\",\n    \"분석SQL\": \"SELECT M141_OLU_SBJT_NO FROM KSPS.MNDM141_OLU WHERE M141_OLU_GRDE_SLSP_DR_NUM < 0\"\n  },\n  {\n    \"업무규칙명\": \"M141_SRI_WHITE_PAPER_PBL_YN와/과 M141_SRI_WHITE_NO_REG_RSN 논리관계 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_SRI\",\n    \"컬럼명\": \"M141_SRI_WHITE_PAPER_PBL_YN\",\n    \"품질지표명\": \"논리관계 일관성\",\n    \"설명\": \"영문백서 발간 여부(M141_SRI_WHITE_PAPER_PBL_YN)가 'Y'이면 미등록 사유(M141_SRI_WHITE_NO_REG_RSN)는 없어야 하고, 'N'이면 사유가 있어야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_SRI\",\n    \"분석SQL\": \"SELECT M141_SRI_SBJT_NO FROM KSPS.MNDM141_SRI WHERE (M141_SRI_WHITE_PAPER_PBL_YN = 'Y' AND M141_SRI_WHITE_NO_REG_RSN IS NOT NULL) OR (M141_SRI_WHITE_PAPER_PBL_YN = 'N' AND M141_SRI_WHITE_NO_REG_RSN IS NULL)\"\n  },\n  {\n    \"업무규칙명\": \"P700_RQST_PRC_DATE와/과 P700_RQST_DATE 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"PLDM700\",\n    \"컬럼명\": \"P700_RQST_PRC_DATE\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"요청 처리일자(P700_RQST_PRC_DATE)는 요청일자(P700_RQST_DATE)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.PLDM700\",\n    \"분석SQL\": \"SELECT P700_RQST_SEQ_NO FROM KSPS.PLDM700 WHERE P700_RQST_PRC_DATE IS NOT NULL AND P700_RQST_DATE IS NOT NULL AND TO_DATE(P700_RQST_PRC_DATE, 'YYYYMMDD') < TO_DATE(P700_RQST_DATE, 'YYYYMMDD')\"\n  },\n  {\n    \"업무규칙명\": \"PERCENT 계산식\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"TMP20240402\",\n    \"컬럼명\": \"PERCENT\",\n    \"품질지표명\": \"계산식\",\n    \"설명\": \"비율(PERCENT) 값은 0과 100 사이여야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.TMP20240402\",\n    \"분석SQL\": \"SELECT AGCID FROM KSPS.TMP20240402 WHERE PERCENT IS NOT NULL AND CASE WHEN REGEXP_LIKE(PERCENT, '^[0-9]+(\\\\.[0-9]+)?$') THEN TO_NUMBER(PERCENT) ELSE NULL END NOT BETWEEN 0 AND 100\"\n  },\n  {\n    \"업무규칙명\": \"H100_NEW_END_DATE와/과 H100_NEW_STT_DATE 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"TMP20240418\",\n    \"컬럼명\": \"H100_NEW_END_DATE\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"신규 종료일(H100_NEW_END_DATE)은 신규 시작일(H100_NEW_STT_DATE)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.TMP20240418\",\n    \"분석SQL\": \"SELECT H100_NO FROM KSPS.TMP20240418 WHERE H100_NEW_YN = 'Y' AND H100_NEW_END_DATE IS NOT NULL AND H100_NEW_STT_DATE IS NOT NULL AND TO_DATE(H100_NEW_END_DATE, 'YYYYMMDD') < TO_DATE(H100_NEW_STT_DATE, 'YYYYMMDD')\"\n  },\n  {\n    \"업무규칙명\": \"MNDM141_OLU_HIR_MOD_DTTM와/과 MNDM141_OLU_HIR_REG_DTTM 시간순서 일관성\",\n    \"DBMS명\": \"진흥사업단DB\",\n    \"스키마명\": \"KSPS\",\n    \"테이블명\": \"MNDM141_OLU_HIR\",\n    \"컬럼명\": \"M141_OLU_HIR_MOD_DTTM\",\n    \"품질지표명\": \"시간순서 일관성\",\n    \"설명\": \"수정일시(M141_OLU_HIR_MOD_DTTM)는 등록일시(M141_OLU_HIR_REG_DTTM)보다 과거나 같아야 합니다.\",\n    \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_OLU_HIR\",\n    \"분석SQL\": \"SELECT M141_OLU_HIR_SBJT_NO, M141_OLU_HIR_REPT_DVS_CD FROM KSPS.MNDM141_OLU_HIR WHERE M141_OLU_HIR_MOD_DTTM IS NOT NULL AND M141_OLU_HIR_REG_DTTM IS NOT NULL AND M141_OLU_HIR_MOD_DTTM < M141_OLU_HIR_REG_DTTM\"\n  }\n]\n```"
+        }
+      }
+    ],
+    "6. AI Agent - 업무규칙 검토1": [
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"A310_MOD_DTTM와/과 A310_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"ACDM310\",\n  \"컬럼명\": \"A310_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"데이터 수정일시(A310_MOD_DTTM)는 최초 등록일시(A310_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.ACDM310\",\n  \"분석SQL\": \"SELECT A310_ACP_SBJT_NO, A310_BIZ_CD, A310_BIZ_NGR, A310_BIZ_YR, A310_TPI_HR_SNO FROM KSPS.ACDM310 WHERE A310_MOD_DTTM IS NOT NULL AND A310_REG_DTTM IS NOT NULL AND A310_MOD_DTTM < A310_REG_DTTM\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙의 '설명'에 기술된 시간 선후관계가 논리적으로 비합리적입니다. 데이터 수정일시는 최초 등록일시보다 미래거나 같아야 하는 것이 일반적이므로, '설명'의 내용이 잘못되었습니다. 현재 분석SQL은 논리적으로 올바른 위반 데이터(수정일시 < 등록일시)를 조회하고 있으므로, '설명'을 '데이터 수정일시는 최초 등록일시보다 미래거나 같아야 합니다'로 수정해야 규칙의 일관성이 확보됩니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"C011_UPR_CMN_CD와/과 C011_CMN_CD 논리관계 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"CIDC011\",\n  \"컬럼명\": \"C011_UPR_CMN_CD\",\n  \"품질지표명\": \"논리관계 일관성\",\n  \"설명\": \"상위 공통코드(C011_UPR_CMN_CD)는 자신의 공통코드(C011_CMN_CD)와 동일할 수 없습니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC011\",\n  \"분석SQL\": \"SELECT C011_CMN_CD, C011_CMN_CLS_CD FROM KSPS.CIDC011 WHERE C011_UPR_CMN_CD IS NOT NULL AND C011_UPR_CMN_CD = C011_CMN_CD\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"규칙의 논리가 타당하며, 분석 SQL은 상위 공통코드가 자신의 공통코드와 동일한 위반 데이터를 정확히 조회합니다. NULL 값에 대한 처리도 적절합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"C023_PWD_FALSE_USE_RSRT_YN와/과 C023_PWD_FALSE_USE_RSRT_CNT 논리관계 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"CIDC023\",\n  \"컬럼명\": \"C023_PWD_FALSE_USE_RSRT_YN\",\n  \"품질지표명\": \"논리관계 일관성\",\n  \"설명\": \"비밀번호 사용제한 여부(C023_PWD_FALSE_USE_RSRT_YN)가 'Y'인 경우, 제한 횟수(C023_PWD_FALSE_USE_RSRT_CNT)는 0보다 커야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC023\",\n  \"분석SQL\": \"SELECT C023_NO FROM KSPS.CIDC023 WHERE C023_PWD_FALSE_USE_RSRT_YN = 'Y' AND (C023_PWD_FALSE_USE_RSRT_CNT IS NULL OR TO_NUMBER(REGEXP_REPLACE(C023_PWD_FALSE_USE_RSRT_CNT, '[^0-9]', '')) <= 0)\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"규칙의 논리가 명확하며, 분석SQL은 비밀번호 사용제한 여부가 'Y'이면서 제한 횟수가 NULL이거나 0 이하인 위반 데이터를 정확히 조회합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"C024_UPD_DATE와/과 C024_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"CIDC024\",\n  \"컬럼명\": \"C024_UPD_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정날짜(C024_UPD_DATE)는 등록일자(C024_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC024\",\n  \"분석SQL\": \"SELECT C024_NO, C024_USER_ID FROM KSPS.CIDC024 WHERE C024_UPD_DATE IS NOT NULL AND C024_REG_DTTM IS NOT NULL AND TO_DATE(C024_UPD_DATE, 'YYYY-MM-DD HH24:MI:SS') < C024_REG_DTTM\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙 설명의 시간 선후관계 논리가 반대로 설정되었습니다. 데이터는 등록된 이후에 수정되므로, 수정날짜(C024_UPD_DATE)는 등록일자(C024_REG_DTTM)보다 미래이거나 같아야 합니다. 따라서 규칙 설명을 '수정날짜는 등록일자보다 미래거나 같아야 한다'로 수정하고, 위반 데이터를 찾는 분석SQL의 조건은 `C024_UPD_DATE < C024_REG_DTTM`이 되어야 하므로 현재 분석SQL은 올바른 논리를 따르고 있습니다. 규칙 설명과 분석SQL의 논리를 일치시켜야 합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"C310_FILE_SZ_MBYT 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"CIDC310\",\n  \"컬럼명\": \"C310_FILE_SZ_MBYT\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"파일 크기(C310_FILE_SZ_MBYT)는 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC310\",\n  \"분석SQL\": \"SELECT C310_FILE_NO, C310_FILE_SNO FROM KSPS.CIDC310 WHERE C310_FILE_SZ_MBYT < 0\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"파일 크기는 음수 값을 가질 수 없으므로, 0 이상이어야 한다는 업무규칙은 타당합니다. 분석 SQL은 규칙을 위반하는 0보다 작은 데이터를 정확하게 조회합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"E320_10_10 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"ETCDM320\",\n  \"컬럼명\": \"E320_10_10\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"강의 이해도 퍼센트(E320_10_10) 값은 0과 100 사이여야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.ETCDM320\",\n  \"분석SQL\": \"SELECT E320_SVY_NO FROM KSPS.ETCDM320 WHERE E320_10_10 IS NOT NULL AND CASE WHEN REGEXP_LIKE(E320_10_10, '^[0-9]+(\\\\.[0-9]+)?$') THEN TO_NUMBER(E320_10_10) ELSE NULL END NOT BETWEEN 0 AND 100\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"규칙의 설명과 분석SQL의 로직이 일치합니다. 문자형일 수 있는 컬럼에 대해 숫자 변환 및 범위(0-100) 검증을 올바르게 수행하여 위반 데이터를 정확히 식별합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H100_NEW_END_DATE와/과 H100_NEW_STT_DATE 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM100\",\n  \"컬럼명\": \"H100_NEW_END_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"공지 NEW 종료일자(H100_NEW_END_DATE)는 시작일자(H100_NEW_STT_DATE)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM100\",\n  \"분석SQL\": \"SELECT H100_NO FROM KSPS.HPDM100 WHERE H100_NEW_YN = 'Y' AND H100_NEW_END_DATE IS NOT NULL AND H100_NEW_STT_DATE IS NOT NULL AND TO_DATE(H100_NEW_END_DATE, 'YYYY-MM-DD') < TO_DATE(H100_NEW_STT_DATE, 'YYYY-MM-DD')\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"업무규칙의 설명과 분석SQL의 논리가 불일치하며, 설명의 업무 논리 또한 비합리적입니다. 일반적으로 종료일자는 시작일자보다 미래거나 같아야 하지만, 설명에는 '과거나 같아야 한다'고 명시되어 있습니다. 현재 분석SQL은 '종료일자 < 시작일자'를 위반으로 탐지하고 있으므로, 규칙 설명을 '종료일자는 시작일자보다 미래거나 같아야 합니다'로 수정해야 논리적 일관성을 확보할 수 있습니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"C100_OVRS_LATITUDE 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM100_MN\",\n  \"컬럼명\": \"C100_OVRS_LATITUDE\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"해외 기관의 위도(C100_OVRS_LATITUDE) 값은 -90과 90 사이여야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM100_MN\",\n  \"분석SQL\": \"SELECT M100_SBJT_NO FROM KSPS.HPDM100_MN WHERE C100_OVRS_LATITUDE IS NOT NULL AND CASE WHEN REGEXP_LIKE(C100_OVRS_LATITUDE, '^-?[0-9]+(\\.[0-9]+)?$') THEN TO_NUMBER(C100_OVRS_LATITUDE) ELSE NULL END NOT BETWEEN -90 AND 90\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"업무규칙의 설명과 분석 SQL이 일치하며, 위도 값의 범위(-90 ~ 90)가 지리적 기준에 부합하여 타당합니다. 분석 SQL은 문자열 컬럼의 숫자 변환 및 NULL 값 처리를 올바르게 수행하여 위반 데이터만 정확히 조회합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H180_UPR_BIZ_CD와/과 H180_BIZ_CD 논리관계 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM180\",\n  \"컬럼명\": \"H180_UPR_BIZ_CD\",\n  \"품질지표명\": \"논리관계 일관성\",\n  \"설명\": \"상위사업코드(H180_UPR_BIZ_CD)는 자신의 사업코드(H180_BIZ_CD)와 동일할 수 없습니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM180\",\n  \"분석SQL\": \"SELECT H180_BIZ_CD FROM KSPS.HPDM180 WHERE H180_UPR_BIZ_CD IS NOT NULL AND H180_UPR_BIZ_CD = H180_BIZ_CD\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"규칙의 설명과 분석SQL의 조건절(WHERE H180_UPR_BIZ_CD = H180_BIZ_CD)이 일치하여 위반 데이터를 정확히 식별합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H181_MOD_DTTM와/과 H181_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM181\",\n  \"컬럼명\": \"H181_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(H181_MOD_DTTM)는 등록일시(H181_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM181\",\n  \"분석SQL\": \"SELECT H181_BIZ_CD, H181_RSCH_TYP_CD FROM KSPS.HPDM181 WHERE H181_MOD_DTTM IS NOT NULL AND H181_REG_DTTM IS NOT NULL AND H181_MOD_DTTM < H181_REG_DTTM\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙 '설명'의 시간 선후관계가 비논리적입니다. 일반적으로 수정일시는 등록일시보다 미래거나 같아야 하므로('수정일시 >= 등록일시'), 현재 설명('수정일시 <= 등록일시')은 업무 흐름에 맞지 않습니다. 또한, 분석SQL은 '설명'을 위반하는 데이터(수정일시 > 등록일시)를 조회해야 하지만, 현재는 '수정일시 < 등록일시' 조건을 사용하고 있어 위반 데이터를 정확히 검출할 수 없습니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H400_MM 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM400\",\n  \"컬럼명\": \"H400_MM\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"사업월(H400_MM)은 1과 12 사이의 값이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM400\",\n  \"분석SQL\": \"SELECT H400_NO FROM KSPS.HPDM400 WHERE H400_MM IS NOT NULL AND (H400_MM < 1 OR H400_MM > 12)\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"규칙 설명과 분석SQL의 조건절이 일치하며, 사업월(H400_MM) 컬럼의 값이 1~12 범위를 벗어나는 위반 데이터를 정확히 조회합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H410_NEW_REQST_END_DATE와/과 H410_NEW_REQST_STT_DATE 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM410\",\n  \"컬럼명\": \"H410_NEW_REQST_END_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"신규과제 신청종료일(H410_NEW_REQST_END_DATE)은 신청시작일(H410_NEW_REQST_STT_DATE)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM410\",\n  \"분석SQL\": \"SELECT H410_NO FROM KSPS.HPDM410 WHERE H410_NEW_REQST_END_DATE IS NOT NULL AND H410_NEW_REQST_STT_DATE IS NOT NULL AND TO_DATE(H410_NEW_REQST_END_DATE, 'YYYYMMDD') < TO_DATE(H410_NEW_REQST_STT_DATE, 'YYYYMMDD')\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙의 '설명'과 '분석SQL'의 논리가 서로 불일치하며, 설명의 업무 논리 또한 비합리적입니다. 일반적으로 신청종료일은 신청시작일보다 미래거나 같아야 하는데(END_DATE >= START_DATE), 설명에는 반대로 기술되어 있습니다. 분석SQL은 올바른 업무 논리(END_DATE >= START_DATE)의 위반 케이스(END_DATE < START_DATE)를 정확히 조회하므로, '설명'을 \\\"신규과제 신청종료일은 신청시작일보다 미래거나 같아야 합니다.\\\"로 수정해야 합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H700_LOG_DTTM와/과 H700_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM700\",\n  \"컬럼명\": \"H700_LOG_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"실제 등록일(H700_LOG_DTTM)은 게시판에 표시되는 등록일자(H700_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM700\",\n  \"분석SQL\": \"SELECT H700_NO FROM KSPS.HPDM700 WHERE H700_LOG_DTTM IS NOT NULL AND H700_REG_DTTM IS NOT NULL AND H700_LOG_DTTM < H700_REG_DTTM\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"분석SQL이 규칙을 위반하는 데이터를 조회하지 않고, 오히려 규칙에 적합한 데이터를 조회하고 있습니다. 규칙 설명에 따르면 'H700_LOG_DTTM'은 'H700_REG_DTTM'보다 과거나 같아야 하므로(<=), 위반 사례는 'H700_LOG_DTTM > H700_REG_DTTM'인 경우입니다. 따라서 분석SQL의 WHERE 조건절을 'H700_LOG_DTTM > H700_REG_DTTM'으로 수정해야 합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141A_MOD_DTTM와/과 M141A_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141A\",\n  \"컬럼명\": \"M141A_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(M141A_MOD_DTTM)는 등록일시(M141A_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141A\",\n  \"분석SQL\": \"SELECT M141A_SBJT_NO, M141A_REPT_DVS_CD, M141A_REPT_SMT_SNO FROM KSPS.MNDM141A WHERE M141A_MOD_DTTM IS NOT NULL AND M141A_REG_DTTM IS NOT NULL AND M141A_MOD_DTTM < M141A_REG_DTTM\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙의 설명과 업무 논리 간에 모순이 있습니다. 일반적으로 수정일시는 등록일시보다 미래이거나 같아야 하는데(M141A_MOD_DTTM >= M141A_REG_DTTM), 설명은 그 반대로 기술되어 있습니다. 분석SQL은 올바른 업무 논리를 위반하는 데이터(수정일시 < 등록일시)를 찾고 있어 타당하지만, 현재의 규칙 설명과는 일치하지 않습니다. 설명을 '수정일시는 등록일시보다 미래거나 같아야 합니다'로 수정해야 합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141D_DB_CNST_CNT 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141D\",\n  \"컬럼명\": \"M141D_DB_CNST_CNT\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"DB 구축 건수(M141D_DB_CNST_CNT)는 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141D\",\n  \"분석SQL\": \"SELECT M141D_SBJT_NO, M141D_REPT_DVS_CD, M141D_REPT_SMT_SNO FROM KSPS.MNDM141D WHERE M141D_DB_CNST_CNT < 0\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"업무규칙 설명(0 이상)과 위배 데이터를 조회하는 분석SQL의 조건(0 미만)이 정확히 일치하며 논리적으로 타당합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141E_EVENT_PRTCPNT_NUM 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141E\",\n  \"컬럼명\": \"M141E_EVENT_PRTCPNT_NUM\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"행사 참가자 수(M141E_EVENT_PRTCPNT_NUM)는 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141E\",\n  \"분석SQL\": \"SELECT M141E_SBJT_NO, M141E_REPT_DVS_CD, M141E_REPT_SMT_SNO FROM KSPS.MNDM141E WHERE M141E_EVENT_PRTCPNT_NUM IS NOT NULL AND REGEXP_LIKE(M141E_EVENT_PRTCPNT_NUM, '^[0-9]+$') AND TO_NUMBER(M141E_EVENT_PRTCPNT_NUM) < 0\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"업무규칙은 행사 참가자 수가 0 이상이어야 한다는 내용으로 타당합니다. 분석 SQL은 해당 컬럼 값이 0보다 작은 위반 데이터를 정확히 조회하도록 작성되었습니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141K_DLGT_OTC_CNT 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141K\",\n  \"컬럼명\": \"M141K_DLGT_OTC_CNT\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"대표 성과 건수(M141K_DLGT_OTC_CNT)는 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141K\",\n  \"분석SQL\": \"SELECT M141K_SBJT_NO, M141K_REPT_DVS_CD, M141K_REPT_SMT_SNO FROM KSPS.MNDM141K WHERE M141K_DLGT_OTC_CNT < 0\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙 설명은 '0 이상'이어야 한다고 정의하지만, 분석SQL은 음수만 확인하고 NULL 값을 탐지하지 못합니다. NULL 값 또한 '0 이상'이 아니므로 규칙 위반에 해당합니다. 정확한 검증을 위해 분석SQL의 WHERE 절을 `WHERE M141K_DLGT_OTC_CNT < 0 OR M141K_DLGT_OTC_CNT IS NULL`로 수정해야 합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141Z_ETC_CNST_CNT 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141Z\",\n  \"컬럼명\": \"M141Z_ETC_CNST_CNT\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"기타 구축 건수(M141Z_ETC_CNST_CNT)는 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141Z\",\n  \"분석SQL\": \"SELECT M141Z_SBJT_NO, M141Z_REPT_DVS_CD, M141Z_REPT_SMT_SNO FROM KSPS.MNDM141Z WHERE M141Z_ETC_CNST_CNT < 0\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"업무규칙 설명('0 이상')을 위반하는 데이터를 정확히 식별하기 위해 분석SQL에서 '< 0' 조건을 사용하였으므로 논리적으로 타당합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_CDM_DB_PUS_REPT_FILE_NO와/과 M141_CDM_DBRPT_NO_REG_RSN 논리관계 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_CDM\",\n  \"컬럼명\": \"M141_CDM_DB_PUS_REPT_FILE_NO\",\n  \"품질지표명\": \"논리관계 일관성\",\n  \"설명\": \"DB활용보고서 파일(M141_CDM_DB_PUS_REPT_FILE_NO)이 등록된 경우, 미등록 사유(M141_CDM_DBRPT_NO_REG_RSN)는 없어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_CDM\",\n  \"분석SQL\": \"SELECT M141_CDM_SBJT_NO FROM KSPS.MNDM141_CDM WHERE (M141_CDM_DB_PUS_REPT_FILE_NO IS NOT NULL AND M141_CDM_DB_PUS_REPT_FILE_NO > 0) AND M141_CDM_DBRPT_NO_REG_RSN IS NOT NULL\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"업무규칙 설명에 따라 파일이 등록되었으면서 미등록 사유도 존재하는 모순 데이터를 정확히 조회하는 SQL입니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_CKD_BEF_CNT와/과 M141_CKD_BEF_NO_REG_RSN 논리관계 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_CKD\",\n  \"컬럼명\": \"M141_CKD_BEF_CNT\",\n  \"품질지표명\": \"논리관계 일관성\",\n  \"설명\": \"표제어 개수(M141_CKD_BEF_CNT)가 0보다 큰 경우, 미등록 사유(M141_CKD_BEF_NO_REG_RSN)는 없어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_CKD\",\n  \"분석SQL\": \"SELECT M141_CKD_SBJT_NO FROM KSPS.MNDM141_CKD WHERE (M141_CKD_BEF_CNT IS NOT NULL AND M141_CKD_BEF_CNT > 0) AND M141_CKD_BEF_NO_REG_RSN IS NOT NULL\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"업무 규칙의 설명과 분석 SQL의 조건절이 정확히 일치하며, 위반 데이터를 올바르게 조회하는 논리적인 SQL입니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_INC_ETC_SLSP_NUM 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_INC\",\n  \"컬럼명\": \"M141_INC_ETC_SLSP_NUM\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"기타 장학금 수혜 인원(M141_INC_ETC_SLSP_NUM)은 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_INC\",\n  \"분석SQL\": \"SELECT M141_INC_SBJT_NO FROM KSPS.MNDM141_INC WHERE M141_INC_ETC_SLSP_NUM < 0\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"규칙 설명(0 이상)과 분석 SQL의 위반 데이터 조회 조건(0 미만)이 정확히 일치합니다. 수혜 '인원'은 음수 값을 가질 수 없으므로 규칙의 논리적 타당성이 확보됩니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_KCL_MOD_DTTM와/과 M141_KCL_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_KCL\",\n  \"컬럼명\": \"M141_KCL_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(M141_KCL_MOD_DTTM)는 등록일시(M141_KCL_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_KCL\",\n  \"분석SQL\": \"SELECT M141_KCL_SBJT_NO FROM KSPS.MNDM141_KCL WHERE M141_KCL_MOD_DTTM IS NOT NULL AND M141_KCL_REG_DTTM IS NOT NULL AND M141_KCL_MOD_DTTM < M141_KCL_REG_DTTM\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙 설명의 논리가 일반적인 시간 순서와 반대이며, 분석SQL과도 일치하지 않습니다. 일반적으로 수정일시는 등록일시보다 미래거나 같아야 하지만('수정일시 >= 등록일시'), 설명에는 '과거나 같아야 한다'고 명시되어 비합리적입니다. 또한 분석SQL은 '수정일시 < 등록일시'인 데이터를 조회하는데, 이는 현재 설명의 위반 케이스('수정일시 > 등록일시')와 다릅니다. 규칙 설명을 '수정일시는 등록일시보다 미래거나 같아야 한다'로 수정해야 합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_KDA_LECT_OPN_CNT 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_KDA\",\n  \"컬럼명\": \"M141_KDA_LECT_OPN_CNT\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"동영상 강좌 제작 건수(M141_KDA_LECT_OPN_CNT)는 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_KDA\",\n  \"분석SQL\": \"SELECT M141_KDA_SBJT_NO FROM KSPS.MNDM141_KDA WHERE M141_KDA_LECT_OPN_CNT < 0\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"업무규칙은 동영상 강좌 제작 건수가 0 이상이어야 한다는 내용으로 타당합니다. 분석 SQL은 규칙을 위반하는 음수 값 데이터를 정확히 조회합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_KSS_MOD_DTTM와/과 M141_KSS_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_KSS\",\n  \"컬럼명\": \"M141_KSS_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(M141_KSS_MOD_DTTM)는 등록일시(M141_KSS_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_KSS\",\n  \"분석SQL\": \"SELECT M141_KSS_SBJT_NO FROM KSPS.MNDM141_KSS WHERE M141_KSS_MOD_DTTM IS NOT NULL AND M141_KSS_REG_DTTM IS NOT NULL AND M141_KSS_MOD_DTTM < M141_KSS_REG_DTTM\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙의 설명과 분석SQL의 논리적 방향이 불일치하며, 설명 자체의 업무 논리가 부적절합니다. 일반적으로 수정일시는 등록일시보다 미래거나 같아야 하므로(MOD_DTTM >= REG_DTTM), 규칙 설명은 '수정일시는 등록일시보다 미래거나 같아야 합니다'로 수정되어야 합니다. 현재 분석SQL은 수정일시가 등록일시보다 과거인 위배 데이터를 올바르게 찾고 있으므로, 설명만 수정하면 규칙이 타당해집니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_OLU_GRDE_SLSP_DR_NUM 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_OLU\",\n  \"컬럼명\": \"M141_OLU_GRDE_SLSP_DR_NUM\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"성적 장학금 박사과정생 수(M141_OLU_GRDE_SLSP_DR_NUM)는 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_OLU\",\n  \"분석SQL\": \"SELECT M141_OLU_SBJT_NO FROM KSPS.MNDM141_OLU WHERE M141_OLU_GRDE_SLSP_DR_NUM < 0\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"규칙의 설명(0 이상)과 위반 데이터를 추출하는 분석SQL의 조건(0 미만)이 논리적으로 일치합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_SRI_WHITE_PAPER_PBL_YN와/과 M141_SRI_WHITE_NO_REG_RSN 논리관계 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_SRI\",\n  \"컬럼명\": \"M141_SRI_WHITE_PAPER_PBL_YN\",\n  \"품질지표명\": \"논리관계 일관성\",\n  \"설명\": \"영문백서 발간 여부(M141_SRI_WHITE_PAPER_PBL_YN)가 'Y'이면 미등록 사유(M141_SRI_WHITE_NO_REG_RSN)는 없어야 하고, 'N'이면 사유가 있어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_SRI\",\n  \"분석SQL\": \"SELECT M141_SRI_SBJT_NO FROM KSPS.MNDM141_SRI WHERE (M141_SRI_WHITE_PAPER_PBL_YN = 'Y' AND M141_SRI_WHITE_NO_REG_RSN IS NOT NULL) OR (M141_SRI_WHITE_PAPER_PBL_YN = 'N' AND M141_SRI_WHITE_NO_REG_RSN IS NULL)\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"규칙의 논리적 관계가 명확하며, 분석SQL이 위반 사례(발간 시 사유가 있거나, 미발간 시 사유가 없는 경우)를 정확히 조회합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"P700_RQST_PRC_DATE와/과 P700_RQST_DATE 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"PLDM700\",\n  \"컬럼명\": \"P700_RQST_PRC_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"요청 처리일자(P700_RQST_PRC_DATE)는 요청일자(P700_RQST_DATE)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.PLDM700\",\n  \"분석SQL\": \"SELECT P700_RQST_SEQ_NO FROM KSPS.PLDM700 WHERE P700_RQST_PRC_DATE IS NOT NULL AND P700_RQST_DATE IS NOT NULL AND TO_DATE(P700_RQST_PRC_DATE, 'YYYYMMDD') < TO_DATE(P700_RQST_DATE, 'YYYYMMDD')\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙 설명과 업무 논리 간에 모순이 있습니다. 일반적으로 요청 처리일자는 요청일자보다 미래이거나 같아야 하나, 설명에는 과거나 같아야 한다고 명시되어 비즈니스 흐름과 반대됩니다. 또한 분석SQL은 '처리일자 < 요청일자'를 조회하는데, 이는 수정된 정상 규칙(처리일자 >= 요청일자)의 위배 데이터를 찾는 것이므로 SQL 자체는 타당합니다. 따라서 규칙 설명을 '요청 처리일자는 요청일자보다 미래거나 같아야 합니다.'로 수정해야 합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"PERCENT 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"TMP20240402\",\n  \"컬럼명\": \"PERCENT\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"비율(PERCENT) 값은 0과 100 사이여야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.TMP20240402\",\n  \"분석SQL\": \"SELECT AGCID FROM KSPS.TMP20240402 WHERE PERCENT IS NOT NULL AND CASE WHEN REGEXP_LIKE(PERCENT, '^[0-9]+(\\\\.[0-9]+)?$') THEN TO_NUMBER(PERCENT) ELSE NULL END NOT BETWEEN 0 AND 100\",\n  \"검토결과\": \"적합\",\n  \"검토의견\": \"업무규칙의 설명과 분석 SQL의 범위 조건(0~100)이 일치하며, 위반 데이터를 정확히 조회합니다. 문자열 타입 컬럼을 고려한 숫자 형식 검증 및 형 변환 로직이 포함되어 있어 타당합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H100_NEW_END_DATE와/과 H100_NEW_STT_DATE 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"TMP20240418\",\n  \"컬럼명\": \"H100_NEW_END_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"신규 종료일(H100_NEW_END_DATE)은 신규 시작일(H100_NEW_STT_DATE)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.TMP20240418\",\n  \"분석SQL\": \"SELECT H100_NO FROM KSPS.TMP20240418 WHERE H100_NEW_YN = 'Y' AND H100_NEW_END_DATE IS NOT NULL AND H100_NEW_STT_DATE IS NOT NULL AND TO_DATE(H100_NEW_END_DATE, 'YYYYMMDD') < TO_DATE(H100_NEW_STT_DATE, 'YYYYMMDD')\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"업무규칙 설명에 따르면 '종료일 <= 시작일'이 정상이므로, 위반 데이터는 '종료일 > 시작일'인 경우입니다. 하지만 현재 분석SQL은 '종료일 < 시작일'인 데이터를 조회하여 규칙을 준수하는 데이터를 잘못 검출하고 있습니다. 위반 데이터를 올바르게 조회하려면 분석SQL의 조건절을 `TO_DATE(H100_NEW_END_DATE, 'YYYYMMDD') > TO_DATE(H100_NEW_STT_DATE, 'YYYYMMDD')`로 수정해야 합니다.\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"MNDM141_OLU_HIR_MOD_DTTM와/과 MNDM141_OLU_HIR_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_OLU_HIR\",\n  \"컬럼명\": \"M141_OLU_HIR_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(M141_OLU_HIR_MOD_DTTM)는 등록일시(M141_OLU_HIR_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_OLU_HIR\",\n  \"분석SQL\": \"SELECT M141_OLU_HIR_SBJT_NO, M141_OLU_HIR_REPT_DVS_CD FROM KSPS.MNDM141_OLU_HIR WHERE M141_OLU_HIR_MOD_DTTM IS NOT NULL AND M141_OLU_HIR_REG_DTTM IS NOT NULL AND M141_OLU_HIR_MOD_DTTM < M141_OLU_HIR_REG_DTTM\",\n  \"검토결과\": \"부적합\",\n  \"검토의견\": \"규칙 설명의 시간 선후관계가 업무 논리에 반합니다. 일반적으로 수정일시는 등록일시보다 미래이거나 같아야 합니다 (MOD_DTTM >= REG_DTTM). 현재 규칙 설명은 그 반대로 정의되어 있어 부적합합니다. 분석SQL은 '수정일시 < 등록일시'인 경우를 조회하는데, 이는 올바른 업무 규칙(수정일시 >= 등록일시)의 위배 사례를 찾는 것이므로, 규칙 설명 자체를 수정해야 합니다.\"\n}\n```"
+        }
+      }
+    ],
+    "10. AI Agent - 규칙 수정1": [
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"A310_MOD_DTTM와/과 A310_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"ACDM310\",\n  \"컬럼명\": \"A310_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"데이터 수정일시(A310_MOD_DTTM)는 최초 등록일시(A310_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.ACDM310\",\n  \"분석SQL\": \"SELECT A310_ACP_SBJT_NO, A310_BIZ_CD, A310_BIZ_NGR, A310_BIZ_YR, A310_TPI_HR_SNO FROM KSPS.ACDM310 WHERE A310_MOD_DTTM IS NOT NULL AND A310_REG_DTTM IS NOT NULL AND A310_MOD_DTTM < A310_REG_DTTM\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"C024_UPD_DATE와/과 C024_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"CIDC024\",\n  \"컬럼명\": \"C024_UPD_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정날짜(C024_UPD_DATE)는 등록일자(C024_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.CIDC024\",\n  \"분석SQL\": \"SELECT C024_NO, C024_USER_ID FROM KSPS.CIDC024 WHERE C024_UPD_DATE IS NOT NULL AND C024_REG_DTTM IS NOT NULL AND TO_DATE(C024_UPD_DATE, 'YYYY-MM-DD HH24:MI:SS') < C024_REG_DTTM\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H100_NEW_END_DATE와/과 H100_NEW_STT_DATE 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM100\",\n  \"컬럼명\": \"H100_NEW_END_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"공지 NEW 종료일자(H100_NEW_END_DATE)는 시작일자(H100_NEW_STT_DATE)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM100\",\n  \"분석SQL\": \"SELECT H100_NO FROM KSPS.HPDM100 WHERE H100_NEW_YN = 'Y' AND H100_NEW_END_DATE IS NOT NULL AND H100_NEW_STT_DATE IS NOT NULL AND TO_DATE(H100_NEW_END_DATE, 'YYYY-MM-DD') > TO_DATE(H100_NEW_STT_DATE, 'YYYY-MM-DD')\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H181_MOD_DTTM와/과 H181_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM181\",\n  \"컬럼명\": \"H181_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(H181_MOD_DTTM)는 등록일시(H181_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM181\",\n  \"분석SQL\": \"SELECT H181_BIZ_CD, H181_RSCH_TYP_CD FROM KSPS.HPDM181 WHERE H181_MOD_DTTM IS NOT NULL AND H181_REG_DTTM IS NOT NULL AND H181_MOD_DTTM < H181_REG_DTTM\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H410_NEW_REQST_END_DATE와/과 H410_NEW_REQST_STT_DATE 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM410\",\n  \"컬럼명\": \"H410_NEW_REQST_END_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"신규과제 신청종료일(H410_NEW_REQST_END_DATE)은 신청시작일(H410_NEW_REQST_STT_DATE)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM410\",\n  \"분석SQL\": \"SELECT H410_NO FROM KSPS.HPDM410 WHERE H410_NEW_REQST_END_DATE IS NOT NULL AND H410_NEW_REQST_STT_DATE IS NOT NULL AND TO_DATE(H410_NEW_REQST_END_DATE, 'YYYYMMDD') < TO_DATE(H410_NEW_REQST_STT_DATE, 'YYYYMMDD')\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H700_LOG_DTTM와/과 H700_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"HPDM700\",\n  \"컬럼명\": \"H700_LOG_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"실제 등록일(H700_LOG_DTTM)은 게시판에 표시되는 등록일자(H700_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.HPDM700\",\n  \"분석SQL\": \"SELECT H700_NO FROM KSPS.HPDM700 WHERE H700_LOG_DTTM IS NOT NULL AND H700_REG_DTTM IS NOT NULL AND H700_LOG_DTTM > H700_REG_DTTM\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141A_MOD_DTTM와/과 M141A_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141A\",\n  \"컬럼명\": \"M141A_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(M141A_MOD_DTTM)는 등록일시(M141A_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141A\",\n  \"분석SQL\": \"SELECT M141A_SBJT_NO, M141A_REPT_DVS_CD, M141A_REPT_SMT_SNO FROM KSPS.MNDM141A WHERE M141A_MOD_DTTM IS NOT NULL AND M141A_REG_DTTM IS NOT NULL AND M141A_MOD_DTTM < M141A_REG_DTTM\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141K_DLGT_OTC_CNT 계산식\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141K\",\n  \"컬럼명\": \"M141K_DLGT_OTC_CNT\",\n  \"품질지표명\": \"계산식\",\n  \"설명\": \"대표 성과 건수(M141K_DLGT_OTC_CNT)는 0 이상이어야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141K\",\n  \"분석SQL\": \"SELECT M141K_SBJT_NO, M141K_REPT_DVS_CD, M141K_REPT_SMT_SNO FROM KSPS.MNDM141K WHERE M141K_DLGT_OTC_CNT < 0 OR M141K_DLGT_OTC_CNT IS NULL\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_KCL_MOD_DTTM와/과 M141_KCL_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_KCL\",\n  \"컬럼명\": \"M141_KCL_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(M141_KCL_MOD_DTTM)는 등록일시(M141_KCL_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_KCL\",\n  \"분석SQL\": \"SELECT M141_KCL_SBJT_NO FROM KSPS.MNDM141_KCL WHERE M141_KCL_MOD_DTTM IS NOT NULL AND M141_KCL_REG_DTTM IS NOT NULL AND M141_KCL_MOD_DTTM < M141_KCL_REG_DTTM\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"M141_KSS_MOD_DTTM와/과 M141_KSS_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_KSS\",\n  \"컬럼명\": \"M141_KSS_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(M141_KSS_MOD_DTTM)는 등록일시(M141_KSS_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_KSS\",\n  \"분석SQL\": \"SELECT M141_KSS_SBJT_NO FROM KSPS.MNDM141_KSS WHERE M141_KSS_MOD_DTTM IS NOT NULL AND M141_KSS_REG_DTTM IS NOT NULL AND M141_KSS_MOD_DTTM < M141_KSS_REG_DTTM\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"P700_RQST_PRC_DATE와/과 P700_RQST_DATE 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"PLDM700\",\n  \"컬럼명\": \"P700_RQST_PRC_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"요청 처리일자(P700_RQST_PRC_DATE)는 요청일자(P700_RQST_DATE)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.PLDM700\",\n  \"분석SQL\": \"SELECT P700_RQST_SEQ_NO FROM KSPS.PLDM700 WHERE P700_RQST_PRC_DATE IS NOT NULL AND P700_RQST_DATE IS NOT NULL AND TO_DATE(P700_RQST_PRC_DATE, 'YYYYMMDD') < TO_DATE(P700_RQST_DATE, 'YYYYMMDD')\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"H100_NEW_END_DATE와/과 H100_NEW_STT_DATE 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"TMP20240418\",\n  \"컬럼명\": \"H100_NEW_END_DATE\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"신규 종료일(H100_NEW_END_DATE)은 신규 시작일(H100_NEW_STT_DATE)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.TMP20240418\",\n  \"분석SQL\": \"SELECT H100_NO FROM KSPS.TMP20240418 WHERE H100_NEW_YN = 'Y' AND H100_NEW_END_DATE IS NOT NULL AND H100_NEW_STT_DATE IS NOT NULL AND TO_DATE(H100_NEW_END_DATE, 'YYYYMMDD') > TO_DATE(H100_NEW_STT_DATE, 'YYYYMMDD')\"\n}\n```"
+        }
+      },
+      {
+        "json": {
+          "output": "```json\n{\n  \"업무규칙명\": \"MNDM141_OLU_HIR_MOD_DTTM와/과 MNDM141_OLU_HIR_REG_DTTM 시간순서 일관성\",\n  \"DBMS명\": \"진흥사업단DB\",\n  \"스키마명\": \"KSPS\",\n  \"테이블명\": \"MNDM141_OLU_HIR\",\n  \"컬럼명\": \"M141_OLU_HIR_MOD_DTTM\",\n  \"품질지표명\": \"시간순서 일관성\",\n  \"설명\": \"수정일시(M141_OLU_HIR_MOD_DTTM)는 등록일시(M141_OLU_HIR_REG_DTTM)보다 과거나 같아야 합니다.\",\n  \"건수SQL\": \"SELECT COUNT(*) FROM KSPS.MNDM141_OLU_HIR\",\n  \"분석SQL\": \"SELECT M141_OLU_HIR_SBJT_NO, M141_OLU_HIR_REPT_DVS_CD, M141_OLU_HIR_MOD_DTTM, M141_OLU_HIR_REG_DTTM FROM KSPS.MNDM141_OLU_HIR WHERE M141_OLU_HIR_MOD_DTTM IS NOT NULL AND M141_OLU_HIR_REG_DTTM IS NOT NULL AND M141_OLU_HIR_MOD_DTTM < M141_OLU_HIR_REG_DTTM\"\n}\n```"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "0. Binary 데이터 확인 및 변환1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "결과 준비": {
+      "main": [
+        [
+          {
+            "node": "파일 업로드",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "파일 업로드": {
+      "main": [
+        [
+          {
+            "node": "콜백 전송",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. AI Agent - 업무규칙 생성1": {
+      "main": [
+        [
+          {
+            "node": "4. 생성된 규칙 파싱1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "3. AI Agent - 업무규칙 생성1",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "6. AI Agent - 업무규칙 검토1",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "10. AI Agent - 규칙 수정1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. 데이터 전처리 및 프롬프트 생성1": {
+      "main": [
+        [
+          {
+            "node": "3. AI Agent - 업무규칙 생성1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. 생성된 규칙 파싱1": {
+      "main": [
+        [
+          {
+            "node": "5. 검토 프롬프트 생성1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. 검토 프롬프트 생성1": {
+      "main": [
+        [
+          {
+            "node": "6. AI Agent - 업무규칙 검토1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. 검토 결과 파싱1": {
+      "main": [
+        [
+          {
+            "node": "8-1. IF - 파싱 성공 여부1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. AI Agent - 업무규칙 검토1": {
+      "main": [
+        [
+          {
+            "node": "7. 검토 결과 파싱1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0. Binary 데이터 확인 및 변환1": {
+      "main": [
+        [
+          {
+            "node": "1. 컬럼정의서 읽기1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. 컬럼정의서 읽기1": {
+      "main": [
+        [
+          {
+            "node": "2. 데이터 전처리 및 프롬프트 생성1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10. AI Agent - 규칙 수정1": {
+      "main": [
+        [
+          {
+            "node": "11. 수정된 규칙 파싱1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. 수정 프롬프트 생성1": {
+      "main": [
+        [
+          {
+            "node": "10. AI Agent - 규칙 수정1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. 수정된 규칙 파싱1": {
+      "main": [
+        [
+          {
+            "node": "11. Merge - 적합+수정완료 합치기1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "8-1. IF - 파싱 성공 여부1": {
+      "main": [
+        [
+          {
+            "node": "8-2. IF - 검토결과 분기1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8-2. IF - 검토결과 분기1": {
+      "main": [
+        [
+          {
+            "node": "11. Merge - 적합+수정완료 합치기1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9. 수정 프롬프트 생성1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. Merge - 적합+수정완료 합치기1": {
+      "main": [
+        [
+          {
+            "node": "11-1. 최종 산출물 형식 매핑1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11-1. 최종 산출물 형식 매핑1": {
+      "main": [
+        [
+          {
+            "node": "12. 최종 엑셀 저장1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. 최종 엑셀 저장1": {
+      "main": [
+        [
+          {
+            "node": "결과 준비",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4badb3ee-7e97-40dc-ba69-16a092f3fee3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "32c5f95e2856792afb4cb6b3c219708d546ea9cd357650e1e624ba9066377ac0"
+  },
+  "id": "zk467saKB7Sbzkj5",
+  "tags": []
+}

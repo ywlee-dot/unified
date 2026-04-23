@@ -40,6 +40,7 @@ class BidNoticeModel(BaseEntity):
     bid_ntce_dtl_url: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, default={})
     source_keyword: Mapped[str | None] = mapped_column(String(200))
+    similar_past_json: Mapped[list | None] = mapped_column(JSON, default=None)
 
 
 class BidAlertModel(BaseEntity):
@@ -55,6 +56,10 @@ class BidAlertModel(BaseEntity):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="sent")
     error_message: Mapped[str | None] = mapped_column(Text)
     match_reasons: Mapped[list | None] = mapped_column(JSON, default=None)
+    # Scoring
+    score: Mapped[float | None] = mapped_column(Float, index=True)
+    grade: Mapped[str | None] = mapped_column(String(10), index=True)  # high|medium|low
+    signals: Mapped[list | None] = mapped_column(JSON, default=None)
 
 
 class BidCheckRunModel(BaseEntity):

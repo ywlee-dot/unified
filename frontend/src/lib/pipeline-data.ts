@@ -8,7 +8,7 @@ import type { Node, Edge } from "@xyflow/react";
 export type PipelineNodeType = "input" | "process" | "service" | "storage" | "output";
 export type RuntimeService = "nextjs" | "fastapi" | "n8n" | "postgres" | "redis" | "external";
 
-export type ArchitectureLayerType = "frontend" | "backend" | "external" | "data";
+export type ArchitectureLayerType = "frontend" | "backend" | "external" | "data" | "n8n" | "ep" | "ads";
 
 export interface PipelineNodeData {
   label: string;
@@ -21,6 +21,25 @@ export interface PipelineNodeData {
   [key: string]: unknown;
 }
 
+export interface PipelineGraphNode {
+  label: string;
+  conditional?: boolean;
+  step?: number;
+}
+
+export interface PipelineGraphEdge {
+  from: [number, number];
+  to: [number, number];
+  label?: string;
+  srcPort?: "left" | "right" | "top" | "bottom";
+  tgtPort?: "left" | "right" | "top" | "bottom";
+}
+
+export interface PipelineGraph {
+  rows: (PipelineGraphNode | null)[][];
+  edges: PipelineGraphEdge[];
+}
+
 export interface ProjectPipeline {
   slug: string;
   name: string;
@@ -29,6 +48,8 @@ export interface ProjectPipeline {
   nodes: Node[];
   edges: Edge[];
   infraServices: string[];
+  pipelineGraph?: PipelineGraph;
+  color?: string;
 }
 
 // ─── Style Constants ───
@@ -148,6 +169,26 @@ function makeLayerNode(
   };
 }
 
+function makeStepLayerNode(
+  id: string,
+  label: string,
+  step: number | undefined,
+  color: string,
+  parentId: string | undefined,
+  x: number,
+  y: number,
+  opts?: { sublabel?: string }
+): Node {
+  const node: Record<string, unknown> = {
+    id,
+    type: "stepNode",
+    position: { x, y },
+    data: { label, step, color, sublabel: opts?.sublabel },
+  };
+  if (parentId !== undefined) node.parentId = parentId;
+  return node as Node;
+}
+
 // ─── 1. dataset-summary (standard) ───
 
 const datasetSummary: ProjectPipeline = {
@@ -181,35 +222,152 @@ const datasetSummary: ProjectPipeline = {
   infraServices: [],
 };
 
-// ─── 2. open-data-analyzer (standard) — 5-stage sequential ───
+// ─── 2. open-data-analyzer — 수직 스윔레인 4개 + 의미론적 인프라 배치 ───
+
+const ODA_COLOR = "#3182f6"; // 블루: 개방가능여부 판단
+const ADS_COLOR = "#06b6d4"; // 시안: AI 데이터셋 정의
+const DP_COLOR  = "#f59e0b"; // 앰버: 데이터 파이프라인
+const EP_COLOR  = "#10b981"; // 에메랄드: 공유데이터 제공 노력
+
+// 스윔레인 배치 (ODA | ADS[2컬럼] | DP | EP) — 공간 충분히 확보
+const ODA_X = 0;
+const ADS_X = 440;   // gap1 = 220px (Gemini 여유 35px)
+const DP_X  = 1000;  // ADS 490px 수용
+const EP_X  = 1400;  // gap3 = 180px (n8n·PG 중앙 배치)
+const SW_W     = 220;
+const SW_W_ADS = 490;  // ADS 메인+브랜치+여백
+const SW_H     = 830;  // ODA/DP/EP 본연 높이
+const SW_H_ADS = 1010; // ADS 10단계 수용
+const NX    = 20;
+const NX_A  = 15;
+const NX_B  = 280;  // 브랜치 컬럼 — 메인과 85px 간격 (삼각 엣지 공간)
+
+// 단계 Y 좌표
+const OY = { up: 60, ex: 180, an: 370, js: 550, xl: 720 };
+const AY = { p1: 60, p2: 160, p3: 260, p4: 360, p5: 460, p6: 560, p7: 590, p8: 720, p9: 820, p10: 920 };
+const DY = { tr: 60, wh: 200, et: 340, tf: 460, cb: 580, st: 730 };
+const EY = { up: 60, wh: 200, wf: 360, cb: 510, ou: 690 };
+
+// 공용 인프라 절대 좌표 — 양쪽 파이프라인에서 35px+ 여유
+const GEM_X = 240,  GEM_Y = OY.an;   // (240, 370) — ODA와 40px, ADS와 35px
+const N8N_X = 1220, N8N_Y = DY.wh;   // (1220, 200) — DP·EP 사이 중앙
+const PG_X  = 1220, PG_Y  = DY.st;   // (1220, 730)
 
 const openDataAnalyzer: ProjectPipeline = {
   slug: "open-data-analyzer",
-  name: "개방 가능 여부 판단",
-  description: "5단계 순차 분석으로 데이터 개방 가능 여부를 판정하고 Excel로 내보내기",
+  name: "ODA · ADS · DP · EP 통합 아키텍처",
+  description: "개방가능여부 판단 + AI 데이터셋 정의 + 데이터 파이프라인 + 공유데이터 제공 노력 — 공용 인프라(Gemini·n8n·PostgreSQL)를 사용 단계 높이에 배치",
   projectType: "standard",
   nodes: [
-    makeNode("oda-upload", "Excel 업로드", "input", "nextjs", 0, 0, { sublabel: "POST /stage1", icon: "upload" }),
-    makeNode("oda-extract", "테이블 추출/병합", "process", "fastapi", 1, 0, { sublabel: "openpyxl" }),
-    makeNode("oda-s1", "Stage1: 개방가능여부", "process", "external", 2, 0, { runtimeLabel: "Gemini API", sublabel: "가능/불가능 판정" }),
-    makeNode("oda-s2", "Stage2: 주제영역", "process", "external", 3, 0, { runtimeLabel: "Gemini API", sublabel: "한국표준 분류" }),
-    makeNode("oda-s3", "Stage3: 핵심컬럼", "process", "external", 0, 1, { runtimeLabel: "Gemini API", sublabel: "컬럼 + 설명" }),
-    makeNode("oda-s4", "Stage4: 조인관계", "process", "external", 1, 1, { runtimeLabel: "Gemini API", sublabel: "FK 분석" }),
-    makeNode("oda-s5", "Stage5: 최종정의", "process", "external", 2, 1, { runtimeLabel: "Gemini API", sublabel: "최종 검증" }),
-    makeNode("oda-json", "최종 판정 JSON", "output", "fastapi", 3, 1, { icon: "check-circle" }),
-    makeNode("oda-excel", "Excel Export", "output", "fastapi", 4, 1, { sublabel: "5개 시트", icon: "file-output" }),
+    // 스윔레인 배경
+    makeLayerGroup("sw-oda", "개방가능여부 판단",    "FastAPI · Gemini AI",  "frontend", ODA_X, 0, SW_W, SW_H),
+    makeLayerGroup("sw-ads", "AI 데이터셋 정의",     "FastAPI · Gemini AI",  "ads",      ADS_X, 0, SW_W_ADS, SW_H_ADS),
+    makeLayerGroup("sw-dp",  "데이터 파이프라인",    "FastAPI · n8n ETL",    "n8n",      DP_X,  0, SW_W, SW_H),
+    makeLayerGroup("sw-ep",  "공유데이터 제공 노력", "FastAPI · n8n 분석",   "ep",       EP_X,  0, SW_W, SW_H),
+
+    // ODA 파이프라인
+    makeStepLayerNode("oda-upload",  "Excel 업로드",     1, ODA_COLOR, "sw-oda", NX, OY.up, { sublabel: "POST /stage1" }),
+    makeStepLayerNode("oda-extract", "테이블 추출/병합", 2, ODA_COLOR, "sw-oda", NX, OY.ex, { sublabel: "openpyxl" }),
+    makeStepLayerNode("oda-analyze", "Gemini AI 분석",   3, ODA_COLOR, "sw-oda", NX, OY.an, { sublabel: "5단계 순차 호출" }),
+    makeStepLayerNode("oda-json",    "최종 판정 JSON",   4, ODA_COLOR, "sw-oda", NX, OY.js, { sublabel: "ApiResponse<T>" }),
+    makeStepLayerNode("oda-excel",   "Excel Export",     5, ODA_COLOR, "sw-oda", NX, OY.xl, { sublabel: "5개 시트" }),
+
+    // ADS 파이프라인 (10단계 — 메인 컬럼 9단계 + 브랜치 컬럼의 step 7)
+    makeStepLayerNode("ads-1",  "수요분석 및 후보 도출", 1,  ADS_COLOR, "sw-ads", NX_A, AY.p1),
+    makeStepLayerNode("ads-2",  "후보 목록 정의",        2,  ADS_COLOR, "sw-ads", NX_A, AY.p2),
+    makeStepLayerNode("ads-3",  "데이터 적합성 평가",    3,  ADS_COLOR, "sw-ads", NX_A, AY.p3, { sublabel: "AI 평가" }),
+    makeStepLayerNode("ads-4",  "데이터셋 범위 확정",    4,  ADS_COLOR, "sw-ads", NX_A, AY.p4),
+    makeStepLayerNode("ads-5",  "AI 데이터셋 설계",      5,  ADS_COLOR, "sw-ads", NX_A, AY.p5, { sublabel: "AI 설계 지원" }),
+    makeStepLayerNode("ads-6",  "비식별·가명 처리",      6,  ADS_COLOR, "sw-ads", NX_A, AY.p6),
+    makeStepLayerNode("ads-7",  "데이터 품질 점검",      7,  ADS_COLOR, "sw-ads", NX_B, AY.p7, { sublabel: "QC 브랜치" }),  // 브랜치 컬럼
+    makeStepLayerNode("ads-8",  "오류데이터 정제",       8,  ADS_COLOR, "sw-ads", NX_A, AY.p8),
+    makeStepLayerNode("ads-9",  "AI 메타데이터 정의",    9,  ADS_COLOR, "sw-ads", NX_A, AY.p9, { sublabel: "AI 메타 생성" }),
+    makeStepLayerNode("ads-10", "데이터셋 정의 완성",    10, ADS_COLOR, "sw-ads", NX_A, AY.p10),
+
+    // DP 파이프라인
+    makeStepLayerNode("dp-trigger",   "스케줄/수동 트리거", 1, DP_COLOR, "sw-dp", NX, DY.tr, { sublabel: "POST /trigger/{id}" }),
+    makeStepLayerNode("dp-webhook",   "n8n Webhook",        2, DP_COLOR, "sw-dp", NX, DY.wh, { sublabel: "webhook 실행 요청" }),
+    makeStepLayerNode("dp-etl",       "ETL 워크플로우",     3, DP_COLOR, "sw-dp", NX, DY.et, { sublabel: "etl-daily / sync" }),
+    makeStepLayerNode("dp-transform", "데이터 변환",        4, DP_COLOR, "sw-dp", NX, DY.tf, { sublabel: "변환 처리" }),
+    makeStepLayerNode("dp-callback",  "콜백 수신",          5, DP_COLOR, "sw-dp", NX, DY.cb, { sublabel: "/api/webhooks/n8n" }),
+    makeStepLayerNode("dp-status",    "상태 업데이트",      6, DP_COLOR, "sw-dp", NX, DY.st),
+
+    // EP 파이프라인
+    makeStepLayerNode("ep-upload",   "파일 업로드",     1, EP_COLOR, "sw-ep", NX, EY.up, { sublabel: "multipart/form-data" }),
+    makeStepLayerNode("ep-webhook",  "n8n Webhook",     2, EP_COLOR, "sw-ep", NX, EY.wh, { sublabel: "webhook 실행 요청" }),
+    makeStepLayerNode("ep-workflow", "분석 워크플로우", 3, EP_COLOR, "sw-ep", NX, EY.wf),
+    makeStepLayerNode("ep-callback", "콜백 수신",       4, EP_COLOR, "sw-ep", NX, EY.cb, { sublabel: "/api/webhooks/n8n" }),
+    makeStepLayerNode("ep-output",   "분석 결과",       5, EP_COLOR, "sw-ep", NX, EY.ou),
+
+    // 공용 인프라 (절대 좌표)
+    makeStepLayerNode("shared-gemini",   "Gemini API",       undefined, "#7c3aed", undefined, GEM_X, GEM_Y, { sublabel: "gemini-2.5-flash · 다중 호출" }),
+    makeStepLayerNode("shared-n8n",      "n8n :5678",        undefined, "#ea580c", undefined, N8N_X, N8N_Y, { sublabel: "webhook · 비동기 처리" }),
+    makeStepLayerNode("shared-postgres", "PostgreSQL :5432", undefined, "#b45309", undefined, PG_X,  PG_Y,  { sublabel: "결과·이력 저장소" }),
   ],
   edges: [
-    makeEdge("oda-upload", "oda-extract", { label: "파일 전송" }),
-    makeEdge("oda-extract", "oda-s1", { label: "테이블 데이터" }),
-    makeEdge("oda-s1", "oda-s2", { label: "세션 상태" }),
-    makeEdge("oda-s2", "oda-s3", { label: "세션 상태" }),
-    makeEdge("oda-s3", "oda-s4", { label: "세션 상태" }),
-    makeEdge("oda-s4", "oda-s5", { label: "세션 상태" }),
-    makeEdge("oda-s5", "oda-json", { label: "최종 결과" }),
-    makeEdge("oda-json", "oda-excel", { label: "Export" }),
+    // ODA 수직 흐름
+    makeEdge("oda-upload",  "oda-extract",  { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("oda-extract", "oda-analyze",  { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("oda-analyze", "oda-json",     { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("oda-json",    "oda-excel",    { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+
+    // ADS 메인 컬럼 수직 흐름 (1→2→3→4→5→6, 그리고 8→9→10)
+    makeEdge("ads-1", "ads-2", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ads-2", "ads-3", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ads-3", "ads-4", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ads-4", "ads-5", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ads-5", "ads-6", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ads-8", "ads-9", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ads-9", "ads-10", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+
+    // 5-6-7 삼각 분기 — step 7은 브랜치 컬럼, 각 엣지가 서로 다른 핸들로 겹침 방지
+    // 5→7: ads-5 우측 상단 → ads-7 좌상단
+    makeEdge("ads-5", "ads-7", { label: "직접 QC 투입", sourceHandle: "source-right-top", targetHandle: "target-top-left", dashed: true, animated: true }),
+    // 6→7: ads-6 우측 → ads-7 좌측 (수평)
+    makeEdge("ads-6", "ads-7", { label: "QC 진입",       sourceHandle: "source-right",     targetHandle: "target-left-top" }),
+    // 7→5: ads-7 좌상단 → ads-5 우측 하단 (루프백 상단)
+    makeEdge("ads-7", "ads-5", { label: "QC 실패·재설계", sourceHandle: "source-left-top",  targetHandle: "target-right-bot", dashed: true, animated: true }),
+    // 7→8: ads-7 하단 → ads-8 우측 상단 (다시 메인으로)
+    makeEdge("ads-7", "ads-8", { label: "QC 통과",       sourceHandle: "source-bottom",    targetHandle: "target-right-top" }),
+
+    // ADS 3→1 적합성 실패 루프백 (우측 바깥으로 곡선 — 상단 오프셋으로 다른 right 엣지와 구분)
+    makeEdge("ads-3", "ads-1", { label: "적합성 실패·재탐색", sourceHandle: "source-right-bot", targetHandle: "target-right-top", dashed: true, animated: true }),
+
+    // DP 수직 흐름
+    makeEdge("dp-trigger",   "dp-webhook",   { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("dp-webhook",   "dp-etl",       { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("dp-etl",       "dp-transform", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("dp-transform", "dp-callback",  { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("dp-callback",  "dp-status",    { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+
+    // EP 수직 흐름
+    makeEdge("ep-upload",   "ep-webhook",  { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ep-webhook",  "ep-workflow", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ep-workflow", "ep-callback", { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+    makeEdge("ep-callback", "ep-output",   { sourceHandle: "source-bottom", targetHandle: "target-top" }),
+
+    // ODA ↔ Gemini 순환 (5회 반복 호출)
+    makeEdge("oda-analyze",   "shared-gemini", { label: "API 호출 ×5", dashed: true }),
+    makeEdge("shared-gemini", "oda-analyze",   { label: "결과 수신", sourceHandle: "source-top", targetHandle: "target-top", dashed: true, animated: true }),
+
+    // ADS → Gemini (3개 AI 집약 단계 — 각자 Gemini 우측 다른 위치로 진입: 상/중/하)
+    makeEdge("ads-3", "shared-gemini", { label: "적합성 AI 평가", sourceHandle: "source-left", targetHandle: "target-right-top", dashed: true }),
+    makeEdge("ads-5", "shared-gemini", { label: "설계 AI 지원",   sourceHandle: "source-left", targetHandle: "target-right",     dashed: true }),
+    makeEdge("ads-9", "shared-gemini", { label: "메타 자동 생성", sourceHandle: "source-left", targetHandle: "target-right-bot", dashed: true }),
+
+    // DP ↔ n8n 비동기 (n8n 하단 좌측으로 콜백 — 2개 스프레드)
+    makeEdge("dp-webhook",  "shared-n8n", { label: "webhook 실행", dashed: true }),
+    makeEdge("shared-n8n",  "dp-callback", { label: "결과 콜백", sourceHandle: "source-bottom-left", targetHandle: "target-top", dashed: true, animated: true }),
+
+    // EP ↔ n8n 비동기 (n8n 하단 우측으로 콜백)
+    makeEdge("ep-webhook",  "shared-n8n", { label: "webhook 실행", sourceHandle: "source-left", targetHandle: "target-right", dashed: true }),
+    makeEdge("shared-n8n",  "ep-callback", { label: "결과 콜백", sourceHandle: "source-bottom-right", targetHandle: "target-top", dashed: true, animated: true }),
+
+    // 저장 → PostgreSQL
+    makeEdge("dp-status", "shared-postgres", { label: "실행이력 저장", dashed: true }),
+    makeEdge("ep-output", "shared-postgres", { label: "결과 저장", sourceHandle: "source-left", targetHandle: "target-right", dashed: true }),
   ],
-  infraServices: ["FastAPI :8000", "Gemini API"],
+  infraServices: ["Gemini API (gemini-2.5-flash)", "n8n :5678", "PostgreSQL :5432"],
 };
 
 // ─── 3. gov-news-crawler (standard) ───

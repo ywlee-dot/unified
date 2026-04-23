@@ -5,8 +5,8 @@ import { GovArticle, GovKeyword } from "@/lib/types";
 
 const API_BASE = "/api";
 
-function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null)
+function ScoreBadge({ score }: { score: number | null | undefined }) {
+  if (score == null)
     return <span className="text-xs text-text-disabled">—</span>;
   const cfg =
     score >= 80

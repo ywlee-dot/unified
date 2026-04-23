@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #0a0a1a; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif;
+  display: flex;
+  background-image: url('bg-gradient.png');
+  background-size: cover;
+}
+
+/* === TITLE BAR === */
+.title-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  background: rgba(10,10,30,0.85);
+  border-bottom: 2px solid #1e88e5;
+  padding: 6pt 0;
+}
+.title-bar h1 {
+  color: #e0e0e0; font-size: 16pt; margin: 0 0 0 20pt;
+  font-weight: bold; letter-spacing: 1px;
+}
+.title-bar p {
+  color: #64b5f6; font-size: 7pt; margin: 2pt 0 0 20pt;
+}
+
+/* === SECTION HEADERS === */
+.section-label {
+  background: rgba(30,136,229,0.15);
+  border-left: 3px solid #1e88e5;
+  padding: 2pt 6pt;
+}
+.section-label p {
+  color: #64b5f6; font-size: 7.5pt; font-weight: bold; margin: 0;
+}
+
+/* === PIPELINE ROW (top) === */
+.pipeline-row {
+  position: absolute; top: 38pt; left: 14pt; right: 14pt;
+  display: flex; align-items: center; gap: 0;
+}
+.pipe-step {
+  background: rgba(30,136,229,0.2);
+  border: 1px solid #1e88e5;
+  border-radius: 6pt;
+  padding: 4pt 5pt;
+  text-align: center;
+  flex: 1;
+}
+.pipe-step p {
+  color: #e0e0e0; font-size: 6.5pt; font-weight: bold; margin: 0;
+}
+.pipe-detail p {
+  color: #90caf9; font-size: 5pt; margin: 1pt 0 0 0;
+}
+.pipe-arrow {
+  width: 14pt; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+/* === MAIN CONTENT AREA === */
+.main-area {
+  position: absolute; top: 82pt; left: 14pt; right: 14pt; bottom: 10pt;
+  display: flex; gap: 8pt;
+}
+
+/* LEFT: Data Ingestion */
+.col-left {
+  width: 200pt; display: flex; flex-direction: column; gap: 5pt;
+}
+
+/* CENTER: Storage */
+.col-center {
+  width: 220pt; display: flex; flex-direction: column; gap: 5pt;
+}
+
+/* RIGHT: Query Flow */
+.col-right {
+  flex: 1; display: flex; flex-direction: column; gap: 5pt;
+}
+
+/* === CARDS === */
+.card {
+  background: rgba(20,20,50,0.8);
+  border: 1px solid #1565c0;
+  border-radius: 6pt;
+  padding: 5pt 6pt;
+}
+.card-header {
+  background: rgba(21,101,192,0.3);
+  border-radius: 3pt;
+  padding: 2pt 5pt;
+  margin-bottom: 3pt;
+}
+.card-header p {
+  color: #64b5f6; font-size: 6.5pt; font-weight: bold; margin: 0;
+}
+
+.card p {
+  color: #b0bec5; font-size: 5.5pt; margin: 1pt 0;
+}
+.card .highlight {
+  color: #4dd0e1;
+}
+
+/* Storage boxes */
+.storage-box {
+  background: rgba(13,33,55,0.9);
+  border: 1px solid #0d47a1;
+  border-radius: 5pt;
+  padding: 4pt 5pt;
+  margin-top: 2pt;
+}
+.storage-box p {
+  color: #90caf9; font-size: 5pt; margin: 0.5pt 0;
+}
+
+/* Sub items */
+.sub-item {
+  background: rgba(30,136,229,0.1);
+  border-left: 2px solid #1e88e5;
+  padding: 2pt 4pt;
+  margin: 2pt 0;
+}
+.sub-item p {
+  color: #b0bec5; font-size: 5pt; margin: 0.5pt 0;
+}
+
+/* Flow steps */
+.flow-step {
+  background: rgba(77,208,225,0.1);
+  border: 1px solid #00838f;
+  border-radius: 4pt;
+  padding: 3pt 5pt;
+  margin: 1pt 0;
+}
+.flow-step p {
+  color: #4dd0e1; font-size: 5.5pt; margin: 0;
+}
+
+.flow-arrow {
+  text-align: center; padding: 0;
+}
+
+/* Category tags */
+.tag-row {
+  display: flex; gap: 3pt; flex-wrap: wrap; margin-top: 2pt;
+}
+.tag {
+  background: rgba(30,136,229,0.25);
+  border: 1px solid #1565c0;
+  border-radius: 3pt;
+  padding: 1pt 4pt;
+}
+.tag p {
+  color: #90caf9; font-size: 4.5pt; margin: 0;
+}
+
+/* Score badge */
+.score-badge {
+  background: rgba(77,208,225,0.2);
+  border: 1px solid #00838f;
+  border-radius: 3pt;
+  padding: 1pt 4pt;
+}
+.score-badge p {
+  color: #4dd0e1; font-size: 4.5pt; margin: 0; font-weight: bold;
+}
+
+/* Pinecone icon color */
+.pinecone-label {
+  background: rgba(0,150,136,0.2);
+  border: 1px solid #00897b;
+  border-radius: 4pt;
+  padding: 3pt 5pt;
+}
+.pinecone-label p {
+  color: #4db6ac; font-size: 6pt; font-weight: bold; margin: 0;
+}
+
+.json-label {
+  background: rgba(255,183,77,0.15);
+  border: 1px solid #f57c00;
+  border-radius: 4pt;
+  padding: 3pt 5pt;
+}
+.json-label p {
+  color: #ffb74d; font-size: 6pt; font-weight: bold; margin: 0;
+}
+
+.pg-label {
+  background: rgba(100,181,246,0.15);
+  border: 1px solid #1976d2;
+  border-radius: 4pt;
+  padding: 3pt 5pt;
+}
+.pg-label p {
+  color: #64b5f6; font-size: 6pt; font-weight: bold; margin: 0;
+}
+
+.result-box {
+  background: rgba(102,187,106,0.15);
+  border: 1px solid #43a047;
+  border-radius: 5pt;
+  padding: 4pt 5pt;
+}
+.result-box p {
+  color: #81c784; font-size: 5pt; margin: 0.5pt 0;
+}
+</style>
+</head>
+<body>
+
+<!-- TITLE BAR -->
+<div class="title-bar">
+  <h1>RAG System Architecture</h1>
+  <p>Evaluation Handbook RAG Pipeline &amp; Data Storage</p>
+</div>
+
+<!-- ===== PIPELINE ROW (7 steps) ===== -->
+<div class="pipeline-row">
+  <div class="pipe-step">
+    <p>1. Document</p>
+    <div class="pipe-detail"><p>HWPX (2025)</p></div>
+  </div>
+  <div class="pipe-arrow"><img src="arrow-right.png" style="width:14pt; height:8pt;"></div>
+  <div class="pipe-step">
+    <p>2. Parse</p>
+    <div class="pipe-detail"><p>ZIP/XML Extract</p></div>
+  </div>
+  <div class="pipe-arrow"><img src="arrow-right.png" style="width:14pt; height:8pt;"></div>
+  <div class="pipe-step">
+    <p>3. Chunk</p>
+    <div class="pipe-detail"><p>17 Items x 6 Cat</p></div>
+  </div>
+  <div class="pipe-arrow"><img src="arrow-right.png" style="width:14pt; height:8pt;"></div>
+  <div class="pipe-step">
+    <p>4. Embed</p>
+    <div class="pipe-detail"><p>Gemini 3072d</p></div>
+  </div>
+  <div class="pipe-arrow"><img src="arrow-right.png" style="width:14pt; height:8pt;"></div>
+  <div class="pipe-step">
+    <p>5. Store</p>
+    <div class="pipe-detail"><p>Pinecone</p></div>
+  </div>
+  <div class="pipe-arrow"><img src="arrow-right.png" style="width:14pt; height:8pt;"></div>
+  <div class="pipe-step">
+    <p>6. Retrieve</p>
+    <div class="pipe-detail"><p>Top-k Cosine</p></div>
+  </div>
+  <div class="pipe-arrow"><img src="arrow-right.png" style="width:14pt; height:8pt;"></div>
+  <div class="pipe-step">
+    <p>7. Generate</p>
+    <div class="pipe-detail"><p>Gemini 2.5 Flash</p></div>
+  </div>
+</div>
+
+<!-- ===== MAIN 3-COLUMN AREA ===== -->
+<div class="main-area">
+
+  <!-- LEFT COLUMN: Data Ingestion & Master Data -->
+  <div class="col-left">
+    <div class="section-label"><p>Data Ingestion Pipeline</p></div>
+
+    <div class="card">
+      <div class="card-header"><p>HWPX Parsing (parse_hwpx.py)</p></div>
+      <p><span class="highlight">Input:</span> 2025 Public Data Evaluation Handbook (.hwpx)</p>
+      <p><span class="highlight">Step 1:</span> ZIP extraction, XML section parsing</p>
+      <p><span class="highlight">Step 2:</span> Split by indicator markers</p>
+      <p><span class="highlight">Step 3:</span> Split by circled numbers</p>
+      <p><span class="highlight">Step 4:</span> Cap at 8,000 chars/section</p>
+      <p><span class="highlight">Output:</span> evaluation_items.json (v2.0.0)</p>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><p>Master Data (evaluation_items.json)</p></div>
+      <div class="sub-item">
+        <p><span class="highlight">public_data</span> (100 pts total)</p>
+      </div>
+      <div class="tag-row">
+        <div class="tag"><p>openness 48</p></div>
+        <div class="tag"><p>quality 45</p></div>
+        <div class="tag"><p>mgmt 7</p></div>
+      </div>
+      <div class="sub-item" style="margin-top: 3pt;">
+        <p><span class="highlight">data_admin</span> (100 pts total)</p>
+      </div>
+      <div class="tag-row">
+        <div class="tag"><p>analysis 50</p></div>
+        <div class="tag"><p>sharing 45</p></div>
+        <div class="tag"><p>mgmt 5</p></div>
+      </div>
+      <p>17 items: item_id, max_score, method, scoring_criteria, keywords</p>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><p>Supported File Formats</p></div>
+      <div class="tag-row">
+        <div class="score-badge"><p>.hwpx</p></div>
+        <div class="score-badge"><p>.hwp</p></div>
+        <div class="score-badge"><p>.pdf</p></div>
+        <div class="score-badge"><p>.docx</p></div>
+        <div class="score-badge"><p>.xlsx</p></div>
+        <div class="score-badge"><p>.txt</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER COLUMN: Data Storage -->
+  <div class="col-center">
+    <div class="section-label"><p>Data Storage Architecture</p></div>
+
+    <div class="card">
+      <div class="pinecone-label"><p>Pinecone Vector DB</p></div>
+      <p><span class="highlight">Index:</span> evaluation-guidelines | <span class="highlight">Dim:</span> 3072 | <span class="highlight">Metric:</span> Cosine</p>
+      <p><span class="highlight">Spec:</span> Serverless (AWS us-east-1)</p>
+      <div class="storage-box">
+        <p><span class="highlight">default namespace</span></p>
+        <p>Document chunks with full text content</p>
+        <p>Metadata: source, chunk_id, category</p>
+      </div>
+      <div class="storage-box" style="margin-top: 3pt;">
+        <p><span class="highlight">v2 namespace</span></p>
+        <p>Structured evaluation items (17 vectors)</p>
+        <p>Metadata: item_id, item_name, category,</p>
+        <p>max_score, scoring_criteria, keywords</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="json-label"><p>JSON ChunkStore (Local)</p></div>
+      <p><span class="highlight">Path:</span> data/evaluation_rag/chunks/</p>
+      <div class="storage-box">
+        <p>index.json: doc_name -> {doc_id, chunks_file, num_chunks}</p>
+        <p>Per-doc files: {doc_hash}.json with chunk text</p>
+        <p>ID: MD5 hash of source name</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="pg-label"><p>PostgreSQL (Results)</p></div>
+      <p><span class="highlight">Table:</span> evaluation_rag_evaluations</p>
+      <div class="storage-box">
+        <p>id (UUID) | input_data | query | context</p>
+        <p>summary | score (0-100) | issues (JSON)</p>
+        <p>improvements (JSON) | item_scores (JSON)</p>
+        <p>max_possible_score | created_at | updated_at</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN: Query & Evaluation Flow -->
+  <div class="col-right">
+    <div class="section-label"><p>Retrieval &amp; Evaluation Flow</p></div>
+
+    <div class="card" style="flex: 1;">
+      <div class="flow-step"><p>User Query / File Upload</p></div>
+      <div class="flow-arrow"><img src="arrow-down-sm.png" style="width:8pt; height:10pt;"></div>
+
+      <div class="flow-step">
+        <p>QueryProcessor: Normalize + Auto-detect Category</p>
+      </div>
+      <div class="flow-arrow"><img src="arrow-down-sm.png" style="width:8pt; height:10pt;"></div>
+
+      <div class="flow-step">
+        <p>EmbeddingService: Gemini embedding-001 (retrieval_query)</p>
+      </div>
+      <div class="flow-arrow"><img src="arrow-down-sm.png" style="width:8pt; height:10pt;"></div>
+
+      <div class="flow-step">
+        <p>RetrievalService: Pinecone top-k (threshold 0.7 / 0.5 / fallback)</p>
+      </div>
+      <div class="flow-arrow"><img src="arrow-down-sm.png" style="width:8pt; height:10pt;"></div>
+
+      <div class="flow-step">
+        <p>RAG Chain: Context assembly from chunks + items</p>
+      </div>
+      <div class="flow-arrow"><img src="arrow-down-sm.png" style="width:8pt; height:10pt;"></div>
+
+      <div class="flow-step">
+        <p>EvaluationEngine: Gemini 2.5 Flash (temp 0.1-0.3)</p>
+      </div>
+      <div class="flow-arrow"><img src="arrow-down-sm.png" style="width:8pt; height:10pt;"></div>
+
+      <div class="result-box">
+        <p><span style="color:#4caf50; font-weight:bold;">JSON Result</span></p>
+        <p>summary | score (0-100) | issues[]</p>
+        <p>improvements[] | item_scores[] (per-item)</p>
+        <p>max_possible_score | category</p>
+      </div>
+
+      <div class="sub-item" style="margin-top: 3pt;">
+        <p><span class="highlight">Two Modes:</span> Simple Eval (single score) | Item-Level Eval (per-item, batch 8)</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

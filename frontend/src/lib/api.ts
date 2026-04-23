@@ -14,6 +14,7 @@ const API_BASE =
 
 class ApiClient {
   private baseUrl: string;
+  private _refreshPromise: Promise<boolean> | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -57,6 +58,22 @@ class ApiClient {
 
     if (!res.ok) {
       if (res.status === 401 && typeof window !== "undefined") {
+        // Try refresh token before redirecting to login
+        const refreshed = await this._tryRefresh();
+        if (refreshed) {
+          // Retry original request once after successful refresh
+          const retryRes = await fetch(url, {
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              ...options.headers,
+            },
+            ...options,
+          });
+          if (retryRes.ok) {
+            return retryRes.status === 204 ? (undefined as T) : retryRes.json();
+          }
+        }
         window.location.href = "/login";
         throw new ApiError("인증이 필요합니다", 401);
       }
@@ -73,6 +90,26 @@ class ApiClient {
     }
 
     return res.json();
+  }
+
+  private async _tryRefresh(): Promise<boolean> {
+    // Deduplicate concurrent refresh calls
+    if (!this._refreshPromise) {
+      this._refreshPromise = (async () => {
+        try {
+          const res = await fetch(`${this.baseUrl}/auth/refresh`, {
+            method: "POST",
+            credentials: "include",
+          });
+          return res.ok;
+        } catch {
+          return false;
+        } finally {
+          this._refreshPromise = null;
+        }
+      })();
+    }
+    return this._refreshPromise;
   }
 
   async get<T>(path: string): Promise<T> {
@@ -105,6 +142,17 @@ class ApiClient {
 
   async logout(): Promise<void> {
     return this.request<void>("/auth/logout", { method: "POST" });
+  }
+
+  async refresh(): Promise<LoginResponse> {
+    const res = await fetch(`${this.baseUrl}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      throw new ApiError("Refresh failed", res.status);
+    }
+    return res.json();
   }
 
   async getMe(): Promise<LoginResponse> {

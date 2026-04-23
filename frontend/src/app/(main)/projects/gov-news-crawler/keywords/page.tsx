@@ -206,12 +206,12 @@ export default function GovKeywordsPage() {
                     </td>
                     <td className="px-6 py-3.5">
                       <div className="flex flex-wrap gap-1">
-                        {kw.target_entities.institutions.map((inst, i) => (
+                        {(kw.target_entities.institutions ?? []).map((inst, i) => (
                           <span key={`inst-${i}`} className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning">
                             {inst}
                           </span>
                         ))}
-                        {kw.target_entities.leaders.map((leader, i) => (
+                        {(kw.target_entities.leaders ?? []).map((leader, i) => (
                           <span key={`leader-${i}`} className="rounded-sm bg-positive-bg px-2 py-0.5 text-xs font-medium text-positive">
                             {leader}
                           </span>

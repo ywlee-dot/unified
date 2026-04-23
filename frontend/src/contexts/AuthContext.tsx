@@ -29,14 +29,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Check auth status on mount
+  // Check auth status on mount — try refresh if access token expired
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const data = await api.getMe();
         setUser(data.user);
-      } catch {
-        // Not authenticated
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          // Access token may be expired — try refresh
+          try {
+            const refreshed = await api.refresh();
+            setUser(refreshed.user);
+          } catch {
+            // Refresh also failed — user must log in
+          }
+        }
       } finally {
         setIsLoading(false);
       }

@@ -289,9 +289,28 @@ export interface EvaluationRagStats {
 
 // --- Bid Monitor ---
 
+export interface ScoringWeights {
+  title_keyword?: number;
+  title_alias?: number;
+  category_exact?: number;
+  category_mid?: number;
+  category_large?: number;
+  institution?: number;
+  flag?: number;
+  price_in_range?: number;
+  price_out_range?: number;
+}
+
+export interface ScoringThresholds {
+  high?: number;
+  medium?: number;
+  low?: number;
+}
+
 export interface FilterConditions {
   title_keywords?: string[];
   title_exclude?: string[];
+  search_aliases?: string[];
   institutions?: string[];
   categories?: {
     pubPrcrmntLrgClsfcNm?: string[];
@@ -309,7 +328,11 @@ export interface FilterConditions {
     max?: number | null;
   };
   match_mode?: "any" | "all";
+  scoring_weights?: ScoringWeights;
+  scoring_thresholds?: ScoringThresholds;
 }
+
+export type BidGrade = "high" | "medium" | "low" | null;
 
 export interface BidKeyword {
   id: string;
@@ -340,8 +363,9 @@ export interface BidNotice {
   bid_ntce_url: string | null;
   bid_ntce_dtl_url: string | null;
   source_keyword: string | null;
-  filter_passed: boolean;
   match_reasons: string[] | null;
+  best_score?: number | null;
+  best_grade?: BidGrade;
   created_at: string;
 }
 
@@ -352,6 +376,9 @@ export interface BidAlert {
   channel: string;
   status: string;
   error_message: string | null;
+  score?: number | null;
+  grade?: BidGrade;
+  signals?: Array<{ type: string; value: string; points: number }> | null;
   created_at: string;
   keyword_text: string | null;
   notice_title: string | null;
@@ -379,6 +406,9 @@ export interface BidMonitorStats {
   active_keywords: number;
   total_notices: number;
   total_alerts: number;
+  high_count?: number;
+  medium_count?: number;
+  low_count?: number;
   recent_runs: BidCheckRun[];
   scheduler_running: boolean;
 }

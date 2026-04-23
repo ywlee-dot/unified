@@ -59,26 +59,51 @@ class AuthService:
         return user
 
     def create_token(self, user: User) -> str:
-        """Create a JWT token for the given user."""
+        """Create a short-lived access JWT token."""
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
         to_encode = {
-            "sub": user.id,
+            "sub": str(user.id),
             "email": user.email,
             "name": user.name,
+            "type": "access",
+            "exp": expire,
+        }
+        return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
+
+    def create_refresh_token(self, user: User) -> str:
+        """Create a long-lived refresh JWT token."""
+        expire = datetime.now(timezone.utc) + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
+        to_encode = {
+            "sub": str(user.id),
+            "type": "refresh",
             "exp": expire,
         }
         return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
     def verify_token(self, token: str) -> UserInfo | None:
-        """Verify JWT token and return user info."""
+        """Verify access JWT token and return user info."""
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            if payload.get("type") != "access":
+                return None
             return UserInfo(
                 user_id=payload["sub"],
                 email=payload["email"],
                 name=payload["name"],
             )
+        except (JWTError, KeyError):
+            return None
+
+    def verify_refresh_token(self, token: str) -> str | None:
+        """Verify refresh JWT token and return user_id on success."""
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            if payload.get("type") != "refresh":
+                return None
+            return payload["sub"]
         except (JWTError, KeyError):
             return None

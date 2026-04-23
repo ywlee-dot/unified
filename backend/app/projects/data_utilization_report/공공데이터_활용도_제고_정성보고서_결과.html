@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>공공데이터 활용도 제고 정성보고서</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Pretendard','맑은 고딕',sans-serif;background:#f5f5f5;color:#191F28}
+  .container{max-width:900px;margin:40px auto;padding:0 20px}
+  .header{text-align:center;margin-bottom:32px}
+  .header h1{font-size:24px;font-weight:700}
+  .header p{font-size:14px;color:#8B95A1;margin-top:8px}
+  .tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+  .tab-btn{padding:10px 20px;border:1px solid #E5E8EB;border-radius:10px;background:#fff;
+            cursor:pointer;font-size:14px;font-weight:600;color:#4E5968;transition:all .2s}
+  .tab-btn:hover{border-color:#059669;color:#059669}
+  .tab-btn.active{background:#059669;color:#fff;border-color:#059669}
+  .file-count{font-size:11px;font-weight:400;opacity:.7;margin-left:4px}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+  .report-meta{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid #E5E8EB}
+  .meta-row{display:flex;align-items:flex-start;padding:6px 0}
+  .meta-label{font-size:13px;font-weight:600;color:#8B95A1;width:100px;flex-shrink:0}
+  .meta-value{font-size:14px;color:#191F28}
+  .meta-value.files{display:flex;flex-wrap:wrap;gap:4px}
+  .file-tag{display:inline-block;padding:4px 10px;background:#E6F9F3;color:#059669;
+             border-radius:6px;font-size:11px;font-weight:500}
+  .report-section{background:#fff;border-radius:12px;padding:20px;margin-bottom:12px;border:1px solid #E5E8EB}
+  .report-section h3{font-size:15px;font-weight:700;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #059669}
+  .content{font-size:14px;line-height:1.8;color:#333}
+  .footer{text-align:center;padding:40px 0;font-size:12px;color:#B0B8C1}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>공공데이터 활용도 제고 정성보고서</h1>
+    <p>1-4-3 공공데이터 활용지원 | 한국학중앙연구원</p>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab(0)">
+      실적 1<span class="file-count">1개 파일</span>
+    </button>
+    <button class="tab-btn" onclick="showTab(1)">
+      실적 2<span class="file-count">2개 파일</span>
+    </button>
+    <button class="tab-btn" onclick="showTab(2)">
+      실적 3<span class="file-count">3개 파일</span>
+    </button></div>
+  
+    <div class="tab-panel active" id="panel-0">
+      <div class="report-meta">
+        <div class="meta-row"><span class="meta-label">실적 번호</span><span class="meta-value">실적 1</span></div>
+        <div class="meta-row"><span class="meta-label">증빙 파일</span><span class="meta-value files"><span class="file-tag">1-1. 2025년 한국학중앙연구원_개방데이터 수요조사 결과보고서_v1.0</span></span></div>
+      </div>
+      <div class="report-section"><h3>추진실적명</h3><div class="content">2025년 한국학중앙연구원 개방데이터 수요조사</div></div>
+      <div class="report-section"><h3>수행시기</h3><div class="content">2025년 상반기</div></div>
+      <div class="report-section"><h3>추진 필요성 및 배경</h3><div class="content">1. 공공데이터의 효과적 개방 및 활용도 제고를 위해 수요자 중심의 데이터 개방 전략 수립이 필요함<br>2. 기존 개방 데이터의 활용 현황을 파악하고, 신규 개방 수요를 체계적으로 발굴할 필요가 있음<br>3. 데이터 수요조사를 통해 국민과 민간의 실질적 데이터 활용 수요를 반영한 개방 계획 수립이 요구됨</div></div>
+      <div class="report-section"><h3>추진내용</h3><div class="content">1. 수요조사 계획 수립 및 실시<br>- 한국학중앙연구원 개방데이터에 대한 외부 수요조사 실시<br>- 연구자, 민간 개발자, 일반 국민 등 다양한 수요자 대상 설문 진행<br>- 개방 희망 데이터, 활용 목적, 데이터 품질 만족도 등 항목 조사<br>2. 수요조사 결과 분석<br>- 수집된 응답 데이터를 분야별, 유형별로 분류 및 분석<br>- 개방 우선순위 도출 및 신규 개방 후보 데이터셋 선정<br>3. 결과보고서 작성 및 개방 계획 반영<br>- 수요조사 결과를 기반으로 개방데이터 확대 계획 수립<br>- 분석 결과를 내부 의사결정에 활용하여 데이터 개방 전략에 반영</div></div>
+      <div class="report-section"><h3>핵심성과</h3><div class="content">1. 수요자 중심 데이터 개방 전략 수립 기반 마련<br>- 외부 수요조사를 통해 실질적 개방 수요를 파악함<br>- 수요 기반 개방 우선순위를 도출하여 데이터 개방의 효과성을 높임<br>2. 개방데이터 활용도 제고를 위한 피드백 체계 구축<br>- 수요자의 의견을 반영한 데이터 품질 개선 방향을 확인함<br>- 향후 지속적 수요조사 시행의 근거를 마련함</div></div>
+    </div>
+    <div class="tab-panel" id="panel-1">
+      <div class="report-meta">
+        <div class="meta-row"><span class="meta-label">실적 번호</span><span class="meta-value">실적 2</span></div>
+        <div class="meta-row"><span class="meta-label">증빙 파일</span><span class="meta-value files"><span class="file-tag">2-1. 2025년 한국학중앙연구원 공공데이터 카드뉴스 제작 계획(안)</span><span class="file-tag">2-2. 2025년 한국학중앙연구원 공공데이터 카드뉴스 결과 보고서</span></span></div>
+      </div>
+      <div class="report-section"><h3>추진실적명</h3><div class="content">2025년 한국학중앙연구원 공공데이터 카드뉴스 제작 및 배포</div></div>
+      <div class="report-section"><h3>수행시기</h3><div class="content">2025년 3월 ~ 2025년 8월</div></div>
+      <div class="report-section"><h3>추진 필요성 및 배경</h3><div class="content">1. 한국학중앙연구원의 개방 공공데이터에 대한 국민 인지도 및 활용도 제고가 필요함<br>2. 일반 국민이 쉽게 이해할 수 있는 시각적 콘텐츠를 통한 데이터 홍보가 효과적임<br>3. 카드뉴스 형태의 콘텐츠를 제작하여 SNS 등 다양한 채널을 통해 확산시킬 필요가 있음</div></div>
+      <div class="report-section"><h3>추진내용</h3><div class="content">1. 카드뉴스 제작 계획 수립<br>- 공공데이터 활용 홍보를 위한 카드뉴스 제작 계획 수립<br>- 주요 개방 데이터셋 선정 및 홍보 콘텐츠 기획<br>2. 카드뉴스 제작 및 배포<br>- 한국학 관련 공공데이터의 활용 방법, 접근 경로 등을 시각화한 카드뉴스 제작<br>- 기관 홈페이지, SNS 등 다양한 채널을 통해 카드뉴스 배포<br>3. 배포 결과 분석<br>- 카드뉴스 배포 현황 및 도달률 분석<br>- 결과보고서 작성을 통한 성과 정리</div></div>
+      <div class="report-section"><h3>핵심성과</h3><div class="content">1. 공공데이터 인지도 향상을 위한 홍보 콘텐츠 제작 완료<br>- 한국학중앙연구원 개방데이터를 소개하는 카드뉴스를 제작·배포함<br>- 시각적 콘텐츠를 통해 일반 국민의 데이터 접근성을 높임<br>2. 다채널 배포를 통한 홍보 효과 달성<br>- 기관 홈페이지 및 SNS를 통해 카드뉴스를 확산함<br>- 데이터 활용에 대한 국민적 관심 제고에 기여함</div></div>
+    </div>
+    <div class="tab-panel" id="panel-2">
+      <div class="report-meta">
+        <div class="meta-row"><span class="meta-label">실적 번호</span><span class="meta-value">실적 3</span></div>
+        <div class="meta-row"><span class="meta-label">증빙 파일</span><span class="meta-value files"><span class="file-tag">3-1. (공문)‘5개 기관이 함께하는 성남시 공공데이터 공동설명회’ 홍보 협조 요청</span><span class="file-tag">3-2. [내부결재] 성남시 공공기관 공공데이터 공동설명회 개최 보고</span><span class="file-tag">3-3. 성남시 공공기관 공공데이터 공동설명회 개최 보고</span></span></div>
+      </div>
+      <div class="report-section"><h3>추진실적명</h3><div class="content">5개 기관이 함께하는 성남시 공공기관 공공데이터 공동설명회</div></div>
+      <div class="report-section"><h3>수행시기</h3><div class="content">2025년 9월 2일</div></div>
+      <div class="report-section"><h3>추진 필요성 및 배경</h3><div class="content">1. 성남시 소재 공공기관 간 공공데이터 개방 현황 공유 및 활용 촉진이 필요함<br>2. 민간의 공공데이터 활용을 지원하기 위해 직접적인 데이터 소개 및 상담 기회 제공이 요구됨<br>3. 5개 기관이 공동으로 설명회를 개최하여 홍보 효과를 극대화하고 기관 간 협력을 강화할 필요가 있음</div></div>
+      <div class="report-section"><h3>추진내용</h3><div class="content">1. 공동설명회 기획 및 준비<br>- 성남시 소재 5개 공공기관 공동 기획<br>- KOICA 코사이어티 타운홀(판교) 장소 확보<br>- 홍보 협조 공문 발송 및 참가자 모집<br>2. 설명회 개최<br>- 일시: 2025년 9월 2일(화) 13:30~17:00<br>- 장소: KOICA 코사이어티 타운홀(3층)<br>- 주요 내용: 5개 기관 공공데이터 소개, 외부연사의 민간 데이터 활용사례 소개, 기관-참가자 간 상담<br>3. 개최 결과 보고<br>- 설명회 참석 현황 및 운영 결과 정리<br>- 내부결재를 통한 개최 보고 완료</div></div>
+      <div class="report-section"><h3>핵심성과</h3><div class="content">1. 5개 기관 공동 설명회 성공적 개최<br>- 성남시 소재 공공기관이 공동으로 공공데이터 설명회를 개최함<br>- 기관 간 협력 모델을 구축하여 향후 공동 행사의 기반을 마련함<br>2. 민간 참여자 대상 직접 소통 기회 제공<br>- 기관별 공공데이터를 직접 소개하고 활용 방법을 안내함<br>- 참가자-기관 간 1:1 상담을 통해 구체적 활용 지원을 제공함<br>3. 외부 연사를 통한 민간 활용사례 공유<br>- 민간의 실제 데이터 활용 사례를 소개하여 참가자의 활용 동기를 부여함</div></div>
+    </div>
+  <div class="footer">AI 기반 자동 생성 보고서 | 생성일: 2026-04-03 13:21</div>
+</div>
+<script>
+function showTab(idx){
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===idx));
+  document.querySelectorAll('.tab-panel').forEach((p,i)=>p.classList.toggle('active',i===idx));
+}
+</script>
+</body>
+</html>

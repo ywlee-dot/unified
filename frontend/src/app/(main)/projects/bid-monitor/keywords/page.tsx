@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { BidKeyword, FilterConditions } from "@/lib/types";
+import { formatKst } from "@/lib/datetime";
 
 const API_BASE = "/api";
 
@@ -149,6 +150,7 @@ function TagInput({
 interface FilterFormState {
   title_keywords: string[];
   title_exclude: string[];
+  search_aliases: string[];
   institutions: string[];
   lrg_clsfc: string[];
   clsfc: string[];
@@ -168,11 +170,25 @@ interface FilterFormState {
   price_min: string;
   price_max: string;
   match_mode: "any" | "all";
+  // Scoring
+  w_title_keyword: string;
+  w_title_alias: string;
+  w_category_exact: string;
+  w_category_mid: string;
+  w_category_large: string;
+  w_institution: string;
+  w_flag: string;
+  w_price_in: string;
+  w_price_out: string;
+  th_high: string;
+  th_medium: string;
+  th_low: string;
 }
 
 const defaultFilterForm: FilterFormState = {
   title_keywords: [],
   title_exclude: [],
+  search_aliases: [],
   institutions: [],
   lrg_clsfc: [],
   clsfc: [],
@@ -192,13 +208,29 @@ const defaultFilterForm: FilterFormState = {
   price_min: "",
   price_max: "",
   match_mode: "any",
+  w_title_keyword: "30",
+  w_title_alias: "15",
+  w_category_exact: "25",
+  w_category_mid: "15",
+  w_category_large: "10",
+  w_institution: "10",
+  w_flag: "10",
+  w_price_in: "5",
+  w_price_out: "-10",
+  th_high: "80",
+  th_medium: "50",
+  th_low: "30",
 };
 
 function filterConditionsToForm(fc: FilterConditions | null | undefined): FilterFormState {
   if (!fc) return defaultFilterForm;
+  const w = fc.scoring_weights ?? {};
+  const th = fc.scoring_thresholds ?? {};
+  const numStr = (v: number | undefined, d: string) => (v != null ? String(v) : d);
   return {
     title_keywords: fc.title_keywords ?? [],
     title_exclude: fc.title_exclude ?? [],
+    search_aliases: fc.search_aliases ?? [],
     institutions: fc.institutions ?? [],
     lrg_clsfc: fc.categories?.pubPrcrmntLrgClsfcNm ?? [],
     clsfc: fc.categories?.pubPrcrmntClsfcNm ?? [],
@@ -218,6 +250,18 @@ function filterConditionsToForm(fc: FilterConditions | null | undefined): Filter
     price_min: fc.price_range?.min != null ? String(fc.price_range.min) : "",
     price_max: fc.price_range?.max != null ? String(fc.price_range.max) : "",
     match_mode: fc.match_mode ?? "any",
+    w_title_keyword: numStr(w.title_keyword, "30"),
+    w_title_alias: numStr(w.title_alias, "15"),
+    w_category_exact: numStr(w.category_exact, "25"),
+    w_category_mid: numStr(w.category_mid, "15"),
+    w_category_large: numStr(w.category_large, "10"),
+    w_institution: numStr(w.institution, "10"),
+    w_flag: numStr(w.flag, "10"),
+    w_price_in: numStr(w.price_in_range, "5"),
+    w_price_out: numStr(w.price_out_range, "-10"),
+    th_high: numStr(th.high, "80"),
+    th_medium: numStr(th.medium, "50"),
+    th_low: numStr(th.low, "30"),
   };
 }
 
@@ -234,9 +278,15 @@ function formToFilterConditions(form: FilterFormState): FilterConditions {
   if (form.arslt_cmpt_yn !== "전체") flags.arsltCmptYn = form.arslt_cmpt_yn;
   if (form.ppsw_gnrl_srvce_yn !== "전체") flags.ppswGnrlSrvceYn = form.ppsw_gnrl_srvce_yn;
 
+  const num = (s: string, d: number) => {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : d;
+  };
+
   return {
     title_keywords: form.title_keywords,
     title_exclude: form.title_exclude,
+    search_aliases: form.search_aliases,
     institutions: form.institutions,
     categories: {
       pubPrcrmntLrgClsfcNm: form.lrg_clsfc,
@@ -254,6 +304,22 @@ function formToFilterConditions(form: FilterFormState): FilterConditions {
       max: maxVal !== "" ? Number(maxVal) : null,
     },
     match_mode: form.match_mode,
+    scoring_weights: {
+      title_keyword: num(form.w_title_keyword, 30),
+      title_alias: num(form.w_title_alias, 15),
+      category_exact: num(form.w_category_exact, 25),
+      category_mid: num(form.w_category_mid, 15),
+      category_large: num(form.w_category_large, 10),
+      institution: num(form.w_institution, 10),
+      flag: num(form.w_flag, 10),
+      price_in_range: num(form.w_price_in, 5),
+      price_out_range: num(form.w_price_out, -10),
+    },
+    scoring_thresholds: {
+      high: num(form.th_high, 80),
+      medium: num(form.th_medium, 50),
+      low: num(form.th_low, 30),
+    },
   };
 }
 
@@ -261,6 +327,7 @@ function hasFilterSet(fc: FilterConditions | null | undefined): boolean {
   if (!fc) return false;
   if ((fc.title_keywords ?? []).length > 0) return true;
   if ((fc.title_exclude ?? []).length > 0) return true;
+  if ((fc.search_aliases ?? []).length > 0) return true;
   if ((fc.institutions ?? []).length > 0) return true;
   if ((fc.categories?.pubPrcrmntLrgClsfcNm ?? []).length > 0) return true;
   if ((fc.categories?.pubPrcrmntClsfcNm ?? []).length > 0) return true;
@@ -411,11 +478,6 @@ export default function BidKeywordsPage() {
     }));
   }
 
-  function formatDate(dt: string | null) {
-    if (!dt) return "—";
-    return new Date(dt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
-  }
-
   function openFilterModal(kw: BidKeyword) {
     setFilterTarget(kw);
     setFilterForm(filterConditionsToForm(kw.filter_conditions));
@@ -476,7 +538,7 @@ export default function BidKeywordsPage() {
   }
 
   // ---- Helpers for filter form mutations ----
-  type TagField = "title_keywords" | "title_exclude" | "institutions" | "lrg_clsfc" | "clsfc" | "mid_clsfc" | "product_clsfc" | "success_bid_method" | "bid_method" | "region" | "rgst_type";
+  type TagField = "title_keywords" | "title_exclude" | "search_aliases" | "institutions" | "lrg_clsfc" | "clsfc" | "mid_clsfc" | "product_clsfc" | "success_bid_method" | "bid_method" | "region" | "rgst_type";
 
   function addTag(field: TagField, tag: string) {
     setFilterForm((f) => ({ ...f, [field]: [...f[field], tag] }));
@@ -574,7 +636,7 @@ export default function BidKeywordsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-3.5 text-text-secondary">{formatDate(kw.last_checked_at)}</td>
+                    <td className="px-6 py-3.5 text-text-secondary">{formatKst(kw.last_checked_at)}</td>
                     <td className="px-6 py-3.5">
                       <button
                         type="button"
@@ -780,12 +842,32 @@ export default function BidKeywordsPage() {
                     <h3 className="text-[13px] font-semibold text-text-primary">제외 키워드</h3>
                     <span className="text-[12px] text-text-disabled">(title_exclude)</span>
                   </div>
-                  <p className="mb-2.5 text-[12px] text-text-tertiary">공고명에 이 키워드가 포함된 경우 알림에서 제외합니다.</p>
+                  <p className="mb-2.5 text-[12px] text-text-tertiary">공고명에 이 키워드가 포함된 경우 알림에서 제외합니다 (Hard exclude).</p>
                   <TagInput
                     tags={filterForm.title_exclude}
                     onAdd={(t) => addTag("title_exclude", t)}
                     onRemove={(t) => removeTag("title_exclude", t)}
                     placeholder="예: 엑스선, 배수로, 상수도"
+                  />
+                </div>
+
+                <div className="border-t border-border-secondary" />
+
+                {/* Section 2b: 유의어 (Stage 1 recall 확장용) */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-positive/10 text-[11px] font-bold text-positive">+</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">검색 유의어</h3>
+                    <span className="text-[12px] text-text-disabled">(search_aliases)</span>
+                  </div>
+                  <p className="mb-2.5 text-[12px] text-text-tertiary">
+                    나라장터 API에 추가 검색어로 활용됩니다. 누락 방지를 위해 주 키워드의 다른 표현을 등록하세요.
+                  </p>
+                  <TagInput
+                    tags={filterForm.search_aliases}
+                    onAdd={(t) => addTag("search_aliases", t)}
+                    onRemove={(t) => removeTag("search_aliases", t)}
+                    placeholder="예: 오픈데이터, 공공데이터 개방, DB구축"
                   />
                 </div>
 
@@ -1135,10 +1217,93 @@ export default function BidKeywordsPage() {
                   </div>
                 </div>
 
+                {/* ── 스코어링 ────────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="h-px flex-1 bg-border-secondary" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">스코어링 (가중치 · 등급)</span>
+                  <div className="h-px flex-1 bg-border-secondary" />
+                </div>
+
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">S</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">시그널 가중치</h3>
+                    <span className="text-[12px] text-text-disabled">(scoring_weights)</span>
+                  </div>
+                  <p className="mb-3 text-[12px] text-text-tertiary">
+                    각 시그널이 공고 점수에 기여하는 크기입니다. 합계가 100을 초과하면 100으로 클램핑됩니다.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {([
+                      { key: "w_title_keyword", label: "제목 키워드" },
+                      { key: "w_title_alias", label: "제목 유의어" },
+                      { key: "w_category_exact", label: "분류 (정확)" },
+                      { key: "w_category_mid", label: "분류 (중분류)" },
+                      { key: "w_category_large", label: "분류 (대분류)" },
+                      { key: "w_institution", label: "기관 매칭" },
+                      { key: "w_flag", label: "플래그 (건당)" },
+                      { key: "w_price_in", label: "가격 범위 내" },
+                      { key: "w_price_out", label: "가격 범위 밖" },
+                    ] as const).map((w) => (
+                      <div key={w.key}>
+                        <label className="mb-1 block text-[12px] text-text-tertiary">{w.label}</label>
+                        <input
+                          type="number"
+                          value={filterForm[w.key]}
+                          onChange={(e) => setFilterForm((f) => ({ ...f, [w.key]: e.target.value }))}
+                          className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-border-secondary" />
+
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">T</span>
+                    <h3 className="text-[13px] font-semibold text-text-primary">등급 임계값</h3>
+                    <span className="text-[12px] text-text-disabled">(scoring_thresholds · 0~100)</span>
+                  </div>
+                  <p className="mb-3 text-[12px] text-text-tertiary">
+                    점수가 임계값 이상이면 해당 등급으로 분류됩니다. 낮을수록 더 많은 공고가 포함됩니다.
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="mb-1 block text-[12px] text-red-600">High</label>
+                      <input
+                        type="number"
+                        value={filterForm.th_high}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, th_high: e.target.value }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-amber-600">Medium</label>
+                      <input
+                        type="number"
+                        value={filterForm.th_medium}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, th_medium: e.target.value }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-slate-600">Low</label>
+                      <input
+                        type="number"
+                        value={filterForm.th_low}
+                        onChange={(e) => setFilterForm((f) => ({ ...f, th_low: e.target.value }))}
+                        className="w-full rounded-md bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {/* ── 매칭 모드 ───────────────────────────────── */}
                 <div className="flex items-center gap-2 pt-2">
                   <div className="h-px flex-1 bg-border-secondary" />
-                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">매칭 모드</span>
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-text-disabled">매칭 모드 (레거시 · 참고용)</span>
                   <div className="h-px flex-1 bg-border-secondary" />
                 </div>
 

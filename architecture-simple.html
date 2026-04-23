@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unified Workspace — 시스템 아키텍처 (간략판)</title>
+<style>
+  :root {
+    --bg: #0b0b14;
+    --card: #13132a;
+    --border: rgba(255,255,255,0.08);
+    --text: #eeeef8;
+    --text2: #8888aa;
+    --text3: #555570;
+    --nginx: #ef4444;
+    --front: #3b82f6;
+    --back: #22c55e;
+    --n8n: #f97316;
+    --data: #a855f7;
+    --ext: #06b6d4;
+    --cicd: #eab308;
+    --font: -apple-system, 'Pretendard', 'Noto Sans KR', sans-serif;
+    --mono: 'SF Mono', 'Fira Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; padding: 40px 20px; }
+
+  .container { max-width: 900px; margin: 0 auto; }
+
+  h1 { text-align: center; font-size: 22px; font-weight: 600; margin-bottom: 6px; letter-spacing: -0.5px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 13px; margin-bottom: 48px; }
+
+  /* ── Flow layout ── */
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; }
+
+  /* ── Arrow between layers ── */
+  .arrow { display: flex; flex-direction: column; align-items: center; padding: 6px 0; }
+  .arrow-line { width: 2px; height: 24px; background: linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0.04)); }
+  .arrow-label { color: var(--text3); font-size: 10px; font-family: var(--mono); margin: 4px 0; }
+  .arrow-head { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid rgba(255,255,255,0.15); }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 28px;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: rgba(255,255,255,0.16); }
+  .card-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 15px; font-weight: 600; margin-bottom: 14px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .card-desc { color: var(--text2); font-size: 12.5px; line-height: 1.7; }
+
+  /* ── 3-column app tier ── */
+  .app-row { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 14px; width: 100%; }
+  @media (max-width: 700px) { .app-row { grid-template-columns: 1fr; } }
+
+  .app-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    border-top: 3px solid transparent;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .app-card:hover { transform: translateY(-2px); }
+  .app-card.frontend { border-top-color: var(--front); }
+  .app-card.backend { border-top-color: var(--back); }
+  .app-card.n8n { border-top-color: var(--n8n); }
+
+  .app-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .app-tech { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-bottom: 10px; }
+  .app-detail { color: var(--text2); font-size: 12px; line-height: 1.7; }
+
+  /* ── Route tags ── */
+  .routes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .route {
+    font-family: var(--mono); font-size: 11px;
+    padding: 3px 10px; border-radius: 6px;
+    background: rgba(255,255,255,0.04); color: var(--text2);
+  }
+
+  /* ── Project chips ── */
+  .projects { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+  .proj {
+    font-size: 11px; font-family: var(--mono);
+    padding: 2px 8px; border-radius: 5px;
+    background: rgba(34,197,94,0.08); color: rgba(34,197,94,0.7);
+  }
+  .proj.n8n-type { background: rgba(249,115,22,0.08); color: rgba(249,115,22,0.7); }
+
+  /* ── Data row ── */
+  .data-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; }
+  @media (max-width: 700px) { .data-row { grid-template-columns: 1fr; } }
+  .data-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    border-left: 3px solid var(--data);
+    transition: border-color 0.2s;
+  }
+  .data-card:hover { border-color: rgba(255,255,255,0.16); }
+  .data-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .data-tech { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+
+  /* ── External row ── */
+  .ext-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; width: 100%; }
+  @media (max-width: 700px) { .ext-row { grid-template-columns: 1fr; } }
+  .ext-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    text-align: center;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .ext-card:hover { transform: translateY(-2px); border-color: rgba(6,182,212,0.3); }
+  .ext-icon { font-size: 24px; margin-bottom: 8px; }
+  .ext-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .ext-desc { font-size: 11px; color: var(--text3); }
+
+  /* ── CICD sidebar ── */
+  .cicd-bar {
+    position: fixed; right: 20px; top: 50%; transform: translateY(-50%);
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 14px; width: 140px;
+  }
+  .cicd-title { font-size: 11px; font-weight: 600; color: var(--cicd); margin-bottom: 10px; text-align: center; }
+  .cicd-step {
+    font-size: 11px; color: var(--text2);
+    padding: 5px 0; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .cicd-step:last-child { border-bottom: none; }
+  .cicd-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cicd); flex-shrink: 0; }
+  @media (max-width: 1100px) { .cicd-bar { display: none; } }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex; justify-content: center; flex-wrap: wrap; gap: 16px;
+    margin-top: 40px; padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── Connections label ── */
+  .conn-labels { display: flex; gap: 20px; justify-content: center; margin-top: 4px; }
+  .conn-label { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+
+  /* ── Network badges ── */
+  .net-badge {
+    display: inline-block; font-size: 10px; font-family: var(--mono);
+    padding: 2px 8px; border-radius: 4px; margin-top: 8px;
+    background: rgba(255,255,255,0.03); color: var(--text3); border: 1px dashed rgba(255,255,255,0.06);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Unified Workspace 아키텍처</h1>
+  <p class="subtitle">OCI 서버 1대 · Docker Compose 7개 서비스 · 10개 프로젝트</p>
+
+  <div class="flow">
+
+    <!-- ① 사용자 -->
+    <div class="card" style="max-width: 280px; text-align: center;">
+      <div class="card-title" style="justify-content: center;">
+        <div class="dot" style="background: #fff;"></div>
+        사용자 (브라우저)
+      </div>
+      <div class="card-desc">HTTPS 요청</div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-label">HTTPS</div>
+      <div class="arrow-head"></div>
+    </div>
+
+    <!-- ② Nginx -->
+    <div class="card" style="border-left: 3px solid var(--nginx);">
+      <div class="card-title">
+        <div class="dot" style="background: var(--nginx);"></div>
+        Nginx — 리버스 프록시
+      </div>
+      <div class="card-desc">
+        모든 요청의 입구. URL 경로를 보고 적절한 서비스로 전달합니다.
+      </div>
+      <div class="routes">
+        <span class="route" style="color: var(--front);">/페이지/* → Frontend</span>
+        <span class="route" style="color: var(--back);">/api/* → Backend</span>
+        <span class="route" style="color: var(--n8n);">/n8n/* → n8n</span>
+        <span class="route" style="color: var(--n8n);">/webhook/* → n8n</span>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-label">라우팅</div>
+      <div class="arrow-head"></div>
+    </div>
+
+    <!-- ③ 앱 3-컬럼 -->
+    <div class="app-row">
+
+      <!-- Frontend -->
+      <div class="app-card frontend">
+        <div class="app-name" style="color: var(--front);">Frontend</div>
+        <div class="app-tech">Next.js 15 · :3000</div>
+        <div class="app-detail">
+          화면 렌더링 담당<br>
+          React 19 + Tailwind CSS<br>
+          차트(Recharts), 다이어그램(XYFlow)
+        </div>
+        <div class="net-badge">frontend-net</div>
+      </div>
+
+      <!-- Backend -->
+      <div class="app-card backend">
+        <div class="app-name" style="color: var(--back);">Backend</div>
+        <div class="app-tech">FastAPI · :8000</div>
+        <div class="app-detail">
+          핵심 API 서버<br>
+          <strong>자동 등록</strong>: 폴더만 만들면 프로젝트 추가<br>
+          JWT 인증 (선택)
+        </div>
+        <div class="projects">
+          <span class="proj">ai_case_report</span>
+          <span class="proj">best_practice</span>
+          <span class="proj">business_rule</span>
+          <span class="proj">dataset_summary</span>
+          <span class="proj">effort_public</span>
+          <span class="proj">evaluation_rag</span>
+          <span class="proj">gov_news</span>
+          <span class="proj">open_data</span>
+          <span class="proj">summarize</span>
+          <span class="proj n8n-type">n8n 연동</span>
+        </div>
+        <div class="net-badge">frontend-net + backend-net</div>
+      </div>
+
+      <!-- n8n -->
+      <div class="app-card n8n">
+        <div class="app-name" style="color: var(--n8n);">n8n</div>
+        <div class="app-tech">Workflow Engine · :5678</div>
+        <div class="app-detail">
+          자동화 워크플로우<br>
+          Backend가 웹훅으로 트리거<br>
+          완료 후 콜백으로 결과 반환
+        </div>
+        <div class="net-badge">backend-net</div>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="conn-labels">
+        <span class="conn-label" style="color: var(--back);">SQL</span>
+        <span class="conn-label" style="color: var(--back);">Cache</span>
+        <span class="conn-label" style="color: var(--ext);">API 호출</span>
+      </div>
+      <div class="arrow-head"></div>
+    </div>
+
+    <!-- ④ 데이터 레이어 -->
+    <div class="data-row">
+      <div class="data-card">
+        <div class="data-name">PostgreSQL</div>
+        <div class="data-tech">:5432 · 메인 데이터베이스</div>
+      </div>
+      <div class="data-card">
+        <div class="data-name">Redis</div>
+        <div class="data-tech">:6379 · 캐시 (예정)</div>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-label">외부 연동</div>
+      <div class="arrow-head"></div>
+    </div>
+
+    <!-- ⑤ 외부 API -->
+    <div class="ext-row">
+      <div class="ext-card">
+        <div class="ext-icon">🧠</div>
+        <div class="ext-name">Google Gemini</div>
+        <div class="ext-desc">LLM · AI 텍스트 처리</div>
+      </div>
+      <div class="ext-card">
+        <div class="ext-icon">📌</div>
+        <div class="ext-name">Pinecone</div>
+        <div class="ext-desc">벡터 DB · RAG 검색</div>
+      </div>
+      <div class="ext-card">
+        <div class="ext-icon">☁️</div>
+        <div class="ext-name">n8n Cloud</div>
+        <div class="ext-desc">외부 워크플로우 3계정</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CI/CD 사이드바 -->
+  <div class="cicd-bar">
+    <div class="cicd-title">CI/CD 배포</div>
+    <div class="cicd-step"><span class="cicd-dot"></span> GitHub Push</div>
+    <div class="cicd-step"><span class="cicd-dot"></span> main → 테스트</div>
+    <div class="cicd-step"><span class="cicd-dot"></span> production → 배포</div>
+    <div class="cicd-step"><span class="cicd-dot"></span> SSH → OCI</div>
+    <div class="cicd-step"><span class="cicd-dot"></span> Docker 재빌드</div>
+  </div>
+
+  <!-- 범례 -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background: var(--nginx);"></div> Nginx</div>
+    <div class="legend-item"><div class="legend-dot" style="background: var(--front);"></div> Frontend</div>
+    <div class="legend-item"><div class="legend-dot" style="background: var(--back);"></div> Backend</div>
+    <div class="legend-item"><div class="legend-dot" style="background: var(--n8n);"></div> n8n</div>
+    <div class="legend-item"><div class="legend-dot" style="background: var(--data);"></div> Data</div>
+    <div class="legend-item"><div class="legend-dot" style="background: var(--ext);"></div> External</div>
+    <div class="legend-item"><div class="legend-dot" style="background: var(--cicd);"></div> CI/CD</div>
+  </div>
+
+</div>
+
+</body>
+</html>

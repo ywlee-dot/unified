@@ -1,0 +1,1659 @@
+{
+  "name": "AI 도입활용 사례 정성보고서 작성",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "cbc0e4a4-dcac-4d61-83d8-e1bf368ae208",
+      "name": "Read PDF",
+      "type": "n8n-nodes-base.readPDF",
+      "typeVersion": 1,
+      "position": [
+        -6576,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.메타데이터.평가항목 }}",
+                    "rightValue": "1. AI 친화‧고가치",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "584bd109-de5c-4a19-9f40-a921c2e1de92"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "평가항목_1"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.메타데이터.평가항목 }}",
+                    "rightValue": "2. 공공데이터 활용도 제고",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "60219518-c6c8-40aa-94bb-e417e1641ed2"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "평가항목_2"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.메타데이터.평가항목 }}",
+                    "rightValue": "3. AI 도입‧활용 사례",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "3bd8ca45-16f4-4142-b6c4-2377aebfe170"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "평가항목_3"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.메타데이터.평가항목 }}",
+                    "rightValue": "4. 데이터기반행정 활용도 제고",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "b969a845-3315-432d-98f7-42e9c002373d"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "평가항목_4"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.메타데이터.평가항목 }}",
+                    "rightValue": "5. 공유데이터 제공 노력",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a86f3684-1134-4aeb-aca8-7b92d344d0f1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "평가항목_5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "566e40f2-2e7b-4588-abff-05cbf7b87808",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -6128,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// PDF 텍스트를 구조화된 JSON으로 변환 (개선된 제목 추출)\nconst items = $input.all();\nreturn items.map(item => {\n  const text = item.json.text || '';\n  \n  console.log('Structure PDF Data - 받은 데이터:', JSON.stringify(item.json, null, 2));\n  \n  let formData = item.json._formData;\n  \n  if (!formData) {\n    console.log('_formData가 없습니다. 기본값을 사용합니다.');\n    formData = {\n      파일명: '알 수 없음',\n      평가항목: '선택 안됨',\n      제출시간: ''\n    };\n  }\n  \n  const 파일명 = $('Form Trigger1').first().json['PDF Upload'].filename || '알 수 없음';\n  const 평가항목 = $('Form Trigger1').first().json['평가 항목'] || '선택 안됨';\n  const 제출시간 = formData.제출시간 || '';\n  \n  console.log('추출된 Form 데이터:', { 파일명, 평가항목, 제출시간 });\n  \n  // 중복 단어 제거 함수\n  function removeDuplicateWords(text) {\n    const words = text.split(/\\s+/);\n    const result = [];\n    let prevWord = '';\n    \n    for (const word of words) {\n      if (word !== prevWord) {\n        result.push(word);\n        prevWord = word;\n      }\n    }\n    \n    return result.join(' ');\n  }\n  \n  // 중복 문장 제거 함수\n  function removeDuplicateSentences(text) {\n    // 먼저 중복 단어 제거\n    text = removeDuplicateWords(text);\n    \n    // 단어를 배열로 분리\n    const words = text.split(/\\s+/);\n    \n    // 전체 문자열의 절반 길이까지만 패턴으로 검사 (효율성)\n    const maxPatternLength = Math.floor(words.length / 2);\n    \n    // 가장 긴 반복 패턴부터 찾기\n    for (let patternLength = maxPatternLength; patternLength >= 3; patternLength--) {\n      const pattern = words.slice(0, patternLength);\n      const patternStr = pattern.join(' ');\n      \n      // 패턴이 바로 다음에 반복되는지 확인\n      const nextSegment = words.slice(patternLength, patternLength * 2);\n      const nextStr = nextSegment.join(' ');\n      \n      if (patternStr === nextStr) {\n        // 반복 패턴 발견 - 한 번만 남기고 나머지 제거\n        const remaining = words.slice(patternLength).join(' ');\n        return patternStr + ' ' + remaining;\n      }\n    }\n    \n    return text;\n  }\n  \n  // 문서 메인 제목 추출 함수 (개선: 날짜까지만 포함)\n  function extractMainTitle(text) {\n    const firstSectionIndex = text.indexOf('□');\n    \n    if (firstSectionIndex === -1) {\n      // □가 없는 경우: 처음 몇 줄에서 제목 추출\n      const lines = text.split('\\n').slice(0, 10).filter(line => line.trim().length > 0);\n      if (lines.length > 0) {\n        return extractTitleUpToDate(lines);\n      }\n      return '';\n    }\n    \n    // □ 이전 텍스트에서 제목 추출\n    const titleCandidate = text.slice(0, firstSectionIndex).trim();\n    const titleLines = titleCandidate\n      .split('\\n')\n      .map(line => line.trim())\n      .filter(line => line.length > 0);\n    \n    if (titleLines.length === 0) return '';\n    \n    return extractTitleUpToDate(titleLines);\n  }\n  \n  // 날짜 패턴까지만 제목으로 추출하는 함수\n  function extractTitleUpToDate(lines) {\n    let titleParts = [];\n    \n    // 날짜 패턴: YYYY. M., YYYY년 M월, YYYY-MM-DD 등\n    const datePattern = /(\\d{4}\\.\\s*\\d{1,2}\\.|^\\d{4}년\\s*\\d{1,2}월|\\d{4}-\\d{2}-\\d{2})/;\n    \n    for (let i = 0; i < lines.length; i++) {\n      const line = lines[i];\n      \n      // 특정 키워드가 나오면 제목 종료\n      const stopKeywords = ['디지털정책관', '정보시스템담당관', '위원회', '시의회', '임시회', '☎', '전화', 'Tel', '팀장', '담당'];\n      const hasStopKeyword = stopKeywords.some(keyword => line.includes(keyword));\n      \n      if (hasStopKeyword) {\n        console.log(`제목 종료: 중지 키워드 발견 - \"${line}\"`);\n        break;\n      }\n      \n      // 날짜 패턴 확인\n      const dateMatch = line.match(datePattern);\n      \n      if (dateMatch) {\n        // 날짜가 포함된 라인까지 추가\n        titleParts.push(line);\n        console.log(`제목 종료: 날짜 패턴 발견 - \"${line}\"`);\n        break;\n      }\n      \n      // 날짜가 아직 안 나왔으면 계속 추가\n      titleParts.push(line);\n      \n      // 안전장치: 최대 5줄까지만\n      if (i >= 4) {\n        console.log('제목 종료: 최대 줄 수 도달');\n        break;\n      }\n    }\n    \n    // 제목 조합 및 정리\n    const combinedTitle = titleParts.join(' ').trim();\n    const cleanedTitle = removeDuplicateSentences(combinedTitle);\n    \n    console.log('추출된 제목:', cleanedTitle);\n    return cleanedTitle;\n  }\n  \n  // 대제목(□)으로 섹션 분리\n  function extractMainSections(text) {\n    const sections = {};\n    const mainSectionRegex = /□\\s*([^\\n]+)/g;\n    const matches = [...text.matchAll(mainSectionRegex)];\n    \n    for (let i = 0; i < matches.length; i++) {\n      const sectionTitle = matches[i][1].trim();\n      const startIndex = matches[i].index + matches[i][0].length;\n      const endIndex = i < matches.length - 1 ? matches[i + 1].index : text.length;\n      const sectionContent = text.slice(startIndex, endIndex).trim();\n      \n      sections[sectionTitle] = sectionContent;\n    }\n    \n    return sections;\n  }\n  \n  // 소제목(❍ (제목)) 파싱 함수\n  function parseSubSections(content) {\n    const subSectionRegex = /❍\\s*\\(\\s*([^)]+)\\s*\\)/g;\n    const matches = [...content.matchAll(subSectionRegex)];\n    \n    if (matches.length === 0) {\n      return content.replace(/^\\s*❍\\s*/gm, '').trim();\n    }\n    \n    const result = {};\n    \n    for (let i = 0; i < matches.length; i++) {\n      const subTitle = matches[i][1].trim();\n      const startIndex = matches[i].index + matches[i][0].length;\n      const endIndex = i < matches.length - 1 ? matches[i + 1].index : content.length;\n      const subContent = content.slice(startIndex, endIndex).trim();\n      \n      const cleanContent = subContent\n        .replace(/^\\s*-\\s*/gm, '')\n        .replace(/^\\s*❍\\s*/gm, '')\n        .trim();\n      \n      result[subTitle] = cleanContent;\n    }\n    \n    return result;\n  }\n  \n  const 메인제목 = extractMainTitle(text);\n  const mainSections = extractMainSections(text);\n  \n  const structuredData = {\n    메타데이터: {\n      문서제목: 메인제목,\n      원본파일명: 파일명,\n      평가항목: 평가항목,\n      제출시간: 제출시간\n    }\n  };\n  \n  for (const [sectionTitle, sectionContent] of Object.entries(mainSections)) {\n    const parsedContent = parseSubSections(sectionContent);\n    structuredData[sectionTitle] = parsedContent;\n  }\n  \n  structuredData['원본텍스트'] = text;\n  \n  console.log('최종 구조화 데이터:', JSON.stringify(structuredData.메타데이터, null, 2));\n  \n  return {\n    json: structuredData\n  };\n});"
+      },
+      "id": "9fff4b3d-acd9-480b-9d3e-ba97ecc11ff4",
+      "name": "Structure PDF Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6352,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 바이너리 데이터를 'data' 필드로 이동하고 Form 데이터도 함께 전달\nconst items = $input.all();\n\nreturn items.map(item => {\n  const binaryKeys = Object.keys(item.binary || {});\n  const firstBinaryKey = binaryKeys[0];\n  \n  const formData = {\n    파일명: item.json['PDF Upload']?.filename || '알 수 없음',\n    평가항목: item.json['평가 항목'] || '선택 안됨',\n    제출시간: item.json.submittedAt || ''\n  };\n  \n  console.log('Prepare Binary - Form 데이터:', formData);\n  \n  if (firstBinaryKey) {\n    return {\n      json: {\n        ...item.json,\n        _formData: formData\n      },\n      binary: {\n        data: item.binary[firstBinaryKey]\n      }\n    };\n  }\n  \n  return {\n    json: {\n      ...item.json,\n      _formData: formData\n    },\n    binary: item.binary\n  };\n});"
+      },
+      "id": "80fa6b25-475b-4e91-a4b4-f49d0e0263f2",
+      "name": "Prepare Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6800,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI 검토를 위한 데이터 준비\nconst items = $input.all();\n\nreturn items.map(item => {\n  const 구조화데이터 = item.json;\n  const 평가항목 = 구조화데이터.메타데이터?.평가항목 || '';\n  const 원본텍스트 = 구조화데이터.원본텍스트 || '';\n  \n  // 메타데이터 제외하고 섹션만 추출\n  const 섹션데이터 = { ...구조화데이터 };\n  delete 섹션데이터.메타데이터;\n  delete 섹션데이터.원본텍스트;\n  \n  // 검토 대상 텍스트 구성 (구조화된 섹션 우선, 없으면 원본)\n  let 검토대상 = '';\n  \n  if (Object.keys(섹션데이터).length > 0) {\n    // 구조화된 섹션이 있는 경우\n    for (const [섹션명, 내용] of Object.entries(섹션데이터)) {\n      검토대상 += `\\n\\n## ${섹션명}\\n`;\n      \n      if (typeof 내용 === 'object') {\n        for (const [하위제목, 하위내용] of Object.entries(내용)) {\n          검토대상 += `\\n### ${하위제목}\\n${하위내용}\\n`;\n        }\n      } else {\n        검토대상 += `${내용}\\n`;\n      }\n    }\n  } else {\n    // 구조화된 섹션이 없으면 원본 텍스트 사용\n    검토대상 = 원본텍스트;\n  }\n  \n  console.log('=== AI 검토 데이터 준비 ===');\n  console.log('평가항목:', 평가항목);\n  console.log('검토대상 길이:', 검토대상.length);\n  \n  return {\n    json: {\n      평가항목: 평가항목,\n      검토대상: 검토대상.trim(),\n      메타데이터: 구조화데이터.메타데이터,\n      원본구조화데이터: 구조화데이터\n    }\n  };\n});"
+      },
+      "id": "b32942c8-046a-4c7f-b2b3-2b2952dd48e1",
+      "name": "Prepare AI Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5904,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI Agent 출력을 판정별로 그룹화 + Structure PDF Data 출력도 함께 포함\n\nconst items = $input.all();\n\n// ✅ 다른 노드 출력 안전 조회\nfunction safeGetNodeFirstJson(nodeName) {\n  try {\n    const nodeData = $(nodeName).all();\n    if (nodeData && nodeData.length > 0) return nodeData[0].json;\n    return null;\n  } catch (error) {\n    console.log(`노드 \"${nodeName}\" 출력 조회 실패:`, error.message);\n    return null;\n  }\n}\n\n// ✅ Structure PDF Data 출력(구조화 결과) 가져오기\nconst structuredPdfData = safeGetNodeFirstJson('Structure PDF Data'); // {메타데이터, ...섹션, 원본텍스트}\n\nfunction extractJsonCandidate(text) {\n  if (!text) return '';\n  let s = String(text).trim();\n  s = s.replace(/```[a-zA-Z]*\\n([\\s\\S]*?)```/g, '$1').trim();\n  const first = s.indexOf('{');\n  const last = s.lastIndexOf('}');\n  if (first >= 0 && last > first) return s.slice(first, last + 1);\n  return '';\n}\n\nfunction softRepair(t) {\n  if (!t) return '';\n  let s = String(t).trim();\n  // 스마트쿼트/유사 따옴표 정리\n  s = s.replace(/[“”]/g, '\"').replace(/[‘’]/g, \"'\");\n  // trailing comma 제거\n  s = s.replace(/,\\s*([}\\]])/g, '$1');\n  return s;\n}\n\nfunction fallback(reason) {\n  console.log('JSON 파싱 fallback:', reason);\n  return {\n    '1단계_케이스_분류': '알 수 없음',\n    '2단계_항목별_검토': {}\n  };\n}\n\nreturn items.map((item) => {\n  const raw = item.json.output;\n  const rawText = typeof raw === 'string' ? raw : JSON.stringify(raw);\n\n  const cand = extractJsonCandidate(rawText);\n  const repaired = softRepair(cand);\n\n  let parsed;\n  try {\n    parsed = JSON.parse(repaired);\n  } catch (e) {\n    parsed = fallback(e.message);\n  }\n\n  if (!parsed || typeof parsed !== 'object') {\n    parsed = fallback('not an object');\n  }\n\n  // 원본 항목별 검토 데이터\n  const 원본검토 = parsed['2단계_항목별_검토'] || {};\n\n  // 판정별로 그룹화 (중첩 객체 형식)\n  const 그룹화된검토 = {};\n\n  for (const [항목코드, 항목데이터] of Object.entries(원본검토)) {\n    if (!항목데이터 || !항목데이터.판정 || !항목데이터.사유) continue;\n\n    const 판정 = 항목데이터.판정;\n    const 사유 = 항목데이터.사유;\n\n    if (!그룹화된검토[판정]) 그룹화된검토[판정] = {};\n    그룹화된검토[판정][항목코드] = 사유;\n  }\n\n  console.log('=== 판정별 그룹화 결과 ===');\n  console.log('충족 항목 수:', Object.keys(그룹화된검토['충족'] || {}).length);\n  console.log('일부 충족 항목 수:', Object.keys(그룹화된검토['일부 충족'] || {}).length);\n  console.log('미흡 항목 수:', Object.keys(그룹화된검토['미흡'] || {}).length);\n\n  // 최종 output 구조\n  const 결과 = {\n    '1단계_케이스_분류': parsed['1단계_케이스_분류'],\n    '2단계_항목별_검토': 그룹화된검토\n  };\n\n  return {\n    json: {\n      ...item.json,\n\n      // ✅ 기존 output은 그룹화 결과로 유지\n      output: 결과,\n\n      // ✅ LLM 원문도 유지\n      __raw_llm: rawText,\n\n      // ✅ Structure PDF Data 출력도 함께 첨부\n      // 필요하면 키 이름 바꿔도 됨 (예: 원본구조화데이터)\n      구조화PDF: structuredPdfData\n    }\n  };\n});\n"
+      },
+      "id": "e2f61949-758f-49bb-8167-41721e64d71f",
+      "name": "Parse & Group by 판정",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5328,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "has-mihup",
+                    "leftValue": "={{ Object.keys($json.output['2단계_항목별_검토']['미흡'] || {}).length }}",
+                    "rightValue": 0,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "적합"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "no-mihup",
+                    "leftValue": "={{ Object.keys($json.output['2단계_항목별_검토']['미흡'] || {}).length }}",
+                    "rightValue": {},
+                    "operator": {
+                      "type": "number",
+                      "operation": "gt"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "보완필요"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "704c5b1a-bb91-493f-b846-95341f4b85be",
+      "name": "Switch - 미흡항목 확인",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -5104,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-pro-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -3696,
+        1616
+      ],
+      "id": "a0a341a7-d849-4968-91d6-8dbc89647be4",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "2QPudyE2hbqnh8C2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "==다음 작업을 수행해주세요.\n\n[절대 규칙: 출력 자체를 금지하는 조건]\n- 추진내용 원문이 비어있거나 의미있는 내용이 없으면:\n  1) \"출력 없음\", \"(출력 없음)\", \"원문 없음\", \"할 수 없습니다\" 같은 문구를 절대 출력하지 말 것\n  2) 그 대신 **아무 텍스트도 출력하지 말 것** (완전 공백 출력)\n\n- 또한 아래 조건 중 하나라도 성립하면 **아무 텍스트도 출력하지 말 것**\n  a) 추진내용원문 길이(공백 제외) < 30\n  b) 추진내용원문이 '출력 없음' / '(출력 없음)' 을 포함\n  c) 추진내용원문이 의미 없는 더미(예: 공백, 줄바꿈만)인 경우\n\n────────────────────────\n[추진내용 원문 구성 규칙]\n- 추진내용원문은 아래 우선순위로 확보\n  1) $json.추진내용원문 (존재하고 1문장 이상일 때만 사용)\n  2) (없으면) $json.type == 'AI요약' && $json.항목명 == '추진내용'\n     → $json.찾은섹션 내용을 결합하여 추진내용원문으로 사용\n     → 형식: 【섹션제목】\\n섹션내용 (섹션 간 공백 1줄)\n\n[추진내용원문]\n{{\n  (() => {\n    let t = '';\n    if (typeof $json.추진내용원문 === 'string' && $json.추진내용원문.trim().length > 0) {\n      t = $json.추진내용원문;\n    } else if ($json.type === 'AI요약' && $json.항목명 === '추진내용') {\n      const secs = Array.isArray($json.찾은섹션) ? $json.찾은섹션 : [];\n      t = secs.map(s => {\n        const title = s?.제목 ?? '섹션';\n        let body = '';\n        if (typeof s?.내용 === 'string') body = s.내용;\n        else if (s?.내용 !== undefined) { try { body = JSON.stringify(s.내용); } catch (e) { body = String(s.내용); } }\n        return `【${title}】\\n${body}`;\n      }).join('\\n\\n');\n    }\n\n    t = String(t || '').trim();\n    if (!t) return '';\n    if (t.includes('출력 없음') || t.includes('(출력 없음)')) return '';\n    if (t.replace(/\\s/g, '').length < 30) return '';\n    return t;\n  })()\n}}\n\n────────────────────────\n[작업 0: 추진배경및목적 생성 여부]\n- 추진내용원문이 존재할 때만 판단/수행\n- 다음 중 하나라도 만족하면 추진배경및목적 생성하지 말 것\n  1) 원본사용으로 라벨링된 추진배경및목적이 존재\n  2) 추진내용원문에 배경/필요성/목적에 해당하는 설명이 이미 포함됨(예: 필요성, 배경, 목적, 취지, 대응, 개선 필요, 확산에 따라, 강화하고자 등)\n\n[작업 1: 추진내용 요약]\n- 추진내용원문이 존재할 때만 수행\n- 1500자 이하: 중복 제거/간결화(30% 이상 축약)\n- 1500자 초과: 지정된 형식으로 요약\n- 추진내용원문에 일정 혹은 기간이 포함되어있는 경우 일정은 원문 그대로 출력\n[작업 2: 기대효과]\n- 추진내용원문이 존재할 때만 수행\n- 평가기준에 따라 검토/생성(내부 관점, 금지 표현 배제, 2~3개, 음슴체)\n\n[출력 형식]\n- 출력이 가능한 경우에만 아래 형식 그대로 출력\n■ 추진배경및목적 (필요 시)\n[내용]\n\n■ 추진내용 요약\n[내용]\n\n■ 기대효과\n[검토결과: 적합] / [검토결과: 부적합 - 신규 생성] / [신규 생성]\n1. …\n2. …\n3. … (필요 시)\n",
+        "options": {
+          "systemMessage": "당신은 정부 및 공공기관 보고서 작성·검토 전문 AI임.\n\n[최우선 강제 규칙]\n- 아래 조건이면 반드시 \"아무 텍스트도 출력하지 말 것\"(완전 공백)\n  1) 추진내용원문이 비어있음\n  2) 추진내용원문(또는 입력 텍스트)에 '출력 없음' 또는 '(출력 없음)' 포함\n  3) 추진내용원문이 공백 제외 30자 미만이거나 의미 없는 더미 텍스트임\n- 금지: \"출력 없음\", \"원문 없음\", \"할 수 없습니다\" 등 실패/부정 안내 문구를 절대 출력하지 말 것\n\n[추진배경및목적]\n- 추진내용에 이미 배경/목적 설명이 포함되어 있으면 생성하지 말 것\n- 생성이 필요한 경우에만 2~4문장, 내부 관점, 음슴체/평서체\n- 금지어: 국민/대국민/민간/시민/외부 이용자/사회적 가치/공공성/파급/확산/정책 수혜자/체감도\n\n[추진내용 요약]\n- 추진내용원문 또는 AI요약 찾은섹션을 근거로만 작성\n- 1500자 이하: 30% 이상 축약, 중복/부가설명 제거\n- 1500자 초과: 지정 포맷 엄수\n- 추진 내용에 일정 및 기간이 포함되어있는 경우 일정은 그대로 출력\n\n[기대효과]\n- 추진내용 근거로만 작성\n- 내부 효과만, 수치 금지, 2~3개, 음슴체\n- 기존 기대효과가 있으면 기준 검토 후 적합하면 유지\n\n[출력 형식]\n- 출력할 내용이 있는 경우에만 아래 형식으로 출력\n■ 추진배경및목적 (필요 시)\n...\n\n■ 추진내용 요약\n...\n\n■ 기대효과\n...\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -3760,
+        1392
+      ],
+      "id": "2d621a48-78fa-4af8-8c85-dd1332f53472",
+      "name": "AI Agent - 통합 처리"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {
+          "temperature": 0.1,
+          "topP": 0.9
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -5616,
+        1616
+      ],
+      "id": "91a0f4a7-b062-4b58-85ff-aa73b1643328",
+      "name": "Google Gemini Chat Model2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "2QPudyE2hbqnh8C2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "다음 보고서를 평가편람 기준에 따라 검토해주세요.\n\n[중요: 출력 규칙]\n- 반드시 JSON 객체 1개만 출력하세요.\n- JSON 외의 어떤 글자도(설명/제목/마크다운/코드펜스/주석) 출력하면 안 됩니다.\n\n평가항목: {{ $json.평가항목 }}\n\n보고서 내용:\n{{ $json.검토대상 }}\n\n위 보고서를 아래 평가기준에 따라 검토하고, JSON 형식으로만 출력해주세요.",
+        "options": {
+          "systemMessage": "당신은 공공기관 AI 활용 사업 보고서를 평가편람 기준에 따라 검토하는 AI입니다.\n\n✅ 출력은 반드시 \"유효한 JSON\" 1개만 허용됩니다.\n- 코드펜스(```) 금지\n- 마크다운 금지\n- 설명 문장 금지\n\n════════════════════════════════\n[1단계] 케이스 분류 기준\n════════════════════════════════\n\n보고서 내용을 읽고 다음 기준에 따라 정확히 분류하세요:\n\n▶ 케이스 A: AI를 활용한 시스템(서비스) 구축·운영\n- AI 기술을 활용한 특화 서비스 구축 (챗봇, 상담 시스템, 추천 시스템)\n- 대국민 서비스 또는 외부 이용자 대상 (국민, 민원인, 방문자)\n- 사회문제 해결 또는 기관 현안 해결 (정책 수립, 의사결정 지원)\n- 시스템 운영 및 유지관리 (데이터 갱신, 모델 개선, 타 시스템 연계)\n\n핵심 키워드: 시스템 구축, 대국민, 외부 이용자, 플랫폼, 챗봇\n\n▶ 케이스 B: 기관 행정업무 내 AI 활용\n- 민간 AI 서비스 라이선스 도입 (ChatGPT, Claude, Gemini, Copilot)\n- 내부 직원의 업무 생산성 향상 (보고서 작성, 번역, 요약, 조사/분석)\n- 내부 행정업무 효율화 (직원 교육, 가이드라인, 프로세스 개선)\n- 시스템 구축 없이 도구 활용 (라이선스 구매 및 계정 관리)\n\n핵심 키워드: 생성형 AI, 라이선스, 직원, 내부 업무, ChatGPT\n\n판단 순서:\n1순위: 외부 이용자 대상? → YES: 케이스 A\n2순위: 시스템 구축? → YES: 케이스 A\n3순위: 라이선스 구매? → YES: 케이스 B\n4순위: 내부 업무 지원? → YES: 케이스 B\n\n════════════════════════════════\n[2단계] 항목별 판정 기준 (절대 규칙)\n════════════════════════════════\n\n!! 절대 규칙: 판정의 정확한 의미 !!\n\n각 평가 항목에 대해 다음 3가지 중 하나로 판정하세요:\n\n1. \"충족\" = 평가 기준을 완전히 만족함\n   - 해당 항목의 모든 요구사항이 보고서에 명확히 기술됨\n   - 추가 보완 없이 그대로 인정 가능\n\n2. \"일부 충족\" = 평가 기준을 부분적으로 만족함\n   - 해당 항목의 일부 요구사항만 기술되어 있음\n   - 보완하면 더 좋지만 필수는 아님\n   - 기본적인 내용은 포함되어 있음\n\n3. \"미흡\" = 평가 기준을 만족하지 못함\n   - 해당 항목에 대한 내용이 없거나 매우 부족함\n   - 필수 요구사항이 누락됨\n   - 반드시 보완이 필요함\n\n!! 판정 시 주의사항 !!\n\n- 각 항목을 독립적으로 평가하세요\n- 보고서에 명시된 내용만을 근거로 판정하세요\n- 추측이나 가정은 하지 마세요\n- \"판정\"과 \"사유\"를 반드시 함께 제시하세요\n\n════════════════════════════════\n\n✅ 필수 출력 키\n\n[필수 키]\n- 1단계_케이스_분류: \"케이스 A\" 또는 \"케이스 B\"\n- 2단계_항목별_검토: 객체 (각 항목마다 \"판정\"과 \"사유\" 포함)\n\n[케이스 A 평가 항목]\nA-1: 추진 배경 및 필요성\n- 사업 추진의 배경과 필요성이 명확히 기술되어 있는가?\n- 해결하려는 문제나 달성하려는 목표가 구체적인가?\n\nA-2: 관련 법령 근거\n- 사업과 관련된 법령, 조례, 규정 등의 근거가 있는가?\n- 법적 근거가 명확히 명시되어 있는가?\n\nA-3: AI/LLM 및 데이터 적용 적절성\n- AI 기술 선택이 사업 목적에 적합한가?\n- 사용할 데이터의 종류와 품질이 적절한가?\n- 기술 적용 방안이 구체적으로 기술되어 있는가?\n\nA-4: 도입 효과 확인 가능성\n- 사업의 성과를 측정할 수 있는 지표가 있는가?\n- 효과 측정 방법이 구체적으로 제시되어 있는가?\n\nA-5: 확산 및 연계 노력\n- 다른 기관이나 사업과의 연계 방안이 있는가?\n- 사업 결과의 확산 계획이 포함되어 있는가?\n\nA-6: 예산 확보 및 유지관리 계획\n- 사업 예산이 구체적으로 제시되어 있는가?\n- 시스템 유지관리 계획이 포함되어 있는가?\n\n[케이스 B 평가 항목]\nB-1: 기관 차원의 업무 생산성 지원\n- AI 도구가 기관 전체의 업무 효율화에 기여하는가?\n- 직원들의 실제 업무에 활용될 수 있는 계획인가?\n- 지원 대상과 범위가 명확한가?\n\nB-2: 체계적 운영 및 관리\n- AI 도구의 운영 관리 방안이 구체적인가?\n- 사용자 교육 계획이 포함되어 있는가?\n- 지속적인 관리 체계가 수립되어 있는가?\n\nB-3: 보안 및 안전한 데이터 활용\n- 개인정보 및 보안 정책이 수립되어 있는가?\n- 안전한 데이터 활용 방안이 제시되어 있는가?\n- 보안 위험 관리 계획이 있는가?\n\n!! 출력 예시 !!\n\n케이스 A 예시:\n{\n  \"1단계_케이스_분류\": \"케이스 A\",\n  \"2단계_항목별_검토\": {\n    \"A-1\": {\n      \"판정\": \"충족\",\n      \"사유\": \"사업의 배경과 필요성이 구체적으로 기술되어 있으며, 해결하려는 문제가 명확함\"\n    },\n    \"A-2\": {\n      \"판정\": \"미흡\",\n      \"사유\": \"관련 법령 근거가 명시되어 있지 않음\"\n    },\n    \"A-3\": {\n      \"판정\": \"일부 충족\",\n      \"사유\": \"AI 기술 선택은 적절하나 데이터 품질에 대한 구체적 설명 부족\"\n    },\n    \"A-4\": {\n      \"판정\": \"충족\",\n      \"사유\": \"성과 측정 지표가 명확하게 제시되어 있음\"\n    },\n    \"A-5\": {\n      \"판정\": \"미흡\",\n      \"사유\": \"타 기관 연계나 확산 계획이 없음\"\n    },\n    \"A-6\": {\n      \"판정\": \"충족\",\n      \"사유\": \"예산 계획과 유지관리 방안이 구체적으로 기술됨\"\n    }\n  }\n}\n\n케이스 B 예시:\n{\n  \"1단계_케이스_분류\": \"케이스 B\",\n  \"2단계_항목별_검토\": {\n    \"B-1\": {\n      \"판정\": \"충족\",\n      \"사유\": \"ChatGPT 도입을 통한 기관 전체 직원의 업무 생산성 향상 계획이 명확함\"\n    },\n    \"B-2\": {\n      \"판정\": \"일부 충족\",\n      \"사유\": \"운영 방안은 있으나 사용자 교육 계획이 구체적이지 않음\"\n    },\n    \"B-3\": {\n      \"판정\": \"일부 충족\",\n      \"사유\": \"기본적인 보안 정책은 있으나 데이터 활용 가이드라인이 미흡함\"\n    }\n  }\n}\n\n반드시 JSON만 출력하세요."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -5680,
+        1392
+      ],
+      "id": "59e6828b-1768-473b-b4db-bd7698a688cb",
+      "name": "AI Agent - 평가기준 검토"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare Quality Check\n// ✅ AI Agent - 통합 처리 출력만 파싱\n// ✅ \"출력없음\" 포함 행 + 전체 empty 행 제거\n\nconst items = $input.all();\n\nfunction cleanSectionText(t) {\n  return String(t || '')\n    .replace(/^■.*?(\\r?\\n)/gm, '')\n    .replace(/\\r/g, '')\n    .trim();\n}\n\nfunction isEmpty(v) {\n  return v === null || v === undefined || String(v).trim() === '';\n}\n\n// output에서 섹션 파싱\nfunction parseAIOutput(output) {\n  let 추진배경및목적 = '';\n  let 추진내용요약 = '';\n  let 기대효과 = '';\n\n  const sections = String(output || '').split('■').filter(s => s.trim());\n\n  for (const section of sections) {\n    const trimmed = section.trim();\n\n    if (trimmed.startsWith('추진배경') || trimmed.startsWith('추진배경및목적')) {\n      추진배경및목적 = cleanSectionText(\n        trimmed.replace(/^추진배경.*?(\\r?\\n)/, '')\n      );\n      continue;\n    }\n\n    if (\n      trimmed.startsWith('추진내용') ||\n      trimmed.includes('추진내용 요약') ||\n      trimmed.includes('추진내용요약')\n    ) {\n      추진내용요약 = cleanSectionText(\n        trimmed.replace(/^추진내용.*?(\\r?\\n)/, '')\n      );\n      continue;\n    }\n\n    if (trimmed.startsWith('기대효과')) {\n      기대효과 = cleanSectionText(\n        trimmed\n          .replace(/^기대효과.*?(\\r?\\n)/, '')\n          .replace(/\\[.*?\\]/g, '')\n      );\n      continue;\n    }\n  }\n\n  return { 추진배경및목적, 추진내용요약, 기대효과 };\n}\n\nconst results = [];\n\nfor (const item of items) {\n  const output = item.json.output ?? item.json.text ?? '';\n\n  // ❌ output에 '출력없음'이 명시된 경우 스킵\n  if (String(output).includes('출력없음')) continue;\n\n  const parsed = parseAIOutput(output);\n\n  // ❌ output + 모든 파싱 결과가 empty면 스킵\n  const allEmpty =\n    isEmpty(output) &&\n    isEmpty(parsed.추진배경및목적) &&\n    isEmpty(parsed.추진내용요약) &&\n    isEmpty(parsed.기대효과);\n\n  if (allEmpty) continue;\n\n  results.push({\n    json: {\n      output: String(output || '').trim(),\n      AI_추진배경및목적: parsed.추진배경및목적,\n      AI_추진내용요약: parsed.추진내용요약,\n      AI_기대효과: parsed.기대효과\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "id": "65424461-4c90-417e-b793-8eaaba6da552",
+      "name": "Prepare Quality Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3408,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Quality Result (FIXED)\n// ✅ AI Agent - 품질 검토 output(JSON 문자열)에서 quality_review / prepare_quality_check 제대로 추출\n// ✅ prepare_quality_check.ai_output_raw 오염 방지: j.output 사용 금지\n// ✅ 파싱 실패해도 workflow 안 터지게 안전 처리\n\nconst items = $input.all();\n\nfunction isObject(v) {\n  return v && typeof v === 'object' && !Array.isArray(v);\n}\n\nfunction stripCodeFences(s) {\n  return String(s || '')\n    .replace(/```(?:json)?\\s*/gi, '')\n    .replace(/```/g, '')\n    .trim();\n}\n\nfunction extractFirstJsonObject(text) {\n  const s = String(text || '');\n  const start = s.indexOf('{');\n  if (start < 0) return '';\n\n  let depth = 0;\n  let inString = false;\n  let escape = false;\n\n  for (let i = start; i < s.length; i++) {\n    const ch = s[i];\n\n    if (inString) {\n      if (escape) escape = false;\n      else if (ch === '\\\\') escape = true;\n      else if (ch === '\"') inString = false;\n      continue;\n    } else {\n      if (ch === '\"') {\n        inString = true;\n        continue;\n      }\n      if (ch === '{') depth++;\n      if (ch === '}') depth--;\n      if (depth === 0) return s.slice(start, i + 1);\n    }\n  }\n  return '';\n}\n\nfunction safeJsonParse(maybeJsonText) {\n  try {\n    return { ok: true, value: JSON.parse(maybeJsonText) };\n  } catch (e) {\n    return { ok: false, error: e?.message || String(e) };\n  }\n}\n\n// ✅ 오염 방지: ai_output_raw는 절대 j.output로 만들지 않는다\nfunction buildPrepareQualityCheckFromFlat(j) {\n  return {\n    ai_output_raw: String(j.__ai_output_raw ?? '').trim(), // ✅ 여기 중요\n    AI_추진배경및목적: j.AI_추진배경및목적 ?? '',\n    AI_추진내용요약: j.AI_추진내용요약 ?? '',\n    AI_기대효과: j.AI_기대효과 ?? '',\n  };\n}\n\nreturn items.map((item) => {\n  const j = item.json || {};\n\n  // 0) 기본 prepare_quality_check 확보 (있으면 유지, 없으면 flat에서 복원)\n  const basePrepareQC = isObject(j.prepare_quality_check)\n    ? j.prepare_quality_check\n    : buildPrepareQualityCheckFromFlat(j);\n\n  // 1) 이미 quality_review가 객체면 그대로 반환(prepareQC 보강만)\n  if (isObject(j.quality_review)) {\n    return {\n      json: {\n        ...j,\n        prepare_quality_check: basePrepareQC,\n        quality_review: j.quality_review,\n        _quality_parsed_from: 'direct',\n      },\n    };\n  }\n\n  // 2) 품질검토 노드 output에서 JSON 파싱 시도\n  const raw = j.output ?? j.text ?? j.__raw ?? '';\n  const cleaned = stripCodeFences(raw);\n\n  // output 전체가 JSON일 수도 있고, 앞뒤 잡문이 섞여있을 수도 있어 첫 JSON을 뽑음\n  let jsonText = cleaned.trim().startsWith('{') ? cleaned.trim() : extractFirstJsonObject(cleaned);\n\n  if (!jsonText) {\n    return {\n      json: {\n        ...j,\n        prepare_quality_check: basePrepareQC,\n        quality_review: {},\n        _quality_parsed_from: 'none',\n        _quality_parse_error: 'no_json_found_in_output',\n      },\n    };\n  }\n\n  const parsed = safeJsonParse(jsonText);\n  if (!parsed.ok || !isObject(parsed.value)) {\n    return {\n      json: {\n        ...j,\n        prepare_quality_check: basePrepareQC,\n        quality_review: {},\n        _quality_parsed_from: 'failed',\n        _quality_parse_error: parsed.error || 'json_parse_failed',\n        _quality_raw_snippet: String(jsonText).slice(0, 500),\n      },\n    };\n  }\n\n  const outObj = parsed.value;\n\n  // 3) outObj에서 quality_review(또는 구버전 quality_check) 추출\n  let quality = {};\n  if (isObject(outObj.quality_review)) quality = outObj.quality_review;\n  else if (isObject(outObj.quality_check)) quality = outObj.quality_check;\n\n  // 4) outObj에서 prepare_quality_check 추출(있으면 우선), 없으면 base 유지\n  const prepareQC = isObject(outObj.prepare_quality_check)\n    ? outObj.prepare_quality_check\n    : basePrepareQC;\n\n  // 5) outObj 안에 PrepareQC 관련 필드가 최상위로 풀려있을 수도 있으니 보강\n  //    (AI Agent가 \"입력 JSON 전체 + quality_review\" 형태로 출력한 경우 대비)\n  const enrichedPrepareQC = {\n    ...prepareQC,\n    ai_output_raw: String(prepareQC.ai_output_raw ?? '').trim() || String(j.__ai_output_raw ?? '').trim(), // ✅ 오염 방지 유지\n    AI_추진배경및목적: prepareQC.AI_추진배경및목적 ?? outObj.AI_추진배경및목적 ?? j.AI_추진배경및목적 ?? '',\n    AI_추진내용요약: prepareQC.AI_추진내용요약 ?? outObj.AI_추진내용요약 ?? j.AI_추진내용요약 ?? '',\n    AI_기대효과: prepareQC.AI_기대효과 ?? outObj.AI_기대효과 ?? j.AI_기대효과 ?? '',\n  };\n\n  // 6) 최종 반환: 기존 j 유지 + (가능하면) outObj도 덮어씌워서 필드 복원 + quality_review/prepareQC 확정\n  return {\n    json: {\n      ...j,\n      ...outObj, // ✅ 품질검토 노드가 입력 JSON을 그대로 출력한 경우 여기서 복원됨\n      // prepare_quality_check: enrichedPrepareQC,\n      quality_review: quality,\n      _quality_parsed_from: 'output_json',\n      _quality_output_has_quality_review: isObject(outObj.quality_review),\n      _quality_output_has_quality_check: isObject(outObj.quality_check),\n      _prepare_qc_from_output: isObject(outObj.prepare_quality_check),\n    },\n  };\n});\n"
+      },
+      "id": "5294539f-eee0-4de3-840d-daa4982fb524",
+      "name": "Parse Quality Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2832,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final Report Assembly - 최종 보고서 데이터 조립 (FIX: 월/일 범위 + 우측 연도 생략 범위 보정)\n// ✅ 추진기간이 별도 항목에 없으면 추진내용(원본/AI요약/AI요약텍스트)에서 날짜/월/기간 범위를 추출해 채움\n// ✅ \"일(DD)\" 포함 → YYYY.MM.DD~YYYY.MM.DD\n// ✅ 월까지만 → YYYY.MM~YYYY.MM (같은 달이면 YYYY.MM)\n// ✅ 추가: 25.11~12 / 25.11.15~12.3 처럼 우측 연도 생략도 자동 보정\n\nconst items = $input.all();\n\nfunction asText(v) {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  try { return JSON.stringify(v); } catch (e) { return String(v); }\n}\n\nfunction pickText(v) {\n  return String(asText(v)).trim();\n}\n\nfunction notEmpty(s) {\n  const t = String(s || '').trim();\n  return t && t !== '(생성되지 않음)' && t !== '(원본 없음)' && t !== '(원본없음)';\n}\n\nfunction getFirstObj(...cands) {\n  for (const c of cands) {\n    if (c && typeof c === 'object' && !Array.isArray(c)) return c;\n  }\n  return {};\n}\n\nfunction findByName(list, name) {\n  if (!Array.isArray(list)) return null;\n  return list.find(x => String(x?.항목명 || '').trim() === name) || null;\n}\n\nfunction firstSectionText(labelItem) {\n  if (!labelItem || !Array.isArray(labelItem.찾은섹션) || labelItem.찾은섹션.length === 0) return '';\n  const first = labelItem.찾은섹션[0];\n  const body = typeof first?.내용 === 'string' ? first.내용 : asText(first?.내용);\n  return String(body || '').trim();\n}\n\nfunction collectTextFromSections(labelItem) {\n  if (!labelItem || !Array.isArray(labelItem.찾은섹션)) return '';\n  return labelItem.찾은섹션.map(s => {\n    const body = typeof s?.내용 === 'string' ? s.내용 : asText(s?.내용);\n    return String(body || '').trim();\n  }).filter(Boolean).join(' ');\n}\n\n// ------------------------------------------------------------\n// 1) Merge 출력이 여러 item(type/항목명/찾은섹션)으로 쪼개져도 모아서 처리\n// ------------------------------------------------------------\nfunction collectMergedPayload(allItems) {\n  const collected = {\n    원본사용: [],\n    AI요약: [],\n    AI생성: [],\n    원본데이터: null,\n    구조화PDF: null,\n    quality_review: {},\n    AI_추진배경및목적: '',\n    AI_추진내용요약: '',\n    AI_기대효과: '',\n  };\n\n  for (const it of allItems) {\n    const j = it.json || {};\n\n    if (Array.isArray(j.원본사용)) collected.원본사용.push(...j.원본사용);\n    if (Array.isArray(j.AI요약)) collected.AI요약.push(...j.AI요약);\n    if (Array.isArray(j.AI생성)) collected.AI생성.push(...j.AI생성);\n\n    if (j.type && j.항목명) {\n      const packed = {\n        항목명: j.항목명,\n        출처: j.출처 ?? null,\n        찾은섹션: Array.isArray(j.찾은섹션) ? j.찾은섹션 : [],\n      };\n      if (j.type === '원본사용') collected.원본사용.push(packed);\n      if (j.type === 'AI요약') collected.AI요약.push(packed);\n      if (j.type === 'AI생성') collected.AI생성.push(packed);\n    }\n\n    if (!collected.원본데이터 && j.원본데이터) collected.원본데이터 = j.원본데이터;\n    if (!collected.원본데이터 && j.구조화PDF) collected.원본데이터 = j.구조화PDF;\n    if (!collected.구조화PDF && j.구조화PDF) collected.구조화PDF = j.구조화PDF;\n\n    if (notEmpty(j.AI_추진배경및목적) && !notEmpty(collected.AI_추진배경및목적)) {\n      collected.AI_추진배경및목적 = pickText(j.AI_추진배경및목적);\n    }\n    if (notEmpty(j.AI_추진내용요약) && !notEmpty(collected.AI_추진내용요약)) {\n      collected.AI_추진내용요약 = pickText(j.AI_추진내용요약);\n    }\n    if (notEmpty(j.AI_기대효과) && !notEmpty(collected.AI_기대효과)) {\n      collected.AI_기대효과 = pickText(j.AI_기대효과);\n    }\n\n    if (j.quality_review && typeof j.quality_review === 'object') {\n      collected.quality_review = { ...collected.quality_review, ...j.quality_review };\n    }\n  }\n\n  function uniqLabel(arr) {\n    const m = new Map();\n    for (const x of arr) {\n      const key = [\n        String(x?.항목명 || ''),\n        String(x?.출처 || ''),\n        String(x?.찾은섹션?.[0]?.제목 || '')\n      ].join('|');\n      if (!m.has(key)) m.set(key, x);\n    }\n    return Array.from(m.values());\n  }\n\n  collected.원본사용 = uniqLabel(collected.원본사용);\n  collected.AI요약 = uniqLabel(collected.AI요약);\n  collected.AI생성 = uniqLabel(collected.AI생성);\n\n  return collected;\n}\n\n// ------------------------------------------------------------\n// 2) 추진기간 추출(월/일 + \"우측 연도 생략\" 범위 보정)\n// ------------------------------------------------------------\nfunction pad2(n) { return String(n).padStart(2, '0'); }\nfunction formatYMD(d) { return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`; }\nfunction formatYM(d) { return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}`; }\n\nfunction normalizeYear(yStr) {\n  const t = String(yStr || '').trim();\n  const y = Number(t);\n  if (!Number.isFinite(y)) return null;\n  if (t.length === 2) return 2000 + y; // 25 -> 2025\n  if (t.length === 4) return y;\n  return null;\n}\n\nfunction daysInMonth(y, m) {\n  return new Date(y, m, 0).getDate();\n}\n\nfunction makeDateSafe(y, m, d, clampDay = false) {\n  const yy = Number(y), mm = Number(m), dd = Number(d);\n  if (!yy || !mm || !dd) return null;\n  if (mm < 1 || mm > 12) return null;\n\n  let day = dd;\n  const dim = daysInMonth(yy, mm);\n  if (day < 1) return null;\n  if (day > dim) {\n    if (!clampDay) return null;\n    day = dim;\n  }\n\n  const dt = new Date(yy, mm - 1, day);\n  if (dt.getFullYear() !== yy || dt.getMonth() !== (mm - 1) || dt.getDate() !== day) return null;\n  return dt;\n}\n\n// ranges: { start: Date, end: Date, precision: 'day'|'month' }\nfunction extractDateRanges(text) {\n  const s = String(text || '');\n  const ranges = [];\n\n  // (A) ✅ 우측 연도 생략 범위: 25.11~12 / 25.11.15~12.3 / 2025.11~2 / 25년11월~12월 등\n  //  - left: (YY|YYYY).M(.D)?\n  //  - right: M(.D)?   (year omitted)\n  //  - rule: rightYear = leftYear (+1 if rightMonth < leftMonth)\n  const reRightOmitYear = /(?<!\\d)(\\d{2}|\\d{4})\\s*(?:[.\\-/]\\s*|\\s*년\\s*)(\\d{1,2})\\s*(?:[.\\-/]\\s*|\\s*월\\s*)?(\\d{1,2})?\\s*(?:일)?\\s*(?:~|∼|\\-|–|—|부터)\\s*(\\d{1,2})(?:\\s*(?:[.\\-/]\\s*|\\s*월\\s*)\\s*(\\d{1,2})\\s*(?:일)?)?(?:\\s*까지)?(?!\\d)/g;\n\n  let m;\n  while ((m = reRightOmitYear.exec(s)) !== null) {\n    const y1 = normalizeYear(m[1]);\n    const mo1 = Number(m[2]);\n    const d1 = m[3] ? Number(m[3]) : null;\n\n    const mo2 = Number(m[4]);\n    const d2 = m[5] ? Number(m[5]) : null;\n\n    if (!y1 || !(mo1 >= 1 && mo1 <= 12) || !(mo2 >= 1 && mo2 <= 12)) continue;\n\n    let y2 = y1;\n    if (mo2 < mo1) y2 = y1 + 1; // 연도 롤오버\n\n    const leftPrec = d1 ? 'day' : 'month';\n    const rightPrec = d2 ? 'day' : 'month';\n    const spanPrec = (leftPrec === 'day' || rightPrec === 'day') ? 'day' : 'month';\n\n    const start = d1\n      ? makeDateSafe(y1, mo1, d1, true)\n      : makeDateSafe(y1, mo1, 1, false);\n\n    const end = d2\n      ? makeDateSafe(y2, mo2, d2, true)\n      : makeDateSafe(y2, mo2, daysInMonth(y2, mo2), true);\n\n    if (start && end) ranges.push({ start, end, precision: spanPrec });\n  }\n\n  // (1) YYYY.MM.DD / YY.MM.DD 단일\n  const reYMD = /(?<!\\d)(\\d{2}|\\d{4})\\s*[.\\-/]\\s*(\\d{1,2})\\s*[.\\-/]\\s*(\\d{1,2})(?!\\d)/g;\n  while ((m = reYMD.exec(s)) !== null) {\n    const yy = normalizeYear(m[1]);\n    const mm = Number(m[2]);\n    const dd = Number(m[3]);\n    if (!yy) continue;\n    const dt = makeDateSafe(yy, mm, dd, true);\n    if (dt) ranges.push({ start: dt, end: dt, precision: 'day' });\n  }\n\n  // (2) YYYY년 M월 D일 / YY년 M월 D일 단일\n  const reYMDK = /(?<!\\d)(\\d{2}|\\d{4})\\s*년\\s*(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일(?!\\d)/g;\n  while ((m = reYMDK.exec(s)) !== null) {\n    const yy = normalizeYear(m[1]);\n    const mm = Number(m[2]);\n    const dd = Number(m[3]);\n    if (!yy) continue;\n    const dt = makeDateSafe(yy, mm, dd, true);\n    if (dt) ranges.push({ start: dt, end: dt, precision: 'day' });\n  }\n\n  // (3) YYYY.MM / YY.MM (월만)\n  const reYMdot = /(?<!\\d)(\\d{2}|\\d{4})\\s*[.\\-/]\\s*(\\d{1,2})(?!\\s*[.\\-/]\\s*\\d)/g;\n  while ((m = reYMdot.exec(s)) !== null) {\n    const yy = normalizeYear(m[1]);\n    const mm = Number(m[2]);\n    if (!yy) continue;\n    const start = makeDateSafe(yy, mm, 1, false);\n    const end = makeDateSafe(yy, mm, daysInMonth(yy, mm), true);\n    if (start && end) ranges.push({ start, end, precision: 'month' });\n  }\n\n  // (4) YYYY년 M월 / YY년 M월 (월만)\n  const reYMK = /(?<!\\d)(\\d{2}|\\d{4})\\s*년\\s*(\\d{1,2})\\s*월(?!\\s*\\d)/g;\n  while ((m = reYMK.exec(s)) !== null) {\n    const yy = normalizeYear(m[1]);\n    const mm = Number(m[2]);\n    if (!yy) continue;\n    const start = makeDateSafe(yy, mm, 1, false);\n    const end = makeDateSafe(yy, mm, daysInMonth(yy, mm), true);\n    if (start && end) ranges.push({ start, end, precision: 'month' });\n  }\n\n  // (5) 일반 범위: left~right (둘 다 연도 포함된 경우)\n  const reSpan = /(\\d{2,4}\\s*(?:[.\\-/]\\s*\\d{1,2}(?:\\s*[.\\-/]\\s*\\d{1,2})?|\\s*년\\s*\\d{1,2}\\s*월(?:\\s*\\d{1,2}\\s*일)?))\\s*(?:~|∼|\\-|–|—|부터)\\s*(\\d{2,4}\\s*(?:[.\\-/]\\s*\\d{1,2}(?:\\s*[.\\-/]\\s*\\d{1,2})?|\\s*년\\s*\\d{1,2}\\s*월(?:\\s*\\d{1,2}\\s*일)?))(?:\\s*까지)?/g;\n\n  let sm;\n  while ((sm = reSpan.exec(s)) !== null) {\n    const left = sm[1];\n    const right = sm[2];\n\n    const L = extractDateRanges(left);\n    const R = extractDateRanges(right);\n\n    if (L.length && R.length) {\n      let lMin = L[0].start;\n      let lPrec = L[0].precision;\n      for (const r of L) {\n        if (r.start.getTime() < lMin.getTime()) lMin = r.start;\n        if (r.precision === 'day') lPrec = 'day';\n      }\n\n      let rMax = R[0].end;\n      let rPrec = R[0].precision;\n      for (const r of R) {\n        if (r.end.getTime() > rMax.getTime()) rMax = r.end;\n        if (r.precision === 'day') rPrec = 'day';\n      }\n\n      const spanPrec = (lPrec === 'day' || rPrec === 'day') ? 'day' : 'month';\n      ranges.push({ start: lMin, end: rMax, precision: spanPrec });\n    }\n  }\n\n  // 유니크\n  const uniq = new Map();\n  for (const r of ranges) {\n    const key = `${formatYMD(r.start)}~${formatYMD(r.end)}|${r.precision}`;\n    if (!uniq.has(key)) uniq.set(key, r);\n  }\n  return Array.from(uniq.values());\n}\n\nfunction formatRangeFromText(text) {\n  const ranges = extractDateRanges(text);\n  if (!ranges.length) return '';\n\n  const hasDay = ranges.some(r => r.precision === 'day');\n\n  let minStart = ranges[0].start;\n  let maxEnd = ranges[0].end;\n\n  for (const r of ranges) {\n    if (r.start.getTime() < minStart.getTime()) minStart = r.start;\n    if (r.end.getTime() > maxEnd.getTime()) maxEnd = r.end;\n  }\n\n  if (hasDay) {\n    return `${formatYMD(minStart)}~${formatYMD(maxEnd)}`;\n  }\n\n  const a = formatYM(minStart);\n  const b = formatYM(maxEnd);\n  return (a === b) ? a : `${a}~${b}`;\n}\n\n// ------------------------------------------------------------\n// 3) 최종 조립\n// ------------------------------------------------------------\nfunction isValidReport(r) {\n  return notEmpty(r.추진실적명) ||\n    notEmpty(r.추진기간) ||\n    notEmpty(r.추진배경및목적) ||\n    notEmpty(r.추진내용) ||\n    notEmpty(r.추진성과또는기대효과) ||\n    notEmpty(r.향후계획);\n}\n\nconst payload = collectMergedPayload(items);\n\nconst 원본데이터 = getFirstObj(payload.원본데이터, payload.구조화PDF);\nconst 문서제목 = 원본데이터?.메타데이터?.문서제목 || '';\n\nconst 최종보고서 = {\n  추진실적명: '',\n  추진기간: '',\n  추진배경및목적: '',\n  추진내용: '',\n  추진성과또는기대효과: '',\n  향후계획: ''\n};\n\nconst 최종보고서_소스 = {\n  추진실적명: '',\n  추진기간: '',\n  추진배경및목적: '',\n  추진내용: '',\n  추진성과또는기대효과: '',\n  향후계획: ''\n};\n\n// 1) 추진실적명\nconst 추진실적명항목 = findByName(payload.원본사용, '추진실적명');\nlet 추진실적명_값 = '';\nif (추진실적명항목) {\n  const t = firstSectionText(추진실적명항목);\n  if (notEmpty(t)) 추진실적명_값 = t;\n}\n\nif (notEmpty(추진실적명_값)) {\n  최종보고서.추진실적명 = 추진실적명_값;\n  최종보고서_소스.추진실적명 = '원본사용(추진실적명.찾은섹션[0].내용)';\n} else if (notEmpty(문서제목)) {\n  최종보고서.추진실적명 = String(문서제목).trim();\n  최종보고서_소스.추진실적명 = '메타데이터.문서제목';\n} else {\n  최종보고서_소스.추진실적명 = '미확보';\n}\n\n// 2) 추진기간\nconst 추진기간항목 = findByName(payload.원본사용, '추진기간');\nconst 추진기간원본 = firstSectionText(추진기간항목);\n\nlet rawPeriod = '';\nlet sourcePeriod = '';\n\nif (notEmpty(추진기간원본)) {\n  rawPeriod = 추진기간원본;\n  sourcePeriod = '원본사용(추진기간)';\n} else {\n  const 추진내용_원본항목 = findByName(payload.원본사용, '추진내용');\n  const 추진내용_AI요약항목 = findByName(payload.AI요약, '추진내용');\n\n  const t1 = collectTextFromSections(추진내용_원본항목);\n  const t2 = collectTextFromSections(추진내용_AI요약항목);\n\n  let merged = [t1, t2, payload.AI_추진내용요약].filter(x => notEmpty(x)).join(' \\n');\n\n  const rawText = 원본데이터?.원본텍스트 || '';\n  if (notEmpty(rawText) && merged.length < 200) {\n    merged += '\\n' + String(rawText).slice(0, 2000);\n  }\n\n  if (notEmpty(merged)) {\n    rawPeriod = merged;\n    sourcePeriod = '추진내용(원본/AI요약/AI요약텍스트/원본텍스트)에서 추출';\n  }\n}\n\nif (notEmpty(rawPeriod)) {\n  const normalized = formatRangeFromText(rawPeriod);\n  if (notEmpty(normalized)) {\n    최종보고서.추진기간 = normalized;\n    최종보고서_소스.추진기간 = `${sourcePeriod} → 날짜/월 범위정규화`;\n  } else {\n    if (sourcePeriod === '원본사용(추진기간)') {\n      최종보고서.추진기간 = rawPeriod;\n      최종보고서_소스.추진기간 = `${sourcePeriod} → 추출실패(원문유지)`;\n    } else {\n      최종보고서_소스.추진기간 = '미확보(추진내용에도 날짜/월 패턴 없음)';\n    }\n  }\n} else {\n  최종보고서_소스.추진기간 = '미확보';\n}\n\n// 3) 추진배경및목적\nconst 배경항목 = findByName(payload.원본사용, '추진배경및목적');\nconst 배경원본 = firstSectionText(배경항목);\n\nif (notEmpty(배경원본)) {\n  최종보고서.추진배경및목적 = 배경원본;\n  최종보고서_소스.추진배경및목적 = '원본사용(추진배경및목적)';\n} else if (notEmpty(payload.AI_추진배경및목적)) {\n  최종보고서.추진배경및목적 = payload.AI_추진배경및목적;\n  최종보고서_소스.추진배경및목적 = 'AI생성_추진배경및목적';\n} else {\n  최종보고서_소스.추진배경및목적 = '미확보';\n}\n\n// 6) 향후계획\nconst 향후계획항목 = findByName(payload.원본사용, '향후계획');\nconst 향후계획원본 = firstSectionText(향후계획항목);\n\nif (notEmpty(향후계획원본)) {\n  최종보고서.향후계획 = 향후계획원본;\n  최종보고서_소스.향후계획 = '원본사용(향후계획)';\n} else {\n  최종보고서_소스.향후계획 = '미확보';\n}\n\n// 4) 추진내용\nif (notEmpty(payload.AI_추진내용요약)) {\n  최종보고서.추진내용 = payload.AI_추진내용요약;\n  최종보고서_소스.추진내용 = 'AI요약_추진내용';\n} else {\n  최종보고서_소스.추진내용 = '미확보';\n}\n\n// 5) 추진성과또는기대효과\nconst 기대효과항목 = findByName(payload.원본사용, '추진성과또는기대효과');\nconst 기대효과원본 = firstSectionText(기대효과항목);\n\nif (notEmpty(기대효과원본)) {\n  최종보고서.추진성과또는기대효과 = 기대효과원본;\n  최종보고서_소스.추진성과또는기대효과 = '원본사용(추진성과또는기대효과)';\n} else if (notEmpty(payload.AI_기대효과)) {\n  최종보고서.추진성과또는기대효과 = payload.AI_기대효과;\n  최종보고서_소스.추진성과또는기대효과 = 'AI생성_기대효과';\n} else {\n  최종보고서_소스.추진성과또는기대효과 = '미확보';\n}\n\nif (!isValidReport(최종보고서)) return [];\n\nreturn [\n  {\n    json: {\n      최종보고서,\n      최종보고서_소스,\n      quality_review: payload.quality_review || {}\n    }\n  }\n];\n"
+      },
+      "id": "08552f8a-9800-4aa3-9dc9-62ead99e90ba",
+      "name": "Final Report Assembly",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=다음 부적합 항목들을 개선사항에 따라 재작성해주세요.\n\n【원본 추진내용】\n{{ $json.추진내용원문 }}\n\n【부적합 항목 및 개선사항】\n\n{{ Object.keys($json.품질검토결과.부적합항목).includes('추진배경및목적') ? '■ 추진배경및목적\\n- 현재 내용: ' + $json.AI생성_추진배경및목적 + '\\n- 부적합 사유: ' + $json.품질검토결과.부적합항목.추진배경및목적.사유 + '\\n- 개선사항: ' + ($json.품질검토결과.부적합항목.추진배경및목적.개선사항 || '위 사유를 참고하여 개선') + '\\n\\n' : '' }}\n\n{{ Object.keys($json.품질검토결과.부적합항목).includes('추진내용') ? '■ 추진내용\\n- 현재 내용: ' + $json.AI생성_추진내용 + '\\n- 부적합 사유: ' + $json.품질검토결과.부적합항목.추진내용.사유 + '\\n- 개선사항: ' + ($json.품질검토결과.부적합항목.추진내용.개선사항 || '위 사유를 참고하여 개선') + '\\n\\n' : '' }}\n\n{{ Object.keys($json.품질검토결과.부적합항목).includes('기대효과') ? '■ 기대효과\\n- 현재 내용: ' + $json.AI생성_기대효과 + '\\n- 부적합 사유: ' + $json.품질검토결과.부적합항목.기대효과.사유 + '\\n- 개선사항: ' + ($json.품질검토결과.부적합항목.기대효과.개선사항 || '위 사유를 참고하여 개선') + '\\n\\n' : '' }}\n\n【재작성 요청】\n위 부적합 항목들을 개선사항에 따라 재작성하고, 다음 형식으로 출력해주세요.",
+        "options": {
+          "systemMessage": "당신은 정부 및 공공기관의 보고서를 개선하는 전문 AI입니다.\n\n【재작성 원칙】\n\n1. 부적합 사유를 정확히 파악하고 개선\n2. 개선사항에 명시된 내용을 반드시 반영\n3. 기존 적합 기준을 모두 충족하도록 작성\n4. 원본 추진내용과의 논리적 연결성 유지\n\n【추진배경및목적 재작성 규칙】\n\n- 추진 내용에서 도출 가능한 내용만 작성\n- 기관 내부 관점 유지 (직원, 조직, 내부 업무 중심)\n- 2-4문장으로 간결하게\n- 음슴체 또는 평서체 사용\n- 금지 표현 사용 금지:\n  * 국민 편의, 대국민 서비스\n  * 외부 이용자, 민간, 시민\n  * 사회적 가치, 공공성\n\n【추진내용 재작성 규칙】\n\n- 핵심 정보 포함 (대상, 규모, 방식, 일정, 예산)\n- 원문 대비 30% 이상 간결화\n- 의미 왜곡 없음\n- 중복 제거\n- 이해하기 쉬운 구조\n\n【기대효과 재작성 규칙】\n\n- 추진내용에서 도출 가능한 효과만\n- 기관 내부 효과만 언급:\n  * 직원 업무 효율성 향상\n  * 조직 역량/전문성 강화\n  * 내부 시스템/프로세스 개선\n  * 데이터/정보 관리 향상\n  * 의사결정 지원\n- 2-3개 항목\n- 음슴체 사용 (~됨, ~향상, ~강화)\n- 존대말 금지 (~됩니다 X)\n- 금지 표현 사용 금지\n- 구체적 수치 없음\n\n【출력 형식】\n\n부적합 항목만 재작성하여 다음 형식으로 출력:\n\n■ 추진배경및목적 (부적합인 경우만)\n[재작성된 추진배경및목적]\n\n■ 추진내용 (부적합인 경우만)\n[재작성된 추진내용]\n\n■ 기대효과 (부적합인 경우만)\n1. [기대효과 1]\n2. [기대효과 2]\n3. [기대효과 3]\n\n【주의사항】\n\n1. 부적합 항목만 출력 (적합 항목은 출력 금지)\n2. ■ 기호로 섹션 구분\n3. 개선사항을 정확히 반영\n4. 형식을 정확히 준수\n5. 불필요한 설명 제거"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -2176,
+        1520
+      ],
+      "id": "0f21b020-a89e-4f61-8a5a-462f1007f74d",
+      "name": "AI Agent - 부적합 재작성"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Revised Content - 재작성된 내용 파싱 및 병합 (품질검토 부적합 항목만 교체)\n// ✅ 주의: 이 노드는 \"AI Agent - 부적합 재작성\" 출력(item.json.output)과\n//         기존 품질검토 결과(item.json.품질검토결과.부적합항목)를 기반으로\n//         item.json.AI생성_* 필드만 필요한 항목에 한해 교체합니다.\n\nconst items = $input.all();\n\nfunction pickText(val) {\n  if (val === null || val === undefined) return '';\n  return typeof val === 'string' ? val : JSON.stringify(val);\n}\n\n// \"■ 섹션\" 기반 파싱 + 없을 경우에도 최대한 추출(방어)\nfunction parseRewrittenSections(text) {\n  const result = {\n    추진배경및목적: '',\n    추진내용: '',\n    기대효과: '',\n  };\n\n  const raw = pickText(text).trim();\n  if (!raw) return result;\n\n  // 기본: ■ 로 섹션 분리\n  const blocks = raw.split('■').map(s => s.trim()).filter(Boolean);\n\n  // 섹션별 내용 추출 함수\n  function extractBody(block, headerRegex) {\n    // 헤더 줄(첫 줄) 제거 후 나머지 본문\n    return block\n      .replace(headerRegex, '')          // 헤더 라인 제거\n      .replace(/^■.*?\\n/gm, '')          // 혹시 남아있는 ■ 라인 제거\n      .trim();\n  }\n\n  for (const block of blocks) {\n    // 첫 줄(헤더)만 따로 보기\n    const firstLine = block.split('\\n')[0]?.trim() || '';\n\n    // 1) 추진배경및목적\n    if (/^추진배경\\s*및\\s*목적/i.test(firstLine) || /^추진배경및목적/i.test(firstLine)) {\n      result.추진배경및목적 = extractBody(block, /^추진배경\\s*및\\s*목적.*?\\n|^추진배경및목적.*?\\n/);\n      continue;\n    }\n\n    // 2) 추진내용\n    if (/^추진내용/i.test(firstLine) || /추진내용\\s*요약/i.test(firstLine)) {\n      result.추진내용 = extractBody(block, /^추진내용.*?\\n/);\n      continue;\n    }\n\n    // 3) 기대효과\n    if (/^기대효과/i.test(firstLine) || /추진성과\\s*또는\\s*기대효과/i.test(firstLine)) {\n      // [검토결과: ...] 같은 태그가 섞일 수 있어 제거\n      const body = extractBody(block, /^기대효과.*?\\n|^추진성과\\s*또는\\s*기대효과.*?\\n/);\n      result.기대효과 = body.replace(/\\[.*?\\]/g, '').trim();\n      continue;\n    }\n  }\n\n  // 방어: ■ 없이 한 덩어리로만 왔는데 \"추진배경및목적:\" 같은 패턴이 있는 경우\n  if (!blocks.length) {\n    const m1 = raw.match(/추진배경\\s*및\\s*목적\\s*[:：]\\s*([\\s\\S]*?)(?=\\n\\s*추진내용\\s*[:：]|\\n\\s*기대효과\\s*[:：]|$)/i);\n    const m2 = raw.match(/추진내용\\s*[:：]\\s*([\\s\\S]*?)(?=\\n\\s*기대효과\\s*[:：]|$)/i);\n    const m3 = raw.match(/기대효과\\s*[:：]\\s*([\\s\\S]*?)$/i);\n\n    if (m1) result.추진배경및목적 = m1[1].trim();\n    if (m2) result.추진내용 = m2[1].trim();\n    if (m3) result.기대효과 = m3[1].trim();\n  }\n\n  return result;\n}\n\nreturn items.map(item => {\n  const rewrittenRaw = item.json.output; // AI Agent - 부적합 재작성 결과\n  const parsed = parseRewrittenSections(rewrittenRaw);\n\n  const 부적합항목 = item.json.품질검토결과?.부적합항목 || {};\n\n  // 기존(초기 생성/요약) 내용\n  let 최종_추진배경및목적 = item.json.AI생성_추진배경및목적;\n  let 최종_추진내용 = item.json.AI생성_추진내용;\n  let 최종_기대효과 = item.json.AI생성_기대효과;\n\n  // ✅ 부적합으로 판정된 항목만, 재작성 결과가 있을 때만 교체\n  if (부적합항목.추진배경및목적 && parsed.추진배경및목적) {\n    최종_추진배경및목적 = parsed.추진배경및목적;\n    console.log('✅ 추진배경및목적 재작성 반영');\n  }\n\n  if (부적합항목.추진내용 && parsed.추진내용) {\n    최종_추진내용 = parsed.추진내용;\n    console.log('✅ 추진내용 재작성 반영');\n  }\n\n  // 기대효과는 보통 \"1.\\n2.\\n3.\" 형태로 오니 그대로 두되 공백만 정리\n  if (부적합항목.기대효과 && parsed.기대효과) {\n    최종_기대효과 = parsed.기대효과.trim();\n    console.log('✅ 기대효과 재작성 반영');\n  }\n\n  return {\n    json: {\n      ...item.json,\n      AI생성_추진배경및목적: 최종_추진배경및목적,\n      AI생성_추진내용: 최종_추진내용,\n      AI생성_기대효과: 최종_기대효과,\n      재작성완료: true,\n\n      // 디버그용(원하면 다음 노드에서 제거 가능)\n      __revised_parsed: parsed,\n      __revised_raw: pickText(rewrittenRaw),\n    },\n  };\n});\n"
+      },
+      "id": "b52e0217-4231-4a23-b9cf-03f84cfc33c0",
+      "name": "Parse Revised Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1824,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=다음 재작성된 항목들의 품질을 검토해주세요.\n\n【원본 추진내용】\n{{ $json.추진내용원문 }}\n\n【재작성된 항목】\n\n{{ $json.품질검토결과.부적합항목.추진배경및목적 ? '■ 재작성: 추진배경및목적\\n' + $json.AI생성_추진배경및목적 + '\\n\\n' : '' }}\n\n{{ $json.품질검토결과.부적합항목.추진내용 ? '■ 재작성: 추진내용\\n' + $json.AI생성_추진내용 + '\\n\\n' : '' }}\n\n{{ $json.품질검토결과.부적합항목.기대효과 ? '■ 재작성: 기대효과\\n' + $json.AI생성_기대효과 + '\\n\\n' : '' }}\n\n【검토 요청】\n위 재작성된 항목들이 다음 기준에 부합하는지 평가하고, JSON 형식으로 출력해주세요:\n\n1. 추진배경및목적 (재작성된 경우)\n   - 이전 부적합 사유가 개선되었는가?\n   - 추진내용과 논리적으로 연결되는가?\n   - 기관 내부 관점을 유지하는가?\n   - 적절한 길이인가? (2-4문장)\n\n2. 추진내용 요약 (재작성된 경우)\n   - 이전 부적합 사유가 개선되었는가?\n   - 핵심 정보가 누락되지 않았는가?\n   - 간결하게 정리되었는가?\n   - 원문의 의미가 왜곡되지 않았는가?\n\n3. 기대효과 (재작성된 경우)\n   - 이전 부적합 사유가 개선되었는가?\n   - 추진내용에서 도출 가능한 효과인가?\n   - 기관 내부 관점을 유지하는가?\n   - 금지 표현이 없는가?\n\n재작성된 각 항목에 대해 \"적합\" 또는 \"부적합\" 판정과 사유를 제시해주세요.",
+        "options": {
+          "systemMessage": "당신은 재작성된 보고서 내용의 품질을 재검토하는 전문 AI입니다.\n\n【재검토 원칙】\n\n1. 이전 부적합 사유가 개선되었는지 우선 확인\n2. 기본 품질 기준 충족 여부 확인\n3. 재작성 횟수를 고려하여 엄격하게 평가\n\n【검토 기준】 (이전 품질 검토와 동일)\n\n■ 추진배경및목적 검토\n- ✅ 적합: 추진내용에서 도출 가능, 내부 관점, 2-4문장, 금지 표현 없음\n- ❌ 부적합: 논리적 연결 부족, 외부 관점, 부적절한 길이, 금지 표현 사용\n\n■ 추진내용 요약 검토\n- ✅ 적합: 핵심 정보 포함, 30% 이상 간결화, 의미 왜곡 없음, 중복 제거\n- ❌ 부적합: 정보 누락, 간결화 부족, 의미 왜곡, 중복 존재\n\n■ 기대효과 검토\n- ✅ 적합: 추진내용 연계, 내부 효과만, 2-3개, 음슴체, 금지 표현 없음\n- ❌ 부적합: 무관한 효과, 외부 관점, 부적절한 개수, 금지 표현 사용\n\n【출력 형식】\n\n재작성된 항목만 검토하여 JSON 형식으로 출력:\n\n{\n  \"추진배경및목적\": {\n    \"판정\": \"적합\" 또는 \"부적합\",\n    \"사유\": \"판정 근거 (이전 부적합 사유 개선 여부 포함)\",\n    \"개선사항\": \"부적합 시 구체적 개선 방향\"\n  },\n  \"추진내용\": {\n    \"판정\": \"적합\" 또는 \"부적합\",\n    \"사유\": \"판정 근거 (이전 부적합 사유 개선 여부 포함)\",\n    \"개선사항\": \"부적합 시 구체적 개선 방향\"\n  },\n  \"기대효과\": {\n    \"판정\": \"적합\" 또는 \"부적합\",\n    \"사유\": \"판정 근거 (이전 부적합 사유 개선 여부 포함)\",\n    \"개선사항\": \"부적합 시 구체적 개선 방향\"\n  }\n}\n\n※ 재작성되지 않은 항목은 JSON에 포함하지 마세요.\n\n【주의사항】\n\n1. 재작성된 항목만 검토\n2. 이전 부적합 사유가 개선되었는지 명시\n3. 여전히 부적합한 경우 구체적 개선 방향 제시\n4. JSON 형식 정확히 준수"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -1600,
+        1520
+      ],
+      "id": "29a6b302-8065-4253-b423-0f2f5fc14af4",
+      "name": "AI Agent - 재검토"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 재검토 결과 파싱 및 최종 판정\nconst items = $input.all();\n\nfunction extractJsonCandidate(text) {\n  if (!text) return '';\n  let s = String(text).trim();\n  s = s.replace(/```[a-zA-Z]*\\n([\\s\\S]*?)```/g, '$1').trim();\n  const first = s.indexOf('{');\n  const last = s.lastIndexOf('}');\n  if (first >= 0 && last > first) return s.slice(first, last + 1);\n  return '';\n}\n\nfunction softRepair(t) {\n  if (!t) return '';\n  let s = String(t).trim();\n  s = s.replace(/[\"\"]/g, '\"').replace(/['']/g, \"'\");\n  s = s.replace(/,\\s*([}\\]])/g, '$1');\n  return s;\n}\n\nreturn items.map(item => {\n  const raw = item.json.output || '';\n  const rawText = typeof raw === 'string' ? raw : JSON.stringify(raw);\n\n  console.log('=== Parse Re-review Result ===');\n\n  const cand = extractJsonCandidate(rawText);\n  const repaired = softRepair(cand);\n\n  let 재검토결과;\n  try {\n    재검토결과 = JSON.parse(repaired);\n    console.log('재검토 JSON 파싱 성공!');\n  } catch (e) {\n    console.error('재검토 JSON 파싱 실패:', e.message);\n    재검토결과 = {};\n  }\n\n  // 기존 품질검토결과 가져오기\n  const 기존적합항목 = item.json.품질검토결과?.적합항목 || {};\n  const 기존부적합항목 = item.json.품질검토결과?.부적합항목 || {};\n  \n  // 최종 적합/부적합 항목 결정\n  const 최종적합항목 = { ...기존적합항목 };\n  const 최종부적합항목 = {};\n  \n  // 재작성된 항목의 재검토 결과 반영\n  for (const [항목명, 검토내용] of Object.entries(재검토결과)) {\n    if (검토내용.판정 === '적합') {\n      // 재작성 후 적합 → 최종 적합 항목에 추가\n      최종적합항목[항목명] = 검토내용;\n      console.log(`${항목명}: 재작성 후 적합 판정`);\n    } else {\n      // 재작성 후에도 부적합 → 최종 부적합 항목에 유지\n      최종부적합항목[항목명] = 검토내용;\n      console.log(`${항목명}: 재작성 후에도 부적합`);\n    }\n  }\n  \n  // 재작성되지 않은 부적합 항목은 그대로 유지\n  for (const [항목명, 검토내용] of Object.entries(기존부적합항목)) {\n    if (!재검토결과[항목명]) {\n      최종부적합항목[항목명] = 검토내용;\n    }\n  }\n  \n  const 적합개수 = Object.keys(최종적합항목).length;\n  const 부적합개수 = Object.keys(최종부적합항목).length;\n  const 전체판정 = 부적합개수 > 0 ? '일부 부적합' : '모두 적합';\n  \n  console.log('재검토 후 적합 항목:', Object.keys(최종적합항목));\n  console.log('재검토 후 부적합 항목:', Object.keys(최종부적합항목));\n  console.log('최종 판정:', 전체판정);\n  \n  return {\n    json: {\n      ...item.json,\n      품질검토결과: {\n        적합항목: 최종적합항목,\n        부적합항목: 최종부적합항목\n      },\n      전체판정: 전체판정,\n      적합개수: 적합개수,\n      부적합개수: 부적합개수,\n      재검토완료: true\n    }\n  };\n});"
+      },
+      "id": "8b39f018-cc0d-4504-995d-54634d55957f",
+      "name": "Parse Re-review Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1248,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-pro-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -2096,
+        1744
+      ],
+      "id": "6052ebb9-6f56-48ce-bd85-d7d3f04ad423",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "2QPudyE2hbqnh8C2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "chatgpt-4o-latest",
+          "mode": "list",
+          "cachedResultName": "chatgpt-4o-latest"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1520,
+        1744
+      ],
+      "id": "85977004-094b-4ce7-8a81-69c70fa7149f",
+      "name": "OpenAI Chat Model1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "===다음 AI 생성 결과의 품질을 검토해주세요.\n\n[중요]\n- 이 입력은 Prepare Quality Check 노드의 출력 JSON입니다.\n- 출력 시, 아래 입력 JSON을 **완전히 그대로** 유지하고\n  그 안에 \"quality_review\" 필드만 추가하세요.\n- 기존 필드 수정/삭제/요약 절대 금지.\n\n────────────────────────\n[입력 JSON - 반드시 그대로 출력에 포함할 것]\n{{ JSON.stringify($json, null, 2) }}\n\n────────────────────────\n[검토 대상 선정 규칙]\n- 아래 조건을 모두 만족하는 항목만 검토 대상입니다.\n  1) 값이 비어있지 않음\n  2) 공백/줄바꿈/기호 제거 후 의미 있는 텍스트가 30자 이상\n- 검토 대상이 하나도 없으면 quality_review는 {} 로 두세요.\n- 검토하지 않는 항목은 quality_review 내부에 키를 출력하지 마세요.\n\n────────────────────────\n[참조용: 추진내용 요약]\n{{ $json.AI_추진내용요약 }}\n\n────────────────────────\n[검토 대상 텍스트]\n\n{{ (String($json.AI_추진배경및목적 || '').replace(/[\\s'\"`]/g,'').length > 30)\n  ? ('■ AI 생성: 추진배경및목적\\n' + $json.AI_추진배경및목적 + '\\n\\n')\n  : '' }}\n\n{{ (String($json.AI_기대효과 || '').replace(/[\\s'\"`]/g,'').length > 30)\n  ? ('■ AI 생성: 기대효과\\n' + $json.AI_기대효과 + '\\n\\n')\n  : '' }}\n\n────────────────────────\n[출력 요청 — 반드시 준수]\n- 출력은 반드시 JSON 객체 1개만.\n- 위에 제공된 [입력 JSON]을 **모든 필드 그대로** 포함하고,\n  거기에 \"quality_review\" 필드만 추가하세요.\n\n출력 구조 예시:\n{\n  \"output\": \"...\",  // 입력 JSON의 모든 필드 유지\n  \"AI_추진배경및목적\": \"...\",\n  \"AI_추진내용요약\": \"...\",\n  \"AI_기대효과\": \"...\",\n  \"quality_review\": { 검토 결과 }\n}\n\n- quality_review에는 검토한 항목만 포함하세요.\n- 검토 대상이 하나도 없으면:\n  {\n    ...입력 JSON 전체,\n    \"quality_review\": {}\n  }",
+        "options": {
+          "systemMessage": "당신은 AI가 생성한 보고서 내용을 품질 기준에 따라 검토하는 전문 AI입니다.\n\n[최우선 규칙]\n1) 출력은 반드시 JSON 객체 1개만 허용됩니다.\n   - 마크다운, 코드펜스, 설명 문장, 줄글 출력 금지\n2) 입력으로 받은 JSON의 모든 필드는 그대로 유지해야 합니다.\n   - 삭제 / 변경 / 요약 / 재정렬 금지\n3) 검토 결과는 반드시 최상위 필드 \"quality_review\"에만 추가하세요.\n4) 검토 대상이 없는 경우에도 \"quality_review\": {} 는 반드시 포함하세요.\n5) 검토하지 않은 항목은 quality_review에 키 자체를 출력하지 마세요.\n\n────────────────────────\n[검토 기준]\n\n■ 추진배경및목적\n- 적합:\n  · 추진내용 요약에서 논리적으로 도출 가능\n  · 기관 내부 관점\n  · 2~4문장\n  · 금지 표현 없음\n- 부적합:\n  · 추진내용과의 연결 부족\n  · 외부 관점\n  · 문장 수 부적절\n  · 금지 표현 또는 추상적 표현\n\n■ 기대효과\n- 적합:\n  · 추진내용 기반\n  · 내부 효과 중심\n    (업무 효율, 역량 강화, 프로세스 개선, 데이터·의사결정 활용)\n  · 2~3개\n  · 음슴체\n  · 수치·금지 표현 없음\n- 부적합:\n  · 외부 관점\n  · 항목 수 부적절\n  · 존대말/수치/추상 표현\n  · 추진내용과 무관\n\n────────────────────────\n[quality_review 출력 형식]\n\n예) 추진배경및목적만 검토:\n{\n  \"...\": \"...\",\n  \"quality_review\": {\n    \"추진배경및목적\": {\n      \"판정\": \"적합\",\n      \"사유\": \"추진내용 요약에서 내부 AI 활용 필요성이 명확히 도출됨\",\n      \"개선사항\": \"\"\n    }\n  }\n}\n\n예) 기대효과만 검토:\n{\n  \"...\": \"...\",\n  \"quality_review\": {\n    \"기대효과\": {\n      \"판정\": \"부적합\",\n      \"사유\": \"외부 확산 효과 중심으로 서술되어 내부 관점이 부족함\",\n      \"개선사항\": \"직원 업무 효율성 및 내부 프로세스 개선 중심으로 재작성 필요\"\n    }\n  }\n}\n\n예) 검토 대상 없음:\n{\n  \"...\": \"...\",\n  \"quality_review\": {}\n}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -3184,
+        1392
+      ],
+      "id": "3c691d0a-36c3-461e-82c7-5d8da9061856",
+      "name": "AI Agent - 품질 검토"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 보완필요 항목을 엑셀용 데이터로 변환\nconst items = $input.all();\n\nreturn items.map(item => {\n  const output = item.json.output || {};\n  const 미흡항목 = output['2단계_항목별_검토']?.['미흡'] || {};\n  const 일부충족항목 = output['2단계_항목별_검토']?.['일부 충족'] || {};\n  const 메타데이터 = item.json.메타데이터 || {};\n  const 케이스분류 = output['1단계_케이스_분류'] || '알 수 없음';\n  \n  // 엑셀 행 데이터 생성\n  const rows = [];\n  \n  // 미흡 항목 추가\n  for (const [항목코드, 사유] of Object.entries(미흡항목)) {\n    rows.push({\n      문서제목: 메타데이터.문서제목 || '제목 없음',\n      평가항목: 메타데이터.평가항목 || '선택 안됨',\n      케이스분류: 케이스분류,\n      항목코드: 항목코드,\n      판정: '미흡',\n      사유: 사유,\n      제출시간: 메타데이터.제출시간 || ''\n    });\n  }\n  \n  // 일부 충족 항목 추가\n  for (const [항목코드, 사유] of Object.entries(일부충족항목)) {\n    rows.push({\n      문서제목: 메타데이터.문서제목 || '제목 없음',\n      평가항목: 메타데이터.평가항목 || '선택 안됨',\n      케이스분류: 케이스분류,\n      항목코드: 항목코드,\n      판정: '일부 충족',\n      사유: 사유,\n      제출시간: 메타데이터.제출시간 || ''\n    });\n  }\n  \n  console.log('=== 엑셀 데이터 변환 완료 ===');\n  console.log('총 보완필요 항목 수:', rows.length);\n  console.log('미흡:', Object.keys(미흡항목).length);\n  console.log('일부 충족:', Object.keys(일부충족항목).length);\n  \n  // 각 행을 개별 아이템으로 반환\n  return rows.map(row => ({ json: row }));\n}).flat();"
+      },
+      "id": "971fbb2a-f26c-482b-bde2-31d5b2d61e1d",
+      "name": "보완필요 항목 추출",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4880,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toFile"
+      },
+      "id": "9ff6c75d-af6a-491a-80e9-db06ebec8c35",
+      "name": "엑셀 파일 생성",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4656,
+        1488
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -4208,
+        1392
+      ],
+      "id": "f662b115-2390-49c1-8cd5-928bfb7601ad",
+      "name": "Merge (AI요약+AI생성)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// explode_label_items.js\nconst items = $input.all();\nconst out = [];\n\nfor (const item of items) {\n  const j = item.json || {};\n\n  const emit = (arr, type) => {\n    if (!Array.isArray(arr)) return;\n    for (const it of arr) {\n      out.push({\n        json: {\n          type,\n          항목명: it.항목명 ?? it.항목 ?? null,\n          출처: it.출처 ?? null,\n          찾은섹션: it.찾은섹션 ?? []\n        }\n      });\n    }\n  };\n\n  emit(j.원본사용, \"원본사용\");\n  emit(j.AI요약, \"AI요약\");\n  emit(j.AI생성, \"AI생성\");\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4656,
+        1296
+      ],
+      "id": "190931b5-146c-427a-8848-e7cdc7b170cc",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "원본사용",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "aef46e70-677b-4e47-baab-d1519c99ec20"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "원본사용"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f5d6923f-44b3-4dc5-8768-25e46ee7524a",
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "AI요약",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "AI요약"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fc3f64b9-4459-475c-afdd-39aaf913207d",
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "AI생성",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "AI생성"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -4432,
+        1280
+      ],
+      "id": "f3326a0c-f53f-4ade-8789-9479b90ceca4",
+      "name": "Switch2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI 통합 처리를 위한 데이터 준비\nconst items = $input.all();\n\nreturn items.map(item => {\n  const 원본사용 = item.json.원본사용 || [];\n  const AI요약 = item.json.AI요약 || [];\n  const AI생성 = item.json.AI생성 || [];\n  const 원본데이터 = item.json.원본데이터 || {};\n  \n  const 추진배경및목적항목 = 원본사용.find(x => x.항목명 === '추진배경및목적');\n  const has추진배경및목적 = 추진배경및목적항목 ? true : false;\n  let 추진배경및목적원문 = '';\n  \n  if (has추진배경및목적 && 추진배경및목적항목.찾은섹션 && 추진배경및목적항목.찾은섹션.length > 0) {\n    const 첫섹션 = 추진배경및목적항목.찾은섹션[0];\n    추진배경및목적원문 = typeof 첫섹션.내용 === 'string' \n      ? 첫섹션.내용 \n      : JSON.stringify(첫섹션.내용);\n  }\n  \n  const 추진내용항목 = AI요약.find(x => x.항목명 === '추진내용');\n  let 추진내용원문 = '';\n  \n  if (추진내용항목 && 추진내용항목.찾은섹션 && 추진내용항목.찾은섹션.length > 0) {\n    추진내용원문 = 추진내용항목.찾은섹션.map(섹션 => {\n      const 내용 = typeof 섹션.내용 === 'string' \n        ? 섹션.내용 \n        : JSON.stringify(섹션.내용);\n      return `【${섹션.제목}】\\n${내용}`;\n    }).join('\\n\\n');\n  }\n  \n  const 기대효과항목 = 원본사용.find(x => x.항목명 === '추진성과또는기대효과');\n  const has기대효과 = 기대효과항목 ? true : false;\n  let 기대효과원문 = '';\n  \n  if (has기대효과 && 기대효과항목.찾은섹션 && 기대효과항목.찾은섹션.length > 0) {\n    const 첫섹션 = 기대효과항목.찾은섹션[0];\n    기대효과원문 = typeof 첫섹션.내용 === 'string' \n      ? 첫섹션.내용 \n      : JSON.stringify(첫섹션.내용);\n  }\n  \n  return {\n    json: {\n      ...item.json,\n      has추진배경및목적: has추진배경및목적,\n      추진배경및목적원문: 추진배경및목적원문,\n      추진내용원문: 추진내용원문,\n      has기대효과: has기대효과,\n      기대효과원문: 기대효과원문\n    }\n  };\n});"
+      },
+      "id": "327f5dee-4d1b-4f5f-b848-6b6a27f7cd80",
+      "name": "Prepare AI 통합 처리",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3984,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "all-pass",
+                    "leftValue": "={{ Object.values($json.quality_review || {}).every(item => item.판정 === '적합') && Object.keys($json.quality_review || {}).length > 0 }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "적합"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "some-fail",
+                    "leftValue": "={{ Object.values($json.quality_review || {}).some(item => item.판정 === '부적합') }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "부적합"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f5013bdf-dde8-4035-9629-eadea7f036a2",
+      "name": "Switch - 품질 판정1",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -2608,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1024,
+        1280
+      ],
+      "id": "e62cc2fb-8248-4e13-99a1-04012ef03c02",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate HTML Report - 추진기간 추가\nconst items = $input.all();\n\nfunction escapeHtml(text) {\n  const map = {\n    '&': '&amp;',\n    '<': '&lt;',\n    '>': '&gt;',\n    '\"': '&quot;',\n    \"'\": '&#039;'\n  };\n  return String(text || '').replace(/[&<>\\\"']/g, m => map[m]);\n}\n\nfunction formatText(text) {\n  if (!text) return '<span style=\"color: #999; font-style: italic;\">내용 없음</span>';\n  return escapeHtml(text).replace(/\\n/g, '<br>');\n}\n\nreturn items.map(item => {\n  const 최종보고서 = item.json.최종보고서 || {};\n  \n  const html = `\n<!DOCTYPE html>\n<html lang=\"ko\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>AI 도입활용 사례 정성보고서</title>\n  <style>\n    * {\n      margin: 0;\n      padding: 0;\n      box-sizing: border-box;\n    }\n    \n    body {\n      font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;\n      line-height: 1.8;\n      color: #1f2937;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      padding: 40px 20px;\n      min-height: 100vh;\n    }\n    \n    .container {\n      max-width: 1200px;\n      margin: 0 auto;\n      background: white;\n      border-radius: 20px;\n      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);\n      overflow: hidden;\n    }\n    \n    .header {\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      padding: 60px 40px;\n      text-align: center;\n      position: relative;\n      overflow: hidden;\n    }\n    \n    .header::before {\n      content: '';\n      position: absolute;\n      top: -50%;\n      left: -50%;\n      width: 200%;\n      height: 200%;\n      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);\n      animation: pulse 15s ease-in-out infinite;\n    }\n    \n    @keyframes pulse {\n      0%, 100% { transform: scale(1); }\n      50% { transform: scale(1.1); }\n    }\n    \n    .header h1 {\n      font-size: 2.5em;\n      font-weight: 700;\n      margin-bottom: 20px;\n      position: relative;\n      z-index: 1;\n      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);\n    }\n    \n    .content {\n      padding: 40px;\n    }\n    \n    .section {\n      margin-bottom: 50px;\n      padding: 30px;\n      background: #ffffff;\n      border-radius: 15px;\n      border: 2px solid #e5e7eb;\n      transition: all 0.3s ease;\n    }\n    \n    .section:hover {\n      border-color: #667eea;\n      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.1);\n      transform: translateY(-2px);\n    }\n    \n    .section-header {\n      margin-bottom: 20px;\n      padding-bottom: 15px;\n      border-bottom: 2px solid #e5e7eb;\n    }\n    \n    .section-title {\n      font-size: 1.5em;\n      font-weight: 700;\n      color: #1e293b;\n      display: flex;\n      align-items: center;\n      gap: 12px;\n    }\n    \n    .section-icon {\n      width: 40px;\n      height: 40px;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      border-radius: 10px;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      font-size: 1.3em;\n      box-shadow: 0 4px 10px rgba(102, 126, 234, 0.3);\n    }\n    \n    .section-content {\n      font-size: 1.05em;\n      color: #374151;\n      line-height: 2;\n      white-space: pre-wrap;\n    }\n    \n    .footer {\n      background: #f8fafc;\n      padding: 30px 40px;\n      text-align: center;\n      color: #64748b;\n      font-size: 0.95em;\n      border-top: 3px solid #e2e8f0;\n    }\n    \n    .footer strong {\n      color: #1e293b;\n    }\n    \n    @media print {\n      body {\n        background: white;\n        padding: 0;\n      }\n      \n      .container {\n        box-shadow: none;\n        border-radius: 0;\n      }\n      \n      .section {\n        page-break-inside: avoid;\n      }\n    }\n    \n    @media (max-width: 768px) {\n      .header h1 {\n        font-size: 1.8em;\n      }\n      \n      .content {\n        padding: 20px;\n      }\n      \n      .section {\n        padding: 20px;\n      }\n    }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>AI 도입활용 사례 정성보고서</h1>\n    </div>\n    \n    <div class=\"content\">\n      <div class=\"section\">\n        <div class=\"section-header\">\n          <div class=\"section-title\">\n            <div class=\"section-icon\">📌</div>\n            추진실적명\n          </div>\n        </div>\n        <div class=\"section-content\">\n          ${formatText(최종보고서.추진실적명)}\n        </div>\n      </div>\n      \n      <div class=\"section\">\n        <div class=\"section-header\">\n          <div class=\"section-title\">\n            <div class=\"section-icon\">📅</div>\n            추진기간\n          </div>\n        </div>\n        <div class=\"section-content\">\n          ${formatText(최종보고서.추진기간)}\n        </div>\n      </div>\n      \n      <div class=\"section\">\n        <div class=\"section-header\">\n          <div class=\"section-title\">\n            <div class=\"section-icon\">🎯</div>\n            추진배경 및 목적\n          </div>\n        </div>\n        <div class=\"section-content\">\n          ${formatText(최종보고서.추진배경및목적)}\n        </div>\n      </div>\n      \n      <div class=\"section\">\n        <div class=\"section-header\">\n          <div class=\"section-title\">\n            <div class=\"section-icon\">📋</div>\n            추진내용\n          </div>\n        </div>\n        <div class=\"section-content\">\n          ${formatText(최종보고서.추진내용)}\n        </div>\n      </div>\n      \n      <div class=\"section\">\n        <div class=\"section-header\">\n          <div class=\"section-title\">\n            <div class=\"section-icon\">✨</div>\n            추진성과 또는 기대효과\n          </div>\n        </div>\n        <div class=\"section-content\">\n          ${formatText(최종보고서.추진성과또는기대효과)}\n        </div>\n      </div>\n      \n      <div class=\"section\">\n        <div class=\"section-header\">\n          <div class=\"section-title\">\n            <div class=\"section-icon\">🚀</div>\n            향후계획\n          </div>\n        </div>\n        <div class=\"section-content\">\n          ${formatText(최종보고서.향후계획)}\n        </div>\n      </div>\n    </div>\n    \n    <div class=\"footer\">\n      <strong>생성 시간:</strong> ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n    </div>\n  </div>\n</body>\n</html>\n  `.trim();\n  \n  // ✅ HTML을 바이너리로 변환\n  const buffer = Buffer.from(html, 'utf-8');\n  const fileName = `AI_도입활용_사례_정성보고서_${new Date().toISOString().split('T')[0]}.html`;\n  \n  return {\n    json: item.json,\n    binary: {\n      data: {\n        data: buffer.toString('base64'),\n        mimeType: 'text/html',\n        fileName: fileName,\n        fileExtension: 'html'\n      }\n    }\n  };\n});"
+      },
+      "id": "3ad75150-294d-4162-b6b3-d21b6ade5ee4",
+      "name": "Generate HTML Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// label_report_items.js - 구조화PDF(Structure PDF Data 결과)를 사용해서 라벨링\nconst items = $input.all();\n\nfunction asText(v) {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  try { return JSON.stringify(v); } catch (e) { return String(v); }\n}\n\nreturn items.map(item => {\n  const structured = item.json.구조화PDF || item.json.원본데이터 || item.json;\n  const data = structured.json ? structured.json : structured;\n\n  function findSectionsByKeywords(dataObj, keywords) {\n    const found = [];\n    if (!dataObj || typeof dataObj !== 'object') return found;\n\n    for (const [sectionTitle, sectionContent] of Object.entries(dataObj)) {\n      if (sectionTitle === '메타데이터' || sectionTitle === '원본텍스트') continue;\n\n      const titleLower = String(sectionTitle).toLowerCase();\n      for (const keyword of keywords) {\n        if (titleLower.includes(String(keyword).toLowerCase())) {\n          found.push({ 제목: sectionTitle, 내용: sectionContent });\n          break;\n        }\n      }\n    }\n    return found;\n  }\n\n  const docTitle = data.메타데이터?.문서제목 || '';\n  const 추진실적명데이터 = {\n    항목명: '추진실적명',\n    출처: '구조화PDF.메타데이터.문서제목',\n    찾은섹션: docTitle ? [{ 제목: '문서제목', 내용: docTitle }] : []\n  };\n\n  const 추진기간섹션 = findSectionsByKeywords(data, ['기간', '일정', '추진기간', '추진 일정']);\n  const 추진기간데이터 = { 항목명: '추진기간', 출처: '기간/일정 섹션', 찾은섹션: 추진기간섹션 };\n\n  const 추진배경및목적섹션 = findSectionsByKeywords(data, ['배경', '목적', '취지', '추진배경', '추진 목적', '필요성']);\n  const 추진배경및목적데이터 = { 항목명: '추진배경및목적', 출처: '배경/목적/취지 섹션', 찾은섹션: 추진배경및목적섹션 };\n\n  const 추진내용섹션 = findSectionsByKeywords(data, ['추진', '내용', '방향', '개요', '방법', '지원', '운영', '도입']);\n  const 추진내용데이터 = { 항목명: '추진내용', 출처: '내용/방향/개요/방법 섹션', 찾은섹션: 추진내용섹션 };\n\n  const 기대효과섹션 = findSectionsByKeywords(data, ['기대효과', '효과', '성과', '결과']);\n  const 추진성과또는기대효과데이터 = { 항목명: '추진성과또는기대효과', 출처: '기대효과/성과 섹션', 찾은섹션: 기대효과섹션 };\n\n  const 향후계획섹션 = findSectionsByKeywords(data, ['향후', '계획', '예정', '추진계획', '향후 추진', '추진 예정']);\n  const 향후계획데이터 = { 항목명: '향후계획', 출처: '향후/계획/예정 섹션', 찾은섹션: 향후계획섹션 };\n\n  const 원본사용 = [];\n  const AI요약 = [];\n  const AI생성 = [];\n\n  원본사용.push(추진실적명데이터);\n  원본사용.push(추진기간데이터);\n\n  if ((추진배경및목적섹션 || []).length === 0) AI생성.push(추진배경및목적데이터);\n  else 원본사용.push(추진배경및목적데이터);\n\n  AI요약.push(추진내용데이터);\n\n  if ((기대효과섹션 || []).length === 0) AI생성.push(추진성과또는기대효과데이터);\n  else 원본사용.push(추진성과또는기대효과데이터);\n\n  if ((향후계획섹션 || []).length === 0) AI생성.push(향후계획데이터);\n  else 원본사용.push(향후계획데이터);\n\n  return {\n    json: {\n      원본사용,\n      AI요약,\n      AI생성,\n      원본데이터: data,\n      구조화PDF: data\n    }\n  };\n});\n"
+      },
+      "id": "5ff7bdb7-eb55-441f-9851-086245cbf7ae",
+      "name": "Label Report Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4880,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-pro-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -3168,
+        1648
+      ],
+      "id": "b96c41d9-5d89-4c2b-a00a-4f7c378d4141",
+      "name": "Google Gemini Chat Model3",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "2QPudyE2hbqnh8C2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai_case_report",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -6992,
+        1392
+      ],
+      "id": "0aee3f7a-93b1-4400-8d3b-60ac3a2514fb",
+      "name": "Webhook",
+      "webhookId": "여기에-webhook-경로"
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhook = $('Webhook').first().json;\nconst body = webhook.body || webhook;\n\nreturn [{\n  json: {\n    tracking_id: body.tracking_id || \"\"\n  },\n  binary: $input.item.binary\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        1296
+      ],
+      "id": "5d05f9c1-e053-4eba-9c88-a7b9ba182c40",
+      "name": "결과 준비"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:8000/api/webhooks/n8n/upload/{{ $json.tracking_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-Callback-Secret",
+              "value": "tucon-n8n"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -48,
+        1296
+      ],
+      "id": "ad782f01-0fde-4b40-af0a-da218649a537",
+      "name": "파일 업로드"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/webhooks/n8n/callback",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-Callback-Secret",
+              "value": "tucon-n8n"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"execution_id\": \"{{ $('결과 준비').first().json.tracking_id }}\",\n  \"status\":\"completed\",\n  \"result_data\": {\n    \"download_url\": \"{{ $json.download_url }}\",\n    \"filename\": \"{{      $json.filename }}\",\n    \"size\": {{ $json.size || 0 }},\n    \"message\": \"작업 완료\"\n  },\n  \"finished_at\":   \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        160,
+        1296
+      ],
+      "id": "5f161b62-3a8d-40d8-b464-4befbc89f685",
+      "name": "콜백 전송"
+    },
+    {
+      "parameters": {
+        "formTitle": "데이터기반행정 실태평가 'AI 도입활용 사례 및 추진노력' 정성보고서 작성 서비스",
+        "formDescription": "데이터기반행정 실태평가 「3-3-2 AI 도입활용 사례 및 추진노력」 지표와 관련된 활용 지원 실적 증빙자료(PDF)를 업로드해주세요.\n\n✓ 실적 제출 : 최대 3건\n✓ 파일 수 : 실적별 제한 없음\n✓ 파일 형식 : PDF 필수",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "실적 1",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "실적 2",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf"
+            },
+            {
+              "fieldLabel": "실적 3",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf"
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "25a1a54b-a74c-4e0c-ad76-f2b78fb882e5",
+      "name": "Form Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -5744,
+        2304
+      ],
+      "webhookId": "2fc580ee-e3d2-49e5-8b16-263ff059d1d0"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 실적 1~3의 모든 PDF를 개별 아이템으로 펼치기\nconst formItem   = $input.first();\nconst formJson   = formItem.json;\nconst formBinary = formItem.binary || {};\nconst allBinaryKeys = Object.keys(formBinary);\n\nconsole.log('=== Expand All Files 시작 ===');\nconsole.log('바이너리 키 목록:', allBinaryKeys);\n\nconst 실적필드목록 = ['실적 1', '실적 2', '실적 3'];\nconst outputItems = [];\n\nfor (let i = 0; i < 실적필드목록.length; i++) {\n  const fieldName = 실적필드목록[i];\n  const 실적번호  = i + 1;\n  const files = formJson[fieldName];\n\n  if (!files || !Array.isArray(files) || files.length === 0) {\n    console.log(`실적 ${실적번호}: 파일 없음, 건너뜀`);\n    continue;\n  }\n\n  for (let j = 0; j < files.length; j++) {\n    const file     = files[j];\n    const fileName = file.filename || '알 수 없음';\n    const mimeType = file.mimetype || 'application/pdf';\n\n    let matchedKey = allBinaryKeys.find(key => {\n      const b = formBinary[key];\n      return b.fileName === fileName || b.filename === fileName;\n    });\n\n    if (!matchedKey) {\n      let globalIdx = 0;\n      for (let pi = 0; pi < i; pi++) {\n        const pf = formJson[실적필드목록[pi]];\n        if (pf && Array.isArray(pf)) globalIdx += pf.length;\n      }\n      globalIdx += j;\n      matchedKey = allBinaryKeys[globalIdx];\n      console.log(`실적${실적번호} 파일명 매칭 실패 → 인덱스(${globalIdx}) 대체: ${matchedKey}`);\n    }\n\n    if (!matchedKey || !formBinary[matchedKey]) {\n      console.log(`실적${실적번호} - ${fileName}: 바이너리 없음, 건너뜀`);\n      continue;\n    }\n\n    const globalItemIndex = outputItems.length;\n\n    outputItems.push({\n      json: {\n        _meta: {\n          _itemIndex:    globalItemIndex,\n          실적번호:       실적번호,\n          실적인덱스:     i,\n          파일명:         fileName,\n          파일순번:       j + 1,\n          실적내파일수:   files.length,\n          평가항목:       formJson['평가 항목'] || 'AI 도입활용 사례',\n          제출시간:       formJson.submittedAt || ''\n        }\n      },\n      binary: {\n        data: {\n          ...formBinary[matchedKey],\n          mimeType:      formBinary[matchedKey].mimeType || mimeType,\n          fileExtension: formBinary[matchedKey].fileExtension || 'pdf'\n        }\n      }\n    });\n\n    console.log(`실적${실적번호} - 파일 ${j+1}: ${fileName} → 아이템 인덱스 ${globalItemIndex}`);\n  }\n}\n\nconsole.log(`=== 총 ${outputItems.length}개 아이템 생성 완료 ===`);\nreturn outputItems;"
+      },
+      "id": "f141dbe7-3828-40ec-9b4e-cb0faa335650",
+      "name": "Expand All Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5520,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 실적번호(숫자 1~3) 기준으로 그룹핑\nconst items = $input.all();\nconst groups = {};\n\nfor (const item of items) {\n  const meta = item.json.메타데이터 || {};\n  const 실적번호 = meta.실적번호;\n\n  if (실적번호 === undefined || 실적번호 === null || 실적번호 === '알 수 없음') {\n    console.log('경고: 실적번호 불명 아이템:', JSON.stringify(meta));\n    continue;\n  }\n\n  const key = String(실적번호);\n\n  if (!groups[key]) {\n    groups[key] = {\n      실적번호:   실적번호,\n      실적인덱스: meta.실적인덱스 ?? -1,\n      평가항목:   meta.평가항목  || '',\n      제출시간:   meta.제출시간  || '',\n      파일수:     0,\n      파일목록:   [],\n      문서목록:   []\n    };\n  }\n\n  groups[key].파일목록.push(meta.원본파일명);\n  groups[key].문서목록.push(item.json);\n  groups[key].파일수 = groups[key].문서목록.length;\n}\n\nconst sorted = Object.values(groups)\n  .sort((a, b) => a.실적인덱스 - b.실적인덱스)\n  .map(g => ({ json: g }));\n\nconsole.log('그룹핑 결과:');\nsorted.forEach(s =>\n  console.log(`  실적 ${s.json.실적번호}: ${s.json.파일수}개 - [${s.json.파일목록.join(', ')}]`)\n);\n\nreturn sorted;"
+      },
+      "id": "c85a464b-199b-4d95-8797-a306cd1d9368",
+      "name": "Group by 실적",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4848,
+        2304
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e549cd5d-62b1-411c-86af-848bbb1ef3e7",
+      "name": "Read PDF1",
+      "type": "n8n-nodes-base.readPDF",
+      "typeVersion": 1,
+      "position": [
+        -5296,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items         = $input.all();\nconst expandedItems = $('Expand All Files').all();\n\nconsole.log(`Structure PDF Data: items=${items.length}, expandedItems=${expandedItems.length}`);\n\nreturn items.map((item, idx) => {\n  const text = item.json.text || '';\n\n  const expandedItem = expandedItems[idx];\n  const meta = (expandedItem && expandedItem.json && expandedItem.json._meta)\n    ? expandedItem.json._meta\n    : {};\n\n  const 실적번호     = meta.실적번호     !== undefined ? meta.실적번호     : '알 수 없음';\n  const 실적인덱스   = meta.실적인덱스   !== undefined ? meta.실적인덱스   : -1;\n  const 파일명       = meta.파일명       || '알 수 없음';\n  const 파일순번     = meta.파일순번     || 1;\n  const 실적내파일수 = meta.실적내파일수 || 1;\n  const 평가항목     = meta.평가항목     || 'AI 도입활용 사례';\n  const 제출시간     = meta.제출시간     || '';\n\n  console.log(`[${idx}] 실적번호: ${실적번호}, 파일명: ${파일명}`);\n\n  function extractMainSections(text) {\n    const sections = {};\n    const matches  = [...text.matchAll(/□\\s*([^\\n]+)/g)];\n    for (let i = 0; i < matches.length; i++) {\n      const title = matches[i][1].trim();\n      const start = matches[i].index + matches[i][0].length;\n      const end   = i < matches.length - 1 ? matches[i+1].index : text.length;\n      sections[title] = text.slice(start, end).trim();\n    }\n    return sections;\n  }\n\n  function parseSubSections(content) {\n    const matches = [...content.matchAll(/❍\\s*\\(\\s*([^)]+)\\s*\\)/g)];\n    if (matches.length === 0) return content.replace(/^\\s*❍\\s*/gm, '').trim();\n    const result = {};\n    for (let i = 0; i < matches.length; i++) {\n      const sub   = matches[i][1].trim();\n      const start = matches[i].index + matches[i][0].length;\n      const end   = i < matches.length - 1 ? matches[i+1].index : content.length;\n      result[sub] = content.slice(start, end)\n        .replace(/^\\s*-\\s*/gm, '').replace(/^\\s*❍\\s*/gm, '').trim();\n    }\n    return result;\n  }\n\n  const mainSections = extractMainSections(text);\n\n  const structuredData = {\n    메타데이터: {\n      문서제목:     파일명.replace(/\\.pdf$/i, ''),\n      원본파일명:   파일명,\n      실적번호:     실적번호,\n      실적인덱스:   실적인덱스,\n      파일순번:     파일순번,\n      실적내파일수: 실적내파일수,\n      평가항목:     평가항목,\n      제출시간:     제출시간\n    }\n  };\n\n  for (const [sTitle, sContent] of Object.entries(mainSections)) {\n    structuredData[sTitle] = parseSubSections(sContent);\n  }\n  structuredData['원본텍스트'] = text;\n\n  return { json: structuredData };\n});"
+      },
+      "id": "d58c463f-0fdb-4f4a-b9bc-2f063f5da5c0",
+      "name": "Structure PDF Data1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5072,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 평가기준 검토용: 실적별 원본텍스트를 합쳐서 AI 검토 데이터 준비\nconst items = $input.all();\n\nreturn items.map(item => {\n  const 실적번호 = item.json.실적번호;\n  const 평가항목 = item.json.평가항목 || 'AI 도입활용 사례';\n  const 문서목록 = item.json.문서목록 || [];\n\n  const 검토대상 = 문서목록.map((doc, i) => {\n    const 파일명 = doc.메타데이터?.원본파일명 || `파일${i+1}`;\n    return `[문서 ${i+1}: ${파일명}]\\n${doc.원본텍스트 || ''}`;\n  }).join('\\n\\n---\\n\\n');\n\n  console.log(`실적 ${실적번호} 평가검토 데이터 준비: ${검토대상.length}자`);\n\n  return {\n    json: {\n      ...item.json,\n      평가항목,\n      검토대상: 검토대상.trim()\n    }\n  };\n});"
+      },
+      "id": "ba51a942-8aa9-45ac-a710-aa3a7e744ef4",
+      "name": "Prepare AI Review1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4624,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build AI Prompt1 - AI가 항목 존재 여부를 직접 판단하고 작성까지 수행하는 단일 프롬프트 생성\nconst items = $input.all();\n\nreturn items.map(item => {\n  const 실적번호        = item.json.실적번호;\n  const 파일목록        = item.json.파일목록 || [];\n  const 전체원본텍스트  = item.json.전체원본텍스트 || '';\n  const 기준일          = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });\n\n  const 파일명목록텍스트 = 파일목록\n    .map((f, i) => `${i + 1}. ${f.replace(/\\.pdf$/i, '').replace(/[_\\[\\]()]/g, ' ').replace(/\\s+/g, ' ').trim()}`)\n    .join('\\n');\n\n  const 프롬프트 = `아래는 실적 ${실적번호}의 증빙 PDF 문서들에서 추출한 원본 내용입니다.\n이 내용을 읽고, 각 항목이 문서에 존재하는지 직접 판단한 뒤, 아래 지시에 따라 정성보고서를 작성해주세요.\n\n${'='.repeat(60)}\n📄 원본 문서 내용\n${'='.repeat(60)}\n${전체원본텍스트.slice(0, 14000)}\n\n${'='.repeat(60)}\n📁 파일명 목록 (추진실적명 작성 참고용)\n${'='.repeat(60)}\n${파일명목록텍스트}\n\n${'='.repeat(60)}\n🗓 실행 기준일: ${기준일}\n${'='.repeat(60)}\n\n${'='.repeat(60)}\n✍️ 항목별 작성 지시\n${'='.repeat(60)}\n\n## 항목 1. 추진실적명\n- 파일명에서 연도·기관명·사업명 핵심 키워드를 추출하여 자연스러운 실적명으로 정리\n- 불필요한 기호, 버전 표기, 행정 접미사(결과보고서·계획안·최종본 등) 제거\n- 여러 파일이 있으면 공통 사업명을 대표 실적명으로 추출\n\n## 항목 2. 추진기간\n- 원본 문서에서 사업/활동의 추진 기간을 찾아 간결하게 서술 (예: 2025년 3월 ~ 2025년 8월)\n- 명시적 기간이 없으면 문서 작성일, 보고일, 행사일 등 날짜 정보를 최대한 활용하여 추론\n\n## 항목 3. 추진배경 및 목적\n판단 기준:\n- 원본 문서에 배경·목적·필요성·취지·현황·문제점에 해당하는 내용이 있으면 → 해당 내용을 정리하여 작성\n- 없으면 → 추진내용을 바탕으로 논리적으로 도출되는 배경을 작성\n\n작성 규칙:\n- 번호 목록 형식\n- 음슴체(~임, ~함, ~필요함, ~있음) 사용\n- 존댓말(~습니다, ~합니다) 절대 금지\n- 2~4개 항목\n\n## 항목 4. 추진내용\n판단 기준:\n- 원본 문서에 추진내용·활동내용·수행내용에 해당하는 내용이 있으면 → 요약하여 작성\n- 내용이 1500자 이하면: 중복 제거/간결화(30% 이상 축약), 원문 구조 유지\n- 내용이 1500자 초과면: 핵심 내용 중심으로 구조화 요약\n- 일정/기간 표현은 원문 그대로 유지\n\n작성 규칙:\n- 항목-세부내용 계층 구조\n- 형식: 번호. 항목명 → 하이픈(-)으로 세부내용 나열\n- 음슴체 사용\n\n## 항목 5. 기대효과\n판단 기준:\n- 원본 문서에 기대효과·효과·성과·결과에 해당하는 내용이 있으면 → 아래 적합 기준으로 검토\n  · 적합: 추진내용 기반, 내부 효과 중심, 2~3개, 음슴체, 수치·존댓말 없음\n  · 부적합(외부 관점·존댓말·수치·추진내용 무관): 새로 작성\n- 없으면 → 추진내용에 근거하여 신규 작성\n\n작성 규칙:\n- 내부 관점 중심(업무 효율, 역량 강화, 의사결정 지원)\n- 2~3개 항목, 번호 목록\n- 음슴체 사용, 수치·존댓말 금지\n\n## 항목 6. 향후계획\n판단 기준:\n- 원본 문서에 향후계획·추진계획·예정에 해당하는 내용이 있으면 → 해당 내용을 바탕으로 작성\n- 없으면 → 아래 우선순위로 작성\n  1순위) 추진내용 안에 실행 기준일(${기준일}) 이후 미래 일정이 있으면 → 해당 일정 연결 후속 업무 중심 작성\n  2순위) 없으면 → 추진내용을 바탕으로 포괄적 후속 추진 방향 작성\n\n작성 규칙:\n- 2~3개 항목, 번호 형태\n- 음슴체 사용\n- 실제 후속 추진 방향이 드러나게 (추상적 효과 나열 금지)\n\n${'='.repeat(60)}\n⚠️ 공통 주의사항\n${'='.repeat(60)}\n- 문서에 없는 사실, 수치, 기관명, 사업명을 절대 창작하지 마세요.\n- 각 항목은 원본 문서에서 해당 내용을 직접 찾아 판단하세요.\n- 내용을 찾지 못한 경우에만 추진내용을 바탕으로 합리적으로 추론하세요.\n\n${'='.repeat(60)}\n📤 출력 형식 (JSON만 출력, 다른 텍스트 절대 금지)\n${'='.repeat(60)}\n{\n  \"추진실적명\": \"실적명\",\n  \"추진기간\": \"기간\",\n  \"추진배경및목적\": \"1. ...\\n2. ...\",\n  \"추진내용\": \"1. 항목명\\n- 세부내용\\n2. 항목명\\n- 세부내용\",\n  \"기대효과\": \"1. ...\\n2. ...\",\n  \"향후계획\": \"1. ...\\n2. ...\"\n}`;\n\n  return {\n    json: {\n      ...item.json,\n      _ai_prompt: 프롬프트\n    }\n  };\n});"
+      },
+      "id": "218838a1-9bf4-4710-97b9-4479b6ba960f",
+      "name": "Build AI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4176,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI Response1 - AI Agent 단일 JSON 응답 파싱\nconst items = $input.all();\nconst buildItems = $('Build AI Prompt').all();\n\nfunction parseReportJson(aiOutput, 파일목록) {\n  try {\n    const cleaned = String(aiOutput)\n      .replace(/```json\\s*/gi, '')\n      .replace(/```\\s*/g, '')\n      .trim();\n    return JSON.parse(cleaned);\n  } catch (e) {\n    console.error('JSON 파싱 실패:', e.message);\n    return {\n      추진실적명: 파일목록.join(', '),\n      추진기간: '',\n      추진배경및목적: '',\n      추진내용: String(aiOutput),\n      기대효과: '',\n      향후계획: ''\n    };\n  }\n}\n\nreturn items.map((item, idx) => {\n  const 원본데이터 = buildItems[idx]?.json || {};\n  const 실적번호  = 원본데이터.실적번호;\n  const 파일목록  = 원본데이터.파일목록 || [];\n  const 제출시간  = 원본데이터.제출시간 || '';\n  const output    = 원본데이터.output;\n\n  const aiOutput = item.json.output || item.json.text || item.json.response || '';\n  console.log(`실적 ${실적번호} AI 응답 (앞 300자):`, String(aiOutput).slice(0, 300));\n\n  const 보고서 = parseReportJson(aiOutput, 파일목록);\n\n  return {\n    json: {\n      실적번호,\n      파일목록,\n      제출시간,\n      output,\n      최종보고서: {\n        추진실적명:     보고서.추진실적명     || 파일목록.join(', '),\n        추진기간:       보고서.추진기간       || '',\n        추진배경및목적: 보고서.추진배경및목적 || '',\n        추진내용:       보고서.추진내용       || '',\n        기대효과:       보고서.기대효과       || '',\n        향후계획:       보고서.향후계획       || ''\n      }\n    }\n  };\n});"
+      },
+      "id": "e87fb9f8-2eef-4aa7-aa2c-7c24db32ae55",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3600,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json._ai_prompt }}",
+        "options": {
+          "systemMessage": "당신은 공공기관 AI 도입활용 사례 정성보고서 작성 전문가입니다.\n\n## 역할\n제공된 원본 문서를 직접 읽고, 각 항목(추진배경·추진내용·기대효과·향후계획 등)이 문서에 존재하는지 스스로 판단합니다.\n- 존재하면: 해당 내용을 지정된 형식에 맞게 정리합니다.\n- 없으면: 추진내용을 바탕으로 합리적으로 추론하여 작성합니다.\n\n## 작성 원칙\n1. 반드시 제공된 원본 문서 내용에만 근거합니다.\n2. 문서에 없는 사실, 수치, 기관명, 사업명을 절대 창작하지 않습니다.\n3. 각 항목의 형식 규칙을 반드시 준수합니다.\n4. 응답은 반드시 순수 JSON 형식으로만 출력합니다.\n   - 마크다운 코드블록(```json 등), 설명 텍스트, 주석 등 JSON 외 어떤 문자도 절대 포함하지 않습니다.\n\n## 항목별 형식 규칙\n- 추진배경및목적, 기대효과, 향후계획: 번호 목록 + 음슴체(~임, ~함, ~있음, ~필요함)\n- 추진내용: 번호. 항목명 → 다음 줄에 하이픈(-)으로 세부내용 나열\n- 존댓말(~습니다, ~합니다) 절대 금지\n- 수치는 원본에 있는 경우에만 사용, 없으면 임의로 만들지 않음"
+        }
+      },
+      "id": "e1948d9a-dd30-4d4a-ac01-80e0667b6927",
+      "name": "AI Agent - 보고서 작성 및 검토",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -3952,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 1. 데이터 입력 및 구조화\n### [입력 정보]\n✓ 실적 제출 : 최대 3건\n✓ 파일 수 : 실적별 제한 없음\n✓ 파일 형식 : PDF 필수",
+        "height": 448,
+        "width": 1072
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -5776,
+        2048
+      ],
+      "id": "c3348fcb-ba90-4f12-b030-7e2a4c5ddce8",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## 2. 보고서 작성 및 검토\n### [관련 정보]\n1. 보고서 필수 작성 항목\n- 추진 실적명, 추진 기간, 추진 배경 및 목적, 추진 내용, 기대효과, 향후 계획\n\n2. 프롬프트\n- 보고서 내 있는 항목 : 원본 사용, AI 요약 / 보고서 내 없는 항목 : AI 작성\n- 추진 내용 : 1500자 이상일 경우에 요약\n",
+        "height": 448,
+        "width": 1232
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -4688,
+        2048
+      ],
+      "id": "96ca7683-d197-4a00-a797-680349db3fe9",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 3. 보고서 저장\n### [관련 정보]\n1. 저장 형식 : HTML\n",
+        "height": 448,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3440,
+        2048
+      ],
+      "id": "1d49a50f-fd0e-4688-9ccc-5d2205badb90",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Label Report Items2 - 키워드 라벨링 없이 원본텍스트만 조립\nconst items = $input.all();\n\nreturn items.map(item => {\n  const 실적번호   = item.json.실적번호;\n  const 실적인덱스 = item.json.실적인덱스;\n  const 제출시간   = item.json.제출시간;\n  const 평가항목   = item.json.평가항목;\n  const 파일목록   = item.json.파일목록 || [];\n  const 문서목록   = item.json.문서목록 || [];\n  const output     = item.json.output;\n\n  // 실적 내 전체 원본텍스트 합산 (AI가 직접 읽고 판단)\n  const 전체원본텍스트 = 문서목록.map((doc, i) => {\n    const 파일명 = doc.메타데이터?.원본파일명 || `파일${i+1}`;\n    return `[문서 ${i+1}: ${파일명}]\\n${doc.원본텍스트 || ''}`;\n  }).join('\\n\\n---\\n\\n');\n\n  return {\n    json: {\n      실적번호, 실적인덱스, 제출시간, 평가항목,\n      파일수: 문서목록.length,\n      파일목록,\n      전체원본텍스트,\n      output\n    }\n  };\n});"
+      },
+      "id": "c82cadec-0609-44ed-b75e-8745779588e6",
+      "name": "Label Report Items1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4400,
+        2304
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-pro-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -3952,
+        2496
+      ],
+      "id": "a11e2420-1f2c-417c-b7e7-b75ccb67af2b",
+      "name": "Google Gemini Chat Model4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfunction escapeHtml(text) {\n  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#039;' };\n  return String(text || '').replace(/[&<>\"']/g, m => map[m]);\n}\n\nfunction formatText(text) {\n  if (!text || !text.trim()) return '<span style=\"color:#9ca3af;font-style:italic;\">내용 없음</span>';\n  return escapeHtml(text.trim()).replace(/\\n/g, '<br>');\n}\n\nconst 실적목록 = items.map(item => item.json);\n\nfunction makeReviewBadges(output) {\n  if (!output || !output['2단계_항목별_검토']) return '';\n  const 검토 = output['2단계_항목별_검토'];\n  const 충족수 = Object.keys(검토['충족'] || {}).length;\n  const 일부수 = Object.keys(검토['일부 충족'] || {}).length;\n  const 미흡수 = Object.keys(검토['미흡'] || {}).length;\n  const 케이스 = output['1단계_케이스_분류'] || '';\n  return `\n    <div class=\"review-summary\">\n      <span class=\"case-badge\">${escapeHtml(케이스)}</span>\n      <span class=\"badge badge-ok\">충족 ${충족수}</span>\n      <span class=\"badge badge-partial\">일부충족 ${일부수}</span>\n      <span class=\"badge badge-fail\">미흡 ${미흡수}</span>\n    </div>`;\n}\n\nconst 실적탭버튼 = 실적목록.map((실적, i) => `\n  <button class=\"tab-btn${i === 0 ? ' active' : ''}\" onclick=\"showTab(${i})\">\n    실적 ${실적.실적번호}\n    <span class=\"file-count\">${실적.파일목록.length}개 파일</span>\n  </button>\n`).join('');\n\nconst 실적패널 = 실적목록.map((실적, i) => {\n  const r = 실적.최종보고서;\n  const 파일태그 = 실적.파일목록.map(f =>\n    `<span class=\"file-tag\">${escapeHtml(f.replace(/\\.pdf$/i, ''))}</span>`\n  ).join('');\n  const 검토배지 = makeReviewBadges(실적.output);\n\n  return `\n  <div class=\"tab-panel${i === 0 ? ' active' : ''}\" id=\"panel-${i}\">\n    <div class=\"report-meta\">\n      <div class=\"meta-row\">\n        <span class=\"meta-label\">실적 번호</span>\n        <span class=\"meta-value\">실적 ${실적.실적번호}</span>\n      </div>\n      <div class=\"meta-row\">\n        <span class=\"meta-label\">증빙 파일</span>\n        <span class=\"meta-value files\">${파일태그}</span>\n      </div>\n      <div class=\"meta-row\">\n        <span class=\"meta-label\">평가 검토</span>\n        <span class=\"meta-value\">${검토배지}</span>\n      </div>\n    </div>\n    <div class=\"section\">\n      <div class=\"section-header\"><div class=\"section-icon\">📌</div><h2 class=\"section-title\">추진실적명</h2></div>\n      <div class=\"section-content\">${formatText(r.추진실적명)}</div>\n    </div>\n    <div class=\"section\">\n      <div class=\"section-header\"><div class=\"section-icon\">📅</div><h2 class=\"section-title\">추진기간</h2></div>\n      <div class=\"section-content\">${formatText(r.추진기간)}</div>\n    </div>\n    <div class=\"section\">\n      <div class=\"section-header\"><div class=\"section-icon\">🎯</div><h2 class=\"section-title\">추진배경 및 목적</h2></div>\n      <div class=\"section-content\">${formatText(r.추진배경및목적)}</div>\n    </div>\n    <div class=\"section\">\n      <div class=\"section-header\"><div class=\"section-icon\">📋</div><h2 class=\"section-title\">추진내용</h2></div>\n      <div class=\"section-content\">${formatText(r.추진내용)}</div>\n    </div>\n    <div class=\"section\">\n      <div class=\"section-header\"><div class=\"section-icon\">✨</div><h2 class=\"section-title\">기대효과</h2></div>\n      <div class=\"section-content\">${formatText(r.기대효과)}</div>\n    </div>\n    <div class=\"section\">\n      <div class=\"section-header\"><div class=\"section-icon\">🚀</div><h2 class=\"section-title\">향후계획</h2></div>\n      <div class=\"section-content\">${formatText(r.향후계획)}</div>\n    </div>\n  </div>`;\n}).join('');\n\nconst html = `<!DOCTYPE html>\n<html lang=\"ko\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>AI 도입활용 사례 정성보고서</title>\n  <style>\n    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }\n    body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }\n    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 48px 40px 36px; text-align: center; }\n    .header-badge { display: inline-block; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.35); border-radius: 20px; padding: 4px 16px; font-size: 0.78em; letter-spacing: 0.08em; margin-bottom: 16px; }\n    .header h1 { font-size: 1.9em; font-weight: 700; line-height: 1.35; margin-bottom: 8px; }\n    .header-sub { font-size: 0.9em; opacity: 0.75; }\n    .tabs-wrap { background: white; border-bottom: 1px solid #e2e8f0; padding: 0 32px; display: flex; gap: 4px; overflow-x: auto; }\n    .tab-btn { flex-shrink: 0; padding: 16px 24px 14px; border: none; background: none; cursor: pointer; font-size: 0.95em; font-weight: 600; color: #64748b; border-bottom: 3px solid transparent; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; }\n    .tab-btn:hover { color: #7c3aed; }\n    .tab-btn.active { color: #5b21b6; border-bottom-color: #7c3aed; }\n    .file-count { font-size: 0.72em; font-weight: 400; color: #94a3b8; background: #f1f5f9; padding: 1px 8px; border-radius: 10px; }\n    .tab-btn.active .file-count { background: #ede9fe; color: #5b21b6; }\n    .tab-panel { display: none; padding: 32px; max-width: 900px; margin: 0 auto; }\n    .tab-panel.active { display: block; }\n    .report-meta { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 28px; }\n    .meta-row { display: flex; align-items: flex-start; gap: 16px; padding: 6px 0; }\n    .meta-row + .meta-row { border-top: 1px solid #f1f5f9; margin-top: 6px; padding-top: 12px; }\n    .meta-label { flex-shrink: 0; width: 80px; font-size: 0.8em; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 2px; }\n    .meta-value { font-size: 0.92em; color: #1e293b; }\n    .files { display: flex; flex-wrap: wrap; gap: 6px; }\n    .file-tag { background: #f5f3ff; color: #5b21b6; border: 1px solid #ddd6fe; border-radius: 6px; padding: 2px 10px; font-size: 0.8em; }\n    .review-summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }\n    .case-badge { background: #1e3a8a; color: white; border-radius: 6px; padding: 2px 10px; font-size: 0.8em; font-weight: 600; }\n    .badge { border-radius: 6px; padding: 2px 10px; font-size: 0.8em; font-weight: 600; }\n    .badge-ok { background: #dcfce7; color: #166534; }\n    .badge-partial { background: #fef9c3; color: #854d0e; }\n    .badge-fail { background: #fee2e2; color: #991b1b; }\n    .section { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 28px; margin-bottom: 20px; transition: box-shadow 0.2s; }\n    .section:hover { box-shadow: 0 4px 20px rgba(124,58,237,0.08); }\n    .section-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #f1f5f9; }\n    .section-icon { font-size: 1.3em; line-height: 1; padding-top: 2px; }\n    .section-title { font-size: 1.05em; font-weight: 700; color: #1e293b; flex: 1; }\n    .section-content { font-size: 0.97em; color: #374151; line-height: 2; }\n    .footer { text-align: center; padding: 32px; font-size: 0.83em; color: #94a3b8; border-top: 1px solid #e2e8f0; background: white; margin-top: 8px; }\n    @media (max-width: 640px) { .header { padding: 32px 20px 24px; } .header h1 { font-size: 1.4em; } .tab-panel { padding: 20px; } }\n    @media print { .tabs-wrap { display: none; } .tab-panel { display: block !important; page-break-after: always; } }\n  </style>\n</head>\n<body>\n  <div class=\"header\">\n    <div class=\"header-badge\">데이터기반행정 실태평가</div>\n    <h1>AI 도입활용 사례 정성보고서</h1>\n    <p class=\"header-sub\">총 ${실적목록.length}건의 실적 · 생성일시 ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>\n  </div>\n  <div class=\"tabs-wrap\">${실적탭버튼}</div>\n  ${실적패널}\n  <div class=\"footer\">본 보고서는 제출된 증빙 PDF를 AI가 분석하여 자동 생성되었습니다.<br>최종 제출 전 내용을 반드시 검토·수정하시기 바랍니다.</div>\n  <script>\n    function showTab(idx) {\n      document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));\n      document.querySelectorAll('.tab-panel').forEach((p, i) => p.classList.toggle('active', i === idx));\n    }\n  </script>\n</body>\n</html>`;\n\nconst buffer = Buffer.from(html, 'utf-8');\nconst fileName = `AI도입활용_정성보고서_${new Date().toISOString().split('T')[0]}.html`;\n\nreturn [{\n  json: { 생성파일명: fileName, 실적수: 실적목록.length },\n  binary: {\n    data: {\n      data: buffer.toString('base64'),\n      mimeType: 'text/html',\n      fileName,\n      fileExtension: 'html'\n    }\n  }\n}];"
+      },
+      "id": "163c87cf-6561-4441-8c70-2f7d44fa9013",
+      "name": "Generate HTML Report1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3376,
+        2304
+      ]
+    }
+  ],
+  "pinData": {
+    "AI Agent - 재검토": [
+      {
+        "json": {
+          "output": "{\n  \"추진배경및목적\": {\n    \"판정\": \"부적합\",\n    \"사유\": \"재작성된 추진배경및목적 내용이 존재하지 않아 검토가 불가능함. 이전 부적합 사유 개선 여부도 판단할 수 없음.\",\n    \"개선사항\": \"추진내용과의 논리적 연계를 고려한 2~4문장 내외의 배경과 목적 서술 필요. 기관 내부 관점 유지하고 불명확하거나 외부적인 표현은 배제해야 함.\"\n  },\n  \"추진내용\": {\n    \"판정\": \"부적합\",\n    \"사유\": \"재작성된 추진내용이 제시되지 않아 검토할 수 없음. 간결화, 핵심 정보 유지 여부 등의 검토 기준을 적용할 수 없음.\",\n    \"개선사항\": \"추진내용 요약 시 핵심 정보를 누락 없이 간결하게 정리해야 하며, 의미 왜곡 없이 최소 30% 이상의 간결화가 필요함.\"\n  },\n  \"기대효과\": {\n    \"판정\": \"부적합\",\n    \"사유\": \"재작성된 기대효과 내용이 없음. 이전 부적합 사유가 있었는지도 확인할 수 없고, 내용 자체가 결여되어 검토 불가.\",\n    \"개선사항\": \"2~3개 항목으로 기관 내부 관점에서의 효과를 명확히 서술해야 하며, 추진내용과 연계된 실질적 성과 중심으로 기술해야 함. 금지 표현 사용하지 않도록 주의.\"\n  }\n}"
+        }
+      }
+    ],
+    "Form Trigger": [
+      {
+        "json": {
+          "실적 1": [
+            {
+              "filename": "대표이사보고자료.pdf",
+              "mimetype": "application/pdf",
+              "size": 83898
+            }
+          ],
+          "실적 2": [
+            {
+              "filename": "AI 교육 및 활용을 위한 ChatGPT 유료 서비스 구독 보고.pdf",
+              "mimetype": "application/pdf",
+              "size": 153284
+            }
+          ],
+          "실적 3": null,
+          "submittedAt": "2026-03-30T09:57:01.207+09:00",
+          "formMode": "test"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Read PDF": {
+      "main": [
+        [
+          {
+            "node": "Structure PDF Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [],
+        [],
+        [
+          {
+            "node": "Prepare AI Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structure PDF Data": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Binary": {
+      "main": [
+        [
+          {
+            "node": "Read PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Review": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - 평가기준 검토",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Group by 판정": {
+      "main": [
+        [
+          {
+            "node": "Switch - 미흡항목 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - 미흡항목 확인": {
+      "main": [
+        [
+          {
+            "node": "Label Report Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "보완필요 항목 추출",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - 통합 처리",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - 평가기준 검토",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - 평가기준 검토": {
+      "main": [
+        [
+          {
+            "node": "Parse & Group by 판정",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - 통합 처리": {
+      "main": [
+        [
+          {
+            "node": "Prepare Quality Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Quality Check": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - 품질 검토",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Quality Result": {
+      "main": [
+        [
+          {
+            "node": "Switch - 품질 판정1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Report Assembly": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - 부적합 재작성": {
+      "main": [
+        [
+          {
+            "node": "Parse Revised Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Revised Content": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - 재검토",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - 재검토": {
+      "main": [
+        [
+          {
+            "node": "Parse Re-review Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - 부적합 재작성",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - 재검토",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - 품질 검토": {
+      "main": [
+        [
+          {
+            "node": "Parse Quality Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "보완필요 항목 추출": {
+      "main": [
+        [
+          {
+            "node": "엑셀 파일 생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge (AI요약+AI생성)": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI 통합 처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Switch2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge (AI요약+AI생성)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge (AI요약+AI생성)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare AI 통합 처리": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - 통합 처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - 품질 판정1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "AI Agent - 부적합 재작성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Final Report Assembly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Report Items": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - 품질 검토",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "결과 준비": {
+      "main": [
+        [
+          {
+            "node": "파일 업로드",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "파일 업로드": {
+      "main": [
+        [
+          {
+            "node": "콜백 전송",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate HTML Report": {
+      "main": [
+        [
+          {
+            "node": "결과 준비",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Expand All Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand All Files": {
+      "main": [
+        [
+          {
+            "node": "Read PDF1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group by 실적": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Review1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read PDF1": {
+      "main": [
+        [
+          {
+            "node": "Structure PDF Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structure PDF Data1": {
+      "main": [
+        [
+          {
+            "node": "Group by 실적",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Review1": {
+      "main": [
+        [
+          {
+            "node": "Label Report Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - 보고서 작성 및 검토",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Report1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - 보고서 작성 및 검토": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Report Items1": {
+      "main": [
+        [
+          {
+            "node": "Build AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - 보고서 작성 및 검토",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b6475b34-bdfb-475a-b97d-00ec604d0df9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "32c5f95e2856792afb4cb6b3c219708d546ea9cd357650e1e624ba9066377ac0"
+  },
+  "id": "ji1hUnsPnL2S0QGJ",
+  "tags": []
+}

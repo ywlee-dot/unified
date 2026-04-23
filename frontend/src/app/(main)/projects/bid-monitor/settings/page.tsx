@@ -17,6 +17,10 @@ export default function BidMonitorSettingsPage() {
   const [triggering, setTriggering] = useState(false);
   const [triggerMessage, setTriggerMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
+  const [backfillHours, setBackfillHours] = useState("24");
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMessage, setBackfillMessage] = useState<{ text: string; ok: boolean } | null>(null);
+
   useEffect(() => {
     async function fetchConfig() {
       try {
@@ -77,6 +81,31 @@ export default function BidMonitorSettingsPage() {
     }
   }
 
+  async function handleBackfill(hours: number) {
+    const h = Math.max(1, Math.min(168, Math.floor(hours)));
+    setBackfilling(true);
+    setBackfillMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/projects/bid-monitor/check/backfill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hours: h }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail ?? "백필 실행에 실패했습니다.");
+      }
+      const stats = await res.json();
+      const summary = `수집 ${stats.total_fetched ?? 0} · 신규 ${stats.total_new ?? 0} · high ${stats.grade_high ?? 0} · medium ${stats.grade_medium ?? 0} · low ${stats.grade_low ?? 0}`;
+      setBackfillMessage({ text: `백필 완료 (${h}시간 소급): ${summary}`, ok: true });
+    } catch (e) {
+      setBackfillMessage({ text: e instanceof Error ? e.message : "오류가 발생했습니다.", ok: false });
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -97,9 +126,14 @@ export default function BidMonitorSettingsPage() {
   return (
     <div className="space-y-5 p-6">
       {/* Header */}
-      <div>
-        <h1 className="text-[22px] font-bold leading-tight text-text-primary">설정</h1>
-        <p className="mt-1 text-sm text-text-tertiary">입찰 공고 모니터 연동 설정을 관리합니다.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-[22px] font-bold leading-tight text-text-primary">설정</h1>
+          <p className="mt-1 text-sm text-text-tertiary">입찰 공고 모니터 연동 설정을 관리합니다.</p>
+        </div>
+        <a href="/projects/bid-monitor/keywords" className="inline-flex h-9 items-center rounded-md bg-surface-secondary px-4 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-tertiary">
+          키워드 관리
+        </a>
       </div>
 
       {/* Discord Webhook */}
@@ -193,6 +227,49 @@ export default function BidMonitorSettingsPage() {
           </span>
           <p className="text-xs text-text-disabled">주기 변경은 서버 환경변수 <code className="rounded bg-surface-secondary px-1 font-mono">CHECK_INTERVAL_MINUTES</code>에서 설정합니다.</p>
         </div>
+      </div>
+
+      {/* Backfill (소급 수집) */}
+      <div className="rounded-lg bg-surface-elevated p-6 shadow-md">
+        <h2 className="mb-1 text-[17px] font-semibold text-text-primary">소급 백필</h2>
+        <p className="mb-4 text-sm text-text-tertiary">
+          서버 재시작 · 장애 등으로 공백이 생겼을 때 과거 N시간 범위의 공고를 일괄 수집합니다. (최대 168시간 / 7일)
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          {[24, 72, 168].map((h) => (
+            <button
+              key={h}
+              onClick={() => handleBackfill(h)}
+              disabled={backfilling}
+              className="h-10 rounded-md bg-surface-secondary px-4 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-tertiary disabled:opacity-50"
+            >
+              {h === 24 ? "24시간" : h === 72 ? "3일" : "7일"}
+            </button>
+          ))}
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={backfillHours}
+              onChange={(e) => setBackfillHours(e.target.value)}
+              min={1}
+              max={168}
+              className="h-10 w-24 rounded-md bg-surface-secondary px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+            <span className="text-sm text-text-tertiary">시간</span>
+            <button
+              onClick={() => handleBackfill(Number(backfillHours))}
+              disabled={backfilling || !backfillHours}
+              className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:opacity-50"
+            >
+              {backfilling ? "실행 중..." : "백필"}
+            </button>
+          </div>
+        </div>
+        {backfillMessage && (
+          <p className={`mt-3 text-sm font-medium ${backfillMessage.ok ? "text-positive" : "text-negative"}`}>
+            {backfillMessage.text}
+          </p>
+        )}
       </div>
 
       {/* Test Notification */}
