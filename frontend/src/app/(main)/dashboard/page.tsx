@@ -21,27 +21,6 @@ import {
   ClipboardList as ClipboardListIcon,
 } from "lucide-react";
 
-interface CategoryItem {
-  label: string;
-  category: string;
-  path: string;
-  icon: React.ElementType;
-}
-
-interface Section {
-  title: string;
-  subtitle: string;
-  sectionIcon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-  accentText: string;
-  accentBg: string;
-  accentHoverBg: string;
-  itemHoverBg: string;
-  itemHoverBorder: string;
-  items: CategoryItem[];
-}
-
 const PALETTE = {
   blue:   { iconBg: "#e8f0fe", iconColor: "#1a73e8", itemHover: "#e8f0fe", itemBorder: "#1a73e8" },
   green:  { iconBg: "#e6f4ea", iconColor: "#137333", itemHover: "#e6f4ea", itemBorder: "#137333" },
