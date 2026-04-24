@@ -1,0 +1,52 @@
+name: Server Logs
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: '서비스 선택'
+        required: true
+        default: 'backend'
+        type: choice
+        options:
+          - backend
+          - frontend
+          - n8n
+          - db
+          - nginx
+      lines:
+        description: '가져올 로그 라인 수 (서버에서 tail)'
+        required: true
+        default: '500'
+      grep:
+        description: 'grep 필터 (빈 값이면 전체). 예: bid_monitor|scheduler'
+        required: false
+        default: ''
+
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tail server logs
+        uses: appleboy/ssh-action@v1
+        env:
+          SERVICE: ${{ inputs.service }}
+          LINES: ${{ inputs.lines }}
+          GREP_FILTER: ${{ inputs.grep }}
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ubuntu
+          key: ${{ secrets.OCI_SSH_KEY }}
+          command_timeout: 5m
+          envs: SERVICE,LINES,GREP_FILTER
+          script: |
+            set -e
+            cd ~/unified
+            echo "=== service=$SERVICE lines=$LINES grep=\"$GREP_FILTER\" ==="
+            if [ -n "$GREP_FILTER" ]; then
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail="$LINES" --no-log-prefix "$SERVICE" 2>&1 \
+                | grep -i -E "$GREP_FILTER" | tail -1000
+            else
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail="$LINES" --no-log-prefix "$SERVICE" 2>&1 \
+                | tail -1000
+            fi

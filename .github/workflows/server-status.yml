@@ -1,0 +1,37 @@
+name: Server Status
+
+on:
+  workflow_dispatch:
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH diagnostic
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ubuntu
+          key: ${{ secrets.OCI_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -e
+            echo "=== uptime ==="
+            uptime
+            echo
+            echo "=== disk ==="
+            df -h / /var/lib/docker 2>/dev/null || df -h /
+            echo
+            echo "=== memory ==="
+            free -h
+            echo
+            echo "=== docker compose ps ==="
+            cd ~/unified
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+            echo
+            echo "=== recent backend logs (last 60 lines) ==="
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=60 backend || true
+            echo
+            echo "=== bid_monitor scheduler status (grep) ==="
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=500 backend 2>&1 \
+              | grep -i -E "bid_monitor|scheduler|bid-monitor" | tail -40 || echo "(no bid_monitor log lines)"

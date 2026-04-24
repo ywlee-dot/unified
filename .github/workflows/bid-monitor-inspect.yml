@@ -1,0 +1,99 @@
+name: Bid Monitor Inspect
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: '조회 대상'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - keywords
+          - notices_recent
+          - alerts_recent
+          - runs_recent
+          - stats
+          - all
+      limit:
+        description: 'notices/alerts/runs 최대 개수'
+        required: true
+        default: '50'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query bid_monitor DB
+        uses: appleboy/ssh-action@v1
+        env:
+          ACTION: ${{ inputs.action }}
+          LIMIT: ${{ inputs.limit }}
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ubuntu
+          key: ${{ secrets.OCI_SSH_KEY }}
+          command_timeout: 5m
+          envs: ACTION,LIMIT
+          script: |
+            set -e
+            cd ~/unified
+            # .env에서 POSTGRES_USER/DB 읽기
+            set -a
+            . ./.env
+            set +a
+            DC="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+            PSQL="$DC exec -T db psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -P pager=off -A -F'|'"
+
+            run_keywords() {
+              echo "=== bid_keywords ==="
+              $PSQL -c "SELECT id, keyword, is_active, bid_types, filter_conditions, last_checked_at, created_at FROM bid_keywords ORDER BY is_active DESC, created_at DESC;"
+            }
+
+            run_notices() {
+              echo
+              echo "=== bid_notices (최근 ${LIMIT}건) ==="
+              $PSQL -c "SELECT bid_ntce_no, bid_type, ntce_instt_nm, bid_ntce_nm, source_keyword, bid_ntce_dt, bid_clse_dt, presmpt_prce FROM bid_notices ORDER BY bid_ntce_dt DESC NULLS LAST LIMIT ${LIMIT};"
+            }
+
+            run_alerts() {
+              echo
+              echo "=== bid_alerts (최근 ${LIMIT}건) ==="
+              $PSQL -c "SELECT a.id, k.keyword, n.bid_ntce_no, n.bid_ntce_nm, a.grade, a.score, a.status, a.channel, a.created_at FROM bid_alerts a LEFT JOIN bid_keywords k ON a.keyword_id=k.id LEFT JOIN bid_notices n ON a.notice_id=n.id ORDER BY a.created_at DESC LIMIT ${LIMIT};"
+            }
+
+            run_runs() {
+              echo
+              echo "=== bid_check_runs (최근 ${LIMIT}건) ==="
+              $PSQL -c "SELECT id, status, trigger_type, started_at, completed_at, statistics, error_message FROM bid_check_runs ORDER BY started_at DESC LIMIT ${LIMIT};"
+            }
+
+            run_stats() {
+              echo
+              echo "=== 통계 ==="
+              $PSQL -c "SELECT 'keywords_active' AS metric, COUNT(*)::text AS value FROM bid_keywords WHERE is_active=true
+                        UNION ALL SELECT 'keywords_total', COUNT(*)::text FROM bid_keywords
+                        UNION ALL SELECT 'notices_total', COUNT(*)::text FROM bid_notices
+                        UNION ALL SELECT 'alerts_total', COUNT(*)::text FROM bid_alerts
+                        UNION ALL SELECT 'runs_total', COUNT(*)::text FROM bid_check_runs
+                        UNION ALL SELECT 'last_run_at', COALESCE(MAX(started_at)::text,'(none)') FROM bid_check_runs;"
+              echo
+              echo "=== 등급별 알림 수 ==="
+              $PSQL -c "SELECT COALESCE(grade,'(null)') AS grade, COUNT(*) FROM bid_alerts GROUP BY grade ORDER BY grade;"
+              echo
+              echo "=== 최근 14일 공고 수 ==="
+              $PSQL -c "SELECT DATE(bid_ntce_dt) AS day, COUNT(*) FROM bid_notices WHERE bid_ntce_dt > NOW() - INTERVAL '14 days' GROUP BY day ORDER BY day DESC;"
+              echo
+              echo "=== source_keyword별 공고 수 (최근 30일) ==="
+              $PSQL -c "SELECT source_keyword, COUNT(*) FROM bid_notices WHERE bid_ntce_dt > NOW() - INTERVAL '30 days' GROUP BY source_keyword ORDER BY COUNT(*) DESC LIMIT 30;"
+            }
+
+            case "$ACTION" in
+              keywords)       run_keywords ;;
+              notices_recent) run_notices ;;
+              alerts_recent)  run_alerts ;;
+              runs_recent)    run_runs ;;
+              stats)          run_stats ;;
+              all)            run_keywords; run_notices; run_alerts; run_runs; run_stats ;;
+              *)              echo "unknown action: $ACTION"; exit 1 ;;
+            esac
