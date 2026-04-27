@@ -193,40 +193,63 @@ export interface GovNewsStats {
 
 // --- Open Data Analyzer ---
 
-export interface OpenDataStageRow {
+export interface OpenDataTableRow {
   table: string;
   key: string;
-  openable?: string;
-  reason_numbers?: number[];
-  reason_text?: string;
-  confidence?: number;
-  has_columns?: boolean;
-  column_count?: number;
-  data_quality?: string;
-  source_file?: string;
-  file_sources?: string[];
-  subject_area?: string;
-  core_columns?: string[];
-  dataset_description?: string;
-  join_table?: string;
-  join_keys?: string[];
+  bucket: string;
+  open_columns: string[];
+  closed_columns: { name: string; reason: string }[];
+  open_count: number;
+  total_count: number;
+  major_area?: string;
+  sub_area?: string;
   dataset_name?: string;
-  final_columns?: string[];
-  final_openable?: string;
-  final_reason?: string;
+  source_file?: string;
 }
 
-export interface OpenDataStageResponse {
+export interface OpenDataGroup {
+  major_area: string;
+  tables: OpenDataTableRow[];
+}
+
+export interface OpenDataAnalysisResult {
   session_id: string;
-  stage: number;
-  rows: OpenDataStageRow[];
+  execution_id?: string;
   total: number;
-  openable_count?: number;
-  not_openable_count?: number;
-  file_count?: number;
-  total_columns?: number;
-  final_openable?: number;
-  final_not_openable?: number;
+  full_open_count: number;
+  partial_count: number;
+  not_openable_count: number;
+  file_count: number;
+  groups: OpenDataGroup[];
+  not_openable: OpenDataTableRow[];
+}
+
+// --- Unified execution history (process_executions table) ---
+
+export interface ProcessExecutionSummary {
+  execution_id: string;
+  project_slug: string;
+  process_type: string;
+  status: "running" | "succeeded" | "failed" | string;
+  input_summary: string;
+  input_metadata: Record<string, unknown> | null;
+  started_at: string | null;
+  finished_at: string | null;
+  error_message: string | null;
+  workflow_id: string | null;
+  workflow_name: string | null;
+}
+
+export interface ProcessExecutionDetail extends ProcessExecutionSummary {
+  result_data: Record<string, unknown> | null;
+}
+
+export interface ProcessExecutionListResponse {
+  items: ProcessExecutionSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 export interface OpenDataAnalyzerStats {

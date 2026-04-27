@@ -63,13 +63,14 @@ jobs:
           username: ubuntu
           key: ${{ secrets.OCI_SSH_KEY }}
           command_timeout: 20m
-          envs: GHCR_TOKEN
+          envs: GHCR_TOKEN,DATABASE_URL
           script: |
             echo "$GHCR_TOKEN" | docker login ghcr.io -u github-actions --password-stdin
             cd ~/unified
             git pull origin production
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend frontend
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
+            DATABASE_URL="$DATABASE_URL" docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
             docker image prune -f
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}

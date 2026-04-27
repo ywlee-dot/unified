@@ -5,6 +5,7 @@ from .config import (
     GEMINI_BASE_URL,
     GEMINI_MODEL,
     DEFAULT_BATCH_SIZE,
+    DEFAULT_CONCURRENCY,
     SYSTEM_PATTERNS,
     SYSTEM_PREFIXES,
     SYSTEM_KOREAN_KEYWORDS,
@@ -13,7 +14,7 @@ from .config import (
 )
 from .file_utils import read_sheet_rows, find_col, normalize_spaces
 from .excel_loader import find_stage_sheet, load_stage_sheet
-from .stage1 import run_stage1, extract_tables_from_excel, SimpleTable, is_system_table, normalize_table_key, calculate_similarity, find_matching_table, merge_table_data, calculate_confidence
+from .stage1 import run_stage1, extract_tables_from_excel, SimpleTable, is_system_table, normalize_table_key, calculate_similarity, find_matching_table, merge_table_data, calculate_confidence, classify_bucket, HIGH_SCORE_THRESHOLD, LOW_SCORE_THRESHOLD, OPEN_COLUMN_THRESHOLD, STANDARD_CATEGORIES
 from .stage2 import run_stage2
 from .stage3 import run_stage3
 from .stage4 import run_stage4
@@ -25,6 +26,7 @@ __all__ = [
     "GEMINI_BASE_URL",
     "GEMINI_MODEL",
     "DEFAULT_BATCH_SIZE",
+    "DEFAULT_CONCURRENCY",
     "SYSTEM_PATTERNS",
     "SYSTEM_PREFIXES",
     "SYSTEM_KOREAN_KEYWORDS",
@@ -44,6 +46,11 @@ __all__ = [
     "find_matching_table",
     "merge_table_data",
     "calculate_confidence",
+    "classify_bucket",
+    "HIGH_SCORE_THRESHOLD",
+    "LOW_SCORE_THRESHOLD",
+    "OPEN_COLUMN_THRESHOLD",
+    "STANDARD_CATEGORIES",
     "run_stage2",
     "run_stage3",
     "run_stage4",

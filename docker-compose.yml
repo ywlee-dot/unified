@@ -46,7 +46,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-workspace_user}:${POSTGRES_PASSWORD:-workspace_pass}@db:5432/${POSTGRES_DB:-workspace}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-workspace_user}:${POSTGRES_PASSWORD:-workspace_pass}@db:5432/${POSTGRES_DB:-workspace}}
       REDIS_URL: redis://redis:6379/0
       N8N_BASE_URL: http://n8n:5678
       N8N_WEBHOOK_BASE_1: ${N8N_WEBHOOK_BASE_1:-https://ywlee.app.n8n.cloud/webhook}

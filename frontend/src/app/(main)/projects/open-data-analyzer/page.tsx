@@ -1,97 +1,237 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import {
+  Sparkles, Upload, FileSpreadsheet, X,
+  ChevronDown, ChevronUp, Copy, Check,
+} from "lucide-react";
 import type {
-  OpenDataStageRow,
-  OpenDataStageResponse,
+  OpenDataTableRow, OpenDataGroup, OpenDataAnalysisResult, DatasetSummaryResult,
 } from "@/lib/types";
-const API_BASE = "/api";
+import { BranchingPipeline, type PipelineGraph } from "@/components/architecture/BranchingPipeline";
+import { api } from "@/lib/api";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import RunHistoryPanel from "@/components/shared/RunHistoryPanel";
 
-const STAGES = [
-  { num: 1, label: "개방가능 여부", desc: "테이블별 개방 가능 여부 판단" },
-  { num: 2, label: "주제영역 도출", desc: "개방 가능 테이블의 주제영역 분류" },
-  { num: 3, label: "핵심컬럼 선정", desc: "데이터셋에 필요한 핵심 컬럼 선정" },
-  { num: 4, label: "조인 검토", desc: "주제영역별 조인 가능성 검토" },
-  { num: 5, label: "최종 점검", desc: "개방 데이터셋 최종 검토" },
-];
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
+
+const PROCESS_PIPELINE: PipelineGraph = {
+  rows: [
+    [
+      { label: "기개방데이터 여부 확인", step: 1 },
+      { label: "AI 친화 고가치 데이터 포함 여부 확인", step: 2 },
+      { label: "신규/변경/수정 테이블 존재 여부 확인", step: 5 },
+      null,
+      null,
+      { label: "당해년도 개방공유 데이터셋 구성", step: 14 },
+      { label: "개방데이터별 키워드 설명, 작성", step: 15 },
+      { label: "연도에 따른 개방 이행", step: 17 },
+      { label: "AI 친화 고가치 보고서 작성", step: 18 },
+    ],
+    [
+      null,
+      { label: "대국민 수요조사", step: 3 },
+      { label: "테이블 전체 개방공유 가능 여부확인", step: 6 },
+      { label: "데이터셋 후보군 생성", step: 7 },
+      { label: "현업부서 개방공유 가능성 검토", step: 11 },
+      { label: "연도별 개방 계획 수립", step: 12 },
+      { label: "가명처리 또는 합성데이터 처리", step: 16 },
+      null,
+      null,
+    ],
+    [
+      null,
+      { label: "보유데이터 전수 조사", step: 4 },
+      { label: "테이블 부분 개방공유 가능 여부 확인", step: 8 },
+      null,
+      { label: "개방공유 불가 사유 타당성 검토", step: 13 },
+      null,
+      null,
+      null,
+      null,
+    ],
+    [
+      null,
+      null,
+      { label: "테이블 개방 공유 불가", step: 9 },
+      null,
+      { label: "개방 불가 사유 기재", step: 10 },
+      null,
+      null,
+      null,
+      null,
+    ],
+  ],
+  edges: [
+    { from: [0, 0], to: [0, 1], label: "Y" },
+    { from: [0, 0], to: [1, 1], label: "N", srcPort: "bottom", tgtPort: "left" },
+    { from: [1, 1], to: [2, 1] },
+    { from: [0, 1], to: [0, 2], label: "Y" },
+    { from: [0, 1], to: [1, 1], label: "N" },
+    { from: [0, 2], to: [1, 2], label: "Y" },
+    { from: [2, 1], to: [1, 2], srcPort: "right", tgtPort: "left" },
+    { from: [1, 2], to: [1, 3], label: "Y" },
+    { from: [1, 2], to: [2, 2], label: "N" },
+    { from: [2, 2], to: [1, 3], label: "Y", srcPort: "right", tgtPort: "left" },
+    { from: [2, 2], to: [3, 2], label: "N" },
+    { from: [3, 2], to: [3, 4] },
+    { from: [1, 3], to: [1, 4] },
+    { from: [1, 4], to: [1, 5], label: "Y" },
+    { from: [1, 4], to: [2, 4], label: "N" },
+    { from: [2, 4], to: [3, 4], label: "Y" },
+    { from: [2, 4], to: [1, 3], label: "N", srcPort: "left", tgtPort: "bottom" },
+    { from: [0, 2], to: [0, 5] },
+    { from: [1, 5], to: [0, 5] },
+    { from: [0, 5], to: [0, 6], label: "N" },
+    { from: [0, 5], to: [1, 6], label: "Y", srcPort: "right", tgtPort: "left" },
+    { from: [0, 6], to: [0, 7] },
+    { from: [0, 7], to: [0, 8] },
+  ],
+  groups: [
+    { cells: [[1, 1], [2, 1]], color: "#0064FF", mode: "merge" },
+    {
+      cells: [
+        [1, 2], [1, 3], [1, 4],
+        [2, 2], [2, 3], [2, 4],
+        [3, 2], [3, 3], [3, 4],
+      ],
+      color: "#10B981",
+      mode: "merge",
+    },
+    {
+      cells: [[0, 6]],
+      color: "#7C3AED",
+      mode: "merge",
+    },
+  ],
+};
+
+type Tab = "verify" | "summary";
 
 export default function OpenDataAnalyzerPage() {
-  const [activeStage, setActiveStage] = useState(1);
+  const [activeTab, setActiveTab] = useState<Tab>("verify");
+
+  return (
+    <div className="space-y-6">
+      {/* 전체 프로세스 파이프라인 */}
+      <div>
+        <div className="mb-2 flex items-baseline gap-2">
+          <h2 className="text-[15px] font-semibold" style={{ color: "#191F28" }}>
+            전체 프로세스
+          </h2>
+          <span className="text-xs" style={{ color: "#8B95A1" }}>
+            개방 가능 여부 판단 흐름
+          </span>
+        </div>
+        <BranchingPipeline
+          graph={PROCESS_PIPELINE}
+          color="#0064FF"
+          activeGroups={
+            activeTab === "verify"
+              ? [{ index: 1, effect: "ants" }]
+              : activeTab === "summary"
+              ? [{ index: 2, effect: "ants" }]
+              : undefined
+          }
+        />
+      </div>
+
+      {/* 탭 네비게이션 */}
+      <div
+        className="inline-flex gap-1 p-1 rounded-xl"
+        style={{ backgroundColor: "#F0F1F4" }}
+      >
+        <TabButton active={activeTab === "verify"} onClick={() => setActiveTab("verify")}>
+          개방가능검증
+        </TabButton>
+        <TabButton active={activeTab === "summary"} onClick={() => setActiveTab("summary")}>
+          설명/키워드 생성
+        </TabButton>
+      </div>
+
+      {activeTab === "verify" && <VerifyTab />}
+      {activeTab === "summary" && <SummaryTab />}
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-5 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap"
+      style={{
+        backgroundColor: active ? "#FFFFFF" : "transparent",
+        color: active ? "#191F28" : "#8B95A1",
+        boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 탭 1 — 개방가능검증                                                  */
+/* ------------------------------------------------------------------ */
+
+function VerifyTab() {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [stageResults, setStageResults] = useState<
-    Record<number, OpenDataStageResponse>
-  >({});
+  const [executionId, setExecutionId] = useState<string | null>(null);
+  const [viewingHistory, setViewingHistory] = useState(false);
+  const [result, setResult] = useState<OpenDataAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mockMode, setMockMode] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [completedStages, setCompletedStages] = useState<Set<number>>(
-    new Set()
-  );
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(Array.from(e.target.files));
-    }
+    if (e.target.files) setFiles(Array.from(e.target.files));
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const droppedFiles = Array.from(e.dataTransfer.files).filter(
-      (f) =>
-        f.name.endsWith(".xlsx") ||
-        f.name.endsWith(".xls")
+    const dropped = Array.from(e.dataTransfer.files).filter(
+      (f) => f.name.endsWith(".xlsx") || f.name.endsWith(".xls")
     );
-    if (droppedFiles.length > 0) {
-      setFiles(droppedFiles);
-    }
+    if (dropped.length > 0) setFiles(dropped);
   }, []);
 
-  const runStage = async (stageNum: number) => {
+  const runAnalysis = async () => {
     setLoading(true);
     setError(null);
-
     try {
       const formData = new FormData();
-
-      if (stageNum === 1) {
-        if (files.length === 0 && !sessionId) {
-          throw new Error("파일을 선택해주세요.");
-        }
-        files.forEach((f) => formData.append("columns_files", f));
-        if (sessionId) {
-          formData.append("session_id", sessionId);
-        }
-      } else {
-        if (!sessionId) {
-          throw new Error("먼저 1단계를 실행해주세요.");
-        }
-        formData.append("session_id", sessionId);
-      }
-
+      if (files.length === 0 && !sessionId) throw new Error("파일을 선택해주세요.");
+      files.forEach((f) => formData.append("columns_files", f));
+      if (sessionId) formData.append("session_id", sessionId);
       formData.append("mock", mockMode.toString());
 
-      const resp = await fetch(
-        `${API_BASE}/projects/open-data-analyzer/stage${stageNum}`,
-        { method: "POST", body: formData, credentials: "include" }
-      );
-
+      const resp = await fetch(`${API_BASE}/projects/open-data-analyzer/stage1`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
       if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(
-          errData.detail || `Stage ${stageNum} 실행 실패 (${resp.status})`
-        );
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `분석 실패 (${resp.status})`);
       }
-
-      const data: OpenDataStageResponse = await resp.json();
+      const data: OpenDataAnalysisResult = await resp.json();
       setSessionId(data.session_id);
-      setStageResults((prev) => ({ ...prev, [stageNum]: data }));
-      setCompletedStages((prev) => new Set([...prev, stageNum]));
-
-      if (stageNum < 5) {
-        setActiveStage(stageNum + 1);
-      }
+      setExecutionId(data.execution_id || null);
+      setViewingHistory(false);
+      setResult(data);
+      setHistoryRefresh((v) => v + 1);
     } catch (err: any) {
       setError(err.message || "알 수 없는 오류가 발생했습니다.");
     } finally {
@@ -99,29 +239,61 @@ export default function OpenDataAnalyzerPage() {
     }
   };
 
-  const handleExport = async () => {
-    if (!sessionId) return;
+  const loadFromHistory = async (execId: string) => {
     setLoading(true);
     setError(null);
-
     try {
-      const formData = new FormData();
-      formData.append("session_id", sessionId);
-
       const resp = await fetch(
-        `${API_BASE}/projects/open-data-analyzer/export`,
-        { method: "POST", body: formData, credentials: "include" }
+        `${API_BASE}/projects/open-data-analyzer/runs/${execId}`,
+        { credentials: "include" }
       );
+      if (!resp.ok) throw new Error(`이력 불러오기 실패 (${resp.status})`);
+      const detail = await resp.json();
+      const response = (detail.result_data as any)?.response;
+      if (!response) throw new Error("결과 데이터가 없습니다.");
+      setResult(response as OpenDataAnalysisResult);
+      setExecutionId(execId);
+      setSessionId(null);
+      setViewingHistory(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      if (!resp.ok) {
-        throw new Error("내보내기 실패");
+  const handleExport = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let blob: Blob;
+      let suffix: string;
+      if (executionId) {
+        const resp = await fetch(
+          `${API_BASE}/projects/open-data-analyzer/runs/${executionId}/export`,
+          { credentials: "include" }
+        );
+        if (!resp.ok) throw new Error("내보내기 실패");
+        blob = await resp.blob();
+        suffix = executionId.slice(0, 8);
+      } else if (sessionId) {
+        const formData = new FormData();
+        formData.append("session_id", sessionId);
+        const resp = await fetch(`${API_BASE}/projects/open-data-analyzer/export`, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!resp.ok) throw new Error("내보내기 실패");
+        blob = await resp.blob();
+        suffix = sessionId.slice(0, 8);
+      } else {
+        return;
       }
-
-      const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `개방데이터분석결과_${sessionId.slice(0, 8)}.xlsx`;
+      a.download = `개방데이터분석결과_${suffix}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
@@ -131,22 +303,20 @@ export default function OpenDataAnalyzerPage() {
     }
   };
 
-  const resetSession = () => {
+  const reset = () => {
     setSessionId(null);
-    setStageResults({});
-    setCompletedStages(new Set());
+    setExecutionId(null);
+    setViewingHistory(false);
+    setResult(null);
     setFiles([]);
-    setActiveStage(1);
     setError(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const currentResult = stageResults[activeStage];
+  const canRun = files.length > 0 || !!sessionId;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -154,21 +324,20 @@ export default function OpenDataAnalyzerPage() {
             개방 가능 여부 판단
           </h1>
           <p className="text-sm mt-1" style={{ color: "#8B95A1" }}>
-            엑셀 테이블 정의서를 업로드하면 LLM이 5단계로 공공데이터 개방 가능
-            여부를 판단합니다
+            엑셀 테이블 정의서를 업로드하면 컬럼 단위로 개방 가능 여부를 분석합니다
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Mock toggle */}
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: "#4E5968" }}>
+          <label
+            className="flex items-center gap-2 text-sm cursor-pointer select-none"
+            style={{ color: "#4E5968" }}
+          >
             <button
               role="switch"
               aria-checked={mockMode}
               onClick={() => setMockMode((v) => !v)}
               className="relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none"
-              style={{
-                backgroundColor: mockMode ? "#0064FF" : "#E8E9ED",
-              }}
+              style={{ backgroundColor: mockMode ? "#0064FF" : "#E8E9ED" }}
             >
               <span
                 className="inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
@@ -180,36 +349,25 @@ export default function OpenDataAnalyzerPage() {
             </button>
             Mock 모드
           </label>
-
-          {sessionId && (
+          {(sessionId || result) && (
             <button
-              onClick={resetSession}
+              onClick={reset}
               className="px-3 py-1.5 text-sm rounded-lg font-medium transition-colors"
-              style={{
-                backgroundColor: "#F0F1F4",
-                color: "#4E5968",
-              }}
+              style={{ backgroundColor: "#F0F1F4", color: "#4E5968" }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#E8E9ED")}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#F0F1F4")}
             >
               새 세션
             </button>
           )}
-          {completedStages.size > 0 && (
+          {result && (
             <button
               onClick={handleExport}
               disabled={loading}
-              className="px-3 py-1.5 text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
-              style={{
-                backgroundColor: "#00B386",
-                color: "#FFFFFF",
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) e.currentTarget.style.backgroundColor = "#009E77";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#00B386";
-              }}
+              className="px-3 py-1.5 text-sm rounded-lg font-medium disabled:opacity-50"
+              style={{ backgroundColor: "#00B386", color: "#FFFFFF" }}
+              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.backgroundColor = "#009E77"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#00B386"; }}
             >
               엑셀 내보내기
             </button>
@@ -217,337 +375,198 @@ export default function OpenDataAnalyzerPage() {
         </div>
       </div>
 
-      {/* Stage Indicator */}
-      <div className="flex items-center">
-        {STAGES.map((stage, idx) => {
-          const isActive = activeStage === stage.num;
-          const isCompleted = completedStages.has(stage.num);
-          return (
-            <div key={stage.num} className="flex items-center">
-              <button
-                onClick={() => setActiveStage(stage.num)}
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all"
-                style={{
-                  backgroundColor: isActive
-                    ? "#0064FF"
-                    : isCompleted
-                    ? "#E6F9F3"
-                    : "#E8E9ED",
-                  color: isActive
-                    ? "#FFFFFF"
-                    : isCompleted
-                    ? "#00B386"
-                    : "#8B95A1",
-                }}
-              >
-                <span
-                  className="flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"
-                  style={{
-                    backgroundColor: isActive
-                      ? "rgba(255,255,255,0.25)"
-                      : isCompleted
-                      ? "#00B386"
-                      : "#B0B8C1",
-                    color: isActive
-                      ? "#FFFFFF"
-                      : isCompleted
-                      ? "#FFFFFF"
-                      : "#FFFFFF",
-                  }}
-                >
-                  {isCompleted ? "✓" : stage.num}
-                </span>
-                {stage.label}
-              </button>
-              {idx < STAGES.length - 1 && (
-                <div
-                  className="w-6 h-0.5 mx-1"
-                  style={{
-                    backgroundColor: isCompleted ? "#00B386" : "#E5E8EB",
-                  }}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <RunHistoryPanel
+        projectSlug="open-data-analyzer"
+        onSelect={loadFromHistory}
+        refreshKey={historyRefresh}
+        selectedExecutionId={executionId}
+      />
 
-      {/* Error */}
+      {viewingHistory && result && (
+        <div
+          className="flex items-center justify-between rounded-lg px-4 py-2.5 text-sm"
+          style={{
+            backgroundColor: "#E8F1FF",
+            border: "1px solid rgba(0,100,255,0.2)",
+            color: "#0050CC",
+          }}
+        >
+          <span>이전 실행 결과를 보고 있습니다 ({executionId?.slice(0, 8)}...)</span>
+          <button
+            onClick={reset}
+            className="text-xs font-medium underline"
+            style={{ color: "#0050CC" }}
+          >
+            현재 작업으로 돌아가기
+          </button>
+        </div>
+      )}
+
       {error && (
         <div
           className="px-4 py-3 rounded-lg text-sm"
           style={{
             backgroundColor: "#FFF0F1",
             color: "#F04452",
-            border: "1px solid #F04452",
-            borderColor: "rgba(240,68,82,0.2)",
+            border: "1px solid rgba(240,68,82,0.2)",
           }}
         >
           {error}
         </div>
       )}
 
-      {/* Stage Content */}
-      <div
-        className="rounded-xl shadow-md"
-        style={{
-          backgroundColor: "#FFFFFF",
-          border: "1px solid #E5E8EB",
-        }}
-      >
-        <div className="p-6">
-          <h2 className="text-lg font-semibold" style={{ color: "#191F28" }}>
-            {STAGES[activeStage - 1].label}
-          </h2>
-          <p className="text-sm mt-1" style={{ color: "#8B95A1" }}>
-            {STAGES[activeStage - 1].desc}
-          </p>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Left: Upload + Submit */}
+        <div className="space-y-4 lg:col-span-1">
+          <div
+            className="rounded-xl shadow-md p-6"
+            style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E8EB" }}
+          >
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              className="flex cursor-pointer flex-col items-center justify-center rounded-lg p-6 transition-colors"
+              style={{
+                border: `2px dashed ${files.length > 0 ? "#00B386" : "#E5E8EB"}`,
+                backgroundColor: files.length > 0 ? "#E6F9F3" : "#F4F5F8",
+              }}
+              onMouseEnter={(e) => {
+                if (!files.length) {
+                  e.currentTarget.style.borderColor = "#0064FF";
+                  e.currentTarget.style.backgroundColor = "#E8F1FF";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!files.length) {
+                  e.currentTarget.style.borderColor = "#E5E8EB";
+                  e.currentTarget.style.backgroundColor = "#F4F5F8";
+                }
+              }}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Upload className="mb-2 h-7 w-7" style={{ color: files.length > 0 ? "#00B386" : "#B0B8C1" }} />
+              <p className="text-sm" style={{ color: "#4E5968" }}>
+                엑셀 파일을 드래그하거나 클릭하여 선택
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#8B95A1" }}>
+                .xlsx, .xls (다중 가능)
+              </p>
+            </div>
+            {files.length > 0 && (
+              <div className="mt-3 space-y-1">
+                {files.map((f, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md"
+                    style={{ backgroundColor: "#F0F1F4", color: "#4E5968" }}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 shrink-0" style={{ color: "#8B95A1" }} />
+                    <span className="truncate">{f.name}</span>
+                    <span className="shrink-0" style={{ color: "#8B95A1" }}>({(f.size / 1024).toFixed(1)}KB)</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Stage 1: File Upload */}
-          {activeStage === 1 && !completedStages.has(1) && (
-            <div className="mt-4">
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                className="rounded-lg p-8 text-center transition-colors cursor-pointer"
-                style={{
-                  border: "2px dashed #E5E8EB",
-                  backgroundColor: files.length > 0 ? "#E6F9F3" : "#FFFFFF",
-                }}
-                onMouseEnter={(e) => {
-                  if (files.length === 0) {
-                    e.currentTarget.style.borderColor = "#0064FF";
-                    e.currentTarget.style.backgroundColor = "#E8F1FF";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (files.length === 0) {
-                    e.currentTarget.style.borderColor = "#E5E8EB";
-                    e.currentTarget.style.backgroundColor = "#FFFFFF";
-                  }
-                }}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  multiple
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <div className="text-4xl mb-3">📁</div>
-                <p className="text-sm" style={{ color: "#4E5968" }}>
-                  엑셀 파일을 드래그하거나 클릭하여 선택하세요
-                </p>
-                <p className="text-xs mt-1" style={{ color: "#8B95A1" }}>
-                  .xlsx, .xls 파일 지원 (다중 파일 가능)
+          <button
+            onClick={runAnalysis}
+            disabled={loading || !canRun}
+            className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed"
+            style={{ backgroundColor: loading || !canRun ? "#B0B8C1" : "#0064FF" }}
+            onMouseEnter={(e) => { if (!loading && canRun) e.currentTarget.style.backgroundColor = "#0050CC"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = loading || !canRun ? "#B0B8C1" : "#0064FF"; }}
+          >
+            {loading ? (
+              <>
+                <LoadingSpinner size="sm" />
+                분석 중...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                분석 실행
+              </>
+            )}
+          </button>
+
+          {(loading || result) && <FormatGuide content={VERIFY_GUIDE} compact />}
+        </div>
+
+        {/* Right: Results */}
+        <div className="lg:col-span-2">
+          {!result && !loading && <FormatGuide content={VERIFY_GUIDE} />}
+
+          {loading && !result && (
+            <div className="flex h-64 items-center justify-center">
+              <div className="text-center">
+                <LoadingSpinner size="lg" />
+                <p className="mt-3 text-sm" style={{ color: "#8B95A1" }}>
+                  컬럼 단위로 개방 가능 여부를 분석하고 있습니다...
                 </p>
               </div>
-              {files.length > 0 && (
-                <div className="mt-3 space-y-1">
-                  {files.map((f, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md"
-                      style={{
-                        backgroundColor: "#F0F1F4",
-                        color: "#4E5968",
-                      }}
-                    >
-                      <span>📄</span>
-                      <span>{f.name}</span>
-                      <span style={{ color: "#8B95A1" }}>
-                        ({(f.size / 1024).toFixed(1)}KB)
-                      </span>
-                    </div>
-                  ))}
+            </div>
+          )}
+
+          {result && (
+            <div className="space-y-5">
+              <div className="flex flex-wrap gap-3">
+                <StatBadge label="전체" value={result.total} bg="#F4F5F8" color="#191F28" />
+                <StatBadge label="전체개방" value={result.full_open_count} bg="#E6F9F3" color="#00B386" />
+                {result.partial_count > 0 && (
+                  <StatBadge label="부분개방" value={result.partial_count} bg="#FFF8E1" color="#B78103" />
+                )}
+                <StatBadge label="개방불가" value={result.not_openable_count} bg="#FFF0F1" color="#F04452" />
+              </div>
+
+              {result.groups.length > 0 && (
+                <div className="rounded-xl shadow-md" style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E8EB" }}>
+                  <div className="px-6 py-4 border-b" style={{ borderColor: "#E5E8EB" }}>
+                    <h2 className="text-base font-semibold" style={{ color: "#191F28" }}>
+                      개방 가능 데이터셋
+                    </h2>
+                    <p className="text-xs mt-0.5" style={{ color: "#8B95A1" }}>
+                      전체개방 {result.full_open_count}건 · 부분개방 {result.partial_count}건
+                    </p>
+                  </div>
+                  <div className="divide-y" style={{ borderColor: "#F0F1F4" }}>
+                    {result.groups.map((group) => (
+                      <GroupSection key={group.major_area} group={group} />
+                    ))}
+                  </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Run Button */}
-          {(activeStage === 1
-            ? files.length > 0 || sessionId
-            : completedStages.has(activeStage - 1)) &&
-            !completedStages.has(activeStage) && (
-              <button
-                onClick={() => runStage(activeStage)}
-                disabled={loading}
-                className="mt-4 px-6 py-2.5 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                style={{
-                  backgroundColor: "#0064FF",
-                  color: "#FFFFFF",
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading) e.currentTarget.style.backgroundColor = "#0050CC";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "#0064FF";
-                }}
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <svg
-                      className="animate-spin h-4 w-4"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                    분석 중...
-                  </span>
-                ) : (
-                  `${activeStage}단계 실행`
-                )}
-              </button>
-            )}
-
-          {/* Results */}
-          {currentResult && (
-            <div className="mt-6">
-              {/* Stats */}
-              <div className="flex flex-wrap gap-3 mb-4">
-                <div
-                  className="px-4 py-2 rounded-lg text-sm"
-                  style={{ backgroundColor: "#F4F5F8" }}
-                >
-                  <span style={{ color: "#8B95A1" }}>총 </span>
-                  <span className="font-semibold" style={{ color: "#191F28" }}>
-                    {currentResult.total}
-                  </span>
-                  <span style={{ color: "#8B95A1" }}>건</span>
-                </div>
-                {currentResult.openable_count !== undefined && (
-                  <>
-                    <div
-                      className="px-4 py-2 rounded-lg text-sm"
-                      style={{ backgroundColor: "#E6F9F3" }}
-                    >
-                      <span style={{ color: "#00B386" }}>개방 가능 </span>
-                      <span className="font-semibold" style={{ color: "#00B386" }}>
-                        {currentResult.openable_count}
-                      </span>
-                    </div>
-                    <div
-                      className="px-4 py-2 rounded-lg text-sm"
-                      style={{ backgroundColor: "#FFF0F1" }}
-                    >
-                      <span style={{ color: "#F04452" }}>개방 불가 </span>
-                      <span className="font-semibold" style={{ color: "#F04452" }}>
-                        {currentResult.not_openable_count}
-                      </span>
-                    </div>
-                  </>
-                )}
-                {currentResult.final_openable !== undefined && (
-                  <>
-                    <div
-                      className="px-4 py-2 rounded-lg text-sm"
-                      style={{ backgroundColor: "#E6F9F3" }}
-                    >
-                      <span style={{ color: "#00B386" }}>최종 가능 </span>
-                      <span className="font-semibold" style={{ color: "#00B386" }}>
-                        {currentResult.final_openable}
-                      </span>
-                    </div>
-                    <div
-                      className="px-4 py-2 rounded-lg text-sm"
-                      style={{ backgroundColor: "#FFF0F1" }}
-                    >
-                      <span style={{ color: "#F04452" }}>최종 불가 </span>
-                      <span className="font-semibold" style={{ color: "#F04452" }}>
-                        {currentResult.final_not_openable}
-                      </span>
-                    </div>
-                  </>
-                )}
-                {currentResult.total_columns !== undefined && (
-                  <div
-                    className="px-4 py-2 rounded-lg text-sm"
-                    style={{ backgroundColor: "#E8F1FF" }}
-                  >
-                    <span style={{ color: "#0064FF" }}>핵심컬럼 </span>
-                    <span className="font-semibold" style={{ color: "#0064FF" }}>
-                      {currentResult.total_columns}
-                    </span>
+              {result.not_openable.length > 0 && (
+                <div className="rounded-xl shadow-md" style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E8EB" }}>
+                  <div className="px-6 py-4 border-b" style={{ borderColor: "#E5E8EB" }}>
+                    <h2 className="text-base font-semibold" style={{ color: "#191F28" }}>
+                      개방 불가 목록
+                    </h2>
+                    <p className="text-xs mt-0.5" style={{ color: "#8B95A1" }}>
+                      {result.not_openable_count}건
+                    </p>
                   </div>
-                )}
-              </div>
-
-              {/* Table */}
-              <div
-                className="overflow-x-auto rounded-lg"
-                style={{ border: "1px solid #E5E8EB" }}
-              >
-                <table className="min-w-full divide-y text-sm" style={{ borderColor: "#E5E8EB" }}>
-                  <thead style={{ backgroundColor: "#F4F5F8" }}>
-                    <tr>
-                      <th
-                        className="px-4 py-3 text-left text-xs font-medium"
-                        style={{ color: "#8B95A1" }}
-                      >
-                        #
-                      </th>
-                      <th
-                        className="px-4 py-3 text-left text-xs font-medium"
-                        style={{ color: "#8B95A1" }}
-                      >
-                        테이블명
-                      </th>
-                      <StageHeaders stage={activeStage} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentResult.rows.map(
-                      (row: OpenDataStageRow, idx: number) => (
-                        <tr
-                          key={idx}
-                          className="transition-colors"
-                          style={{ borderTop: "1px solid #F0F1F4" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F0F1F4")}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                        >
-                          <td className="px-4 py-3" style={{ color: "#B0B8C1" }}>
-                            {idx + 1}
-                          </td>
-                          <td className="px-4 py-3 font-medium" style={{ color: "#191F28" }}>
-                            {row.table}
-                          </td>
-                          <StageCells stage={activeStage} row={row} />
-                        </tr>
-                      )
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* No results yet, stage is completed */}
-          {completedStages.has(activeStage) && !currentResult && (
-            <div className="mt-6 text-center py-8" style={{ color: "#B0B8C1" }}>
-              결과를 불러오는 중...
+                  <div className="divide-y" style={{ borderColor: "#F0F1F4" }}>
+                    {result.not_openable.map((row) => (
+                      <NotOpenableRow key={row.key} row={row} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Session Info */}
       {sessionId && (
         <div className="text-xs" style={{ color: "#B0B8C1" }}>
           세션: {sessionId.slice(0, 12)}...
@@ -557,190 +576,872 @@ export default function OpenDataAnalyzerPage() {
   );
 }
 
-function StageHeaders({ stage }: { stage: number }) {
-  const thStyle = { color: "#8B95A1" };
-  switch (stage) {
-    case 1:
-      return (
-        <>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            개방여부
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            사유번호
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            판단사유
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            신뢰도
-          </th>
-        </>
+/* ------------------------------------------------------------------ */
+/* 탭 2 — 설명/키워드 생성                                              */
+/* ------------------------------------------------------------------ */
+
+function SummaryTab() {
+  const [file, setFile] = useState<File | null>(null);
+  const [orgName, setOrgName] = useState("");
+  const [sheet, setSheet] = useState("");
+  const [groupKey, setGroupKey] = useState("");
+  const [headerStart, setHeaderStart] = useState("");
+  const [headerEnd, setHeaderEnd] = useState("");
+  const [useMock, setUseMock] = useState(false);
+  const [includePrompt, setIncludePrompt] = useState(false);
+  const [includeRows, setIncludeRows] = useState(false);
+  const [includeDebug, setIncludeDebug] = useState(false);
+
+  const [results, setResults] = useState<DatasetSummaryResult[]>([]);
+  const [debug, setDebug] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [executionId, setExecutionId] = useState<string | null>(null);
+  const [viewingHistory, setViewingHistory] = useState(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleFile = useCallback((f: File) => {
+    const ext = f.name.split(".").pop()?.toLowerCase();
+    if (ext !== "xlsx" && ext !== "csv") {
+      setError(".xlsx 또는 .csv 파일만 지원합니다.");
+      return;
+    }
+    setFile(f);
+    setError(null);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const f = e.dataTransfer.files[0];
+      if (f) handleFile(f);
+    },
+    [handleFile]
+  );
+
+  const handleSubmit = async () => {
+    if (!file) { setError("파일을 선택해주세요."); return; }
+    if (!orgName.trim()) { setError("기관명을 입력해주세요."); return; }
+
+    setLoading(true);
+    setError(null);
+    setResults([]);
+    setDebug(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("org_name", orgName.trim());
+    if (sheet.trim()) formData.append("sheet", sheet.trim());
+    if (groupKey.trim()) formData.append("group_key", groupKey.trim());
+    if (headerStart.trim()) formData.append("header_start", headerStart.trim());
+    if (headerEnd.trim()) formData.append("header_end", headerEnd.trim());
+    formData.append("mock", String(useMock));
+    formData.append("include_prompt", String(includePrompt));
+    formData.append("include_rows", String(includeRows));
+    formData.append("include_debug", String(includeDebug));
+
+    try {
+      const res = await api.postFormData<{
+        results: DatasetSummaryResult[];
+        debug?: Record<string, unknown>;
+        execution_id?: string;
+      }>("/projects/dataset-summary/summarize", formData);
+      setResults(res.results);
+      if (res.debug) setDebug(res.debug);
+      setExecutionId(res.execution_id || null);
+      setViewingHistory(false);
+      setHistoryRefresh((v) => v + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "요청 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFromHistory = async (execId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await fetch(
+        `${API_BASE}/projects/dataset-summary/runs/${execId}`,
+        { credentials: "include" }
       );
-    case 2:
-      return (
-        <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-          주제영역
-        </th>
-      );
-    case 3:
-      return (
-        <>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            핵심컬럼
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            데이터셋 설명
-          </th>
-        </>
-      );
-    case 4:
-      return (
-        <>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            조인 테이블
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            조인 키
-          </th>
-        </>
-      );
-    case 5:
-      return (
-        <>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            데이터셋명
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            최종개방여부
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium" style={thStyle}>
-            판정사유
-          </th>
-        </>
-      );
-    default:
-      return null;
-  }
+      if (!resp.ok) throw new Error(`이력 불러오기 실패 (${resp.status})`);
+      const detail = await resp.json();
+      const response = (detail.result_data as any)?.response;
+      if (!response) throw new Error("결과 데이터가 없습니다.");
+      setResults(response.results || []);
+      setDebug(response.debug || null);
+      setExecutionId(execId);
+      setViewingHistory(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "이력 불러오기 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetView = () => {
+    setResults([]);
+    setDebug(null);
+    setExecutionId(null);
+    setViewingHistory(false);
+    setError(null);
+  };
+
+  const toggleCard = (idx: number) => {
+    setExpandedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
+
+  const copyToClipboard = async (text: string, idx: number) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
+  };
+
+  const inputStyle = {
+    backgroundColor: "#F0F1F4",
+    borderRadius: "10px",
+    border: "none",
+    padding: "8px 12px",
+    fontSize: "14px",
+    color: "#191F28",
+    outline: "none",
+    width: "100%",
+  };
+
+  const focusStyle = { boxShadow: "0 0 0 2px rgba(0,100,255,0.2)" };
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: "#191F28" }}>
+            데이터셋 설명/키워드 자동생성
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: "#8B95A1" }}>
+            데이터셋 정의서(Excel/CSV)를 업로드하면 LLM이 키워드 8개와 설명문을 자동 생성합니다
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <label
+            className="flex items-center gap-2 text-sm cursor-pointer select-none"
+            style={{ color: "#4E5968" }}
+          >
+            <button
+              role="switch"
+              aria-checked={useMock}
+              onClick={() => setUseMock((v) => !v)}
+              className="relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none"
+              style={{ backgroundColor: useMock ? "#0064FF" : "#E8E9ED" }}
+            >
+              <span
+                className="inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                style={{
+                  transform: useMock ? "translateX(18px)" : "translateX(2px)",
+                  marginTop: "2px",
+                }}
+              />
+            </button>
+            Mock 모드
+          </label>
+        </div>
+      </div>
+
+      <RunHistoryPanel
+        projectSlug="dataset-summary"
+        onSelect={loadFromHistory}
+        refreshKey={historyRefresh}
+        selectedExecutionId={executionId}
+      />
+
+      {viewingHistory && results.length > 0 && (
+        <div
+          className="flex items-center justify-between rounded-lg px-4 py-2.5 text-sm"
+          style={{
+            backgroundColor: "#E8F1FF",
+            border: "1px solid rgba(0,100,255,0.2)",
+            color: "#0050CC",
+          }}
+        >
+          <span>이전 실행 결과를 보고 있습니다 ({executionId?.slice(0, 8)}...)</span>
+          <button
+            onClick={resetView}
+            className="text-xs font-medium underline"
+            style={{ color: "#0050CC" }}
+          >
+            현재 작업으로 돌아가기
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Left: Upload + Settings */}
+        <div className="space-y-4 lg:col-span-1">
+          <div
+            className="rounded-xl shadow-md p-6 space-y-4"
+            style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E8EB" }}
+          >
+            {/* File Upload */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
+                파일 업로드
+              </label>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className="flex cursor-pointer flex-col items-center justify-center rounded-lg p-6 transition-colors"
+                style={{
+                  border: `2px dashed ${dragOver ? "#0064FF" : file ? "#00B386" : "#E5E8EB"}`,
+                  backgroundColor: dragOver ? "#E8F1FF" : file ? "#E6F9F3" : "#F4F5F8",
+                }}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.csv"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                />
+                {file ? (
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-5 w-5" style={{ color: "#00B386" }} />
+                    <span className="text-sm font-medium" style={{ color: "#00B386" }}>
+                      {file.name}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                      className="ml-1 rounded p-0.5 transition-colors"
+                      style={{ color: "#8B95A1" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#4E5968")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "#8B95A1")}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="mb-2 h-7 w-7" style={{ color: "#B0B8C1" }} />
+                    <p className="text-sm" style={{ color: "#4E5968" }}>
+                      파일을 드래그하거나 클릭하여 선택
+                    </p>
+                    <p className="mt-1 text-xs" style={{ color: "#8B95A1" }}>.xlsx, .csv</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div style={{ borderTop: "1px solid #F0F1F4" }} />
+
+            {/* Inputs */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
+                  기관명 <span style={{ color: "#F04452" }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  placeholder="예: 한국토지주택공사"
+                  style={inputStyle}
+                  onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                  onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
+                  시트명 (선택)
+                </label>
+                <input
+                  type="text"
+                  value={sheet}
+                  onChange={(e) => setSheet(e.target.value)}
+                  placeholder="기본: 첫 번째 시트"
+                  style={inputStyle}
+                  onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                  onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
+                  그룹 키 컬럼 (선택)
+                </label>
+                <input
+                  type="text"
+                  value={groupKey}
+                  onChange={(e) => setGroupKey(e.target.value)}
+                  placeholder="자동 감지"
+                  style={inputStyle}
+                  onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                  onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
+                    헤더 시작 셀
+                  </label>
+                  <input
+                    type="text"
+                    value={headerStart}
+                    onChange={(e) => setHeaderStart(e.target.value)}
+                    placeholder="예: A1"
+                    style={inputStyle}
+                    onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                    onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
+                    헤더 끝 셀
+                  </label>
+                  <input
+                    type="text"
+                    value={headerEnd}
+                    onChange={(e) => setHeaderEnd(e.target.value)}
+                    placeholder="예: J2"
+                    style={inputStyle}
+                    onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                    onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Options */}
+            <div className="space-y-2.5" style={{ borderTop: "1px solid #F0F1F4", paddingTop: "12px" }}>
+              {([
+                { label: "프롬프트 보기", checked: includePrompt, onChange: setIncludePrompt },
+                { label: "원본 행 보기", checked: includeRows, onChange: setIncludeRows },
+                { label: "디버그 정보", checked: includeDebug, onChange: setIncludeDebug },
+              ] as const).map(({ label, checked, onChange }) => (
+                <label
+                  key={label}
+                  className="flex items-center gap-2.5 text-sm cursor-pointer select-none"
+                  style={{ color: "#4E5968" }}
+                >
+                  <span
+                    className="inline-flex items-center justify-center w-4 h-4 rounded transition-colors shrink-0"
+                    style={{
+                      backgroundColor: checked ? "#0064FF" : "#F0F1F4",
+                      border: checked ? "none" : "1.5px solid #B0B8C1",
+                    }}
+                    onClick={() => onChange(!checked)}
+                  >
+                    {checked && (
+                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => onChange(e.target.checked)}
+                    className="sr-only"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={loading || !file}
+            className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed"
+            style={{ backgroundColor: loading || !file ? "#B0B8C1" : "#0064FF" }}
+            onMouseEnter={(e) => { if (!loading && file) e.currentTarget.style.backgroundColor = "#0050CC"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = loading || !file ? "#B0B8C1" : "#0064FF"; }}
+          >
+            {loading ? (
+              <>
+                <LoadingSpinner size="sm" />
+                생성 중...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                생성하기
+              </>
+            )}
+          </button>
+
+          {error && (
+            <div
+              className="rounded-lg p-3 text-sm"
+              style={{ backgroundColor: "#FFF0F1", color: "#F04452", border: "1px solid rgba(240,68,82,0.2)" }}
+            >
+              {error}
+            </div>
+          )}
+
+          {(loading || results.length > 0) && <FormatGuide content={SUMMARY_GUIDE} compact />}
+        </div>
+
+        {/* Right: Results */}
+        <div className="lg:col-span-2">
+          {results.length === 0 && !loading && <FormatGuide content={SUMMARY_GUIDE} />}
+
+          {loading && (
+            <div className="flex h-64 items-center justify-center">
+              <div className="text-center">
+                <LoadingSpinner size="lg" />
+                <p className="mt-3 text-sm" style={{ color: "#8B95A1" }}>
+                  LLM이 설명문과 키워드를 생성하고 있습니다...
+                </p>
+              </div>
+            </div>
+          )}
+
+          {results.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold" style={{ color: "#191F28" }}>
+                생성 결과{" "}
+                <span className="text-sm font-medium" style={{ color: "#8B95A1" }}>
+                  ({results.length}건)
+                </span>
+              </h2>
+
+              {results.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="overflow-hidden rounded-lg shadow-sm"
+                  style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E8EB" }}
+                >
+                  {/* Card Header */}
+                  <div
+                    className="flex cursor-pointer items-center justify-between px-4 py-3 transition-colors"
+                    style={{ borderBottom: "1px solid #F0F1F4" }}
+                    onClick={() => toggleCard(idx)}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F4F5F8")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shrink-0"
+                        style={{ backgroundColor: "#E8F1FF", color: "#0064FF" }}
+                      >
+                        {item.row_index}
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "#191F28" }}>
+                          {item.common["개방 데이터셋명"] || item.group_key || `그룹 ${item.row_index}`}
+                        </p>
+                        {item.common["테이블명(한글)"] && (
+                          <p className="text-xs" style={{ color: "#8B95A1" }}>
+                            {item.common["테이블명(한글)"]}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {expandedCards.has(idx)
+                      ? <ChevronUp className="h-4 w-4 shrink-0" style={{ color: "#8B95A1" }} />
+                      : <ChevronDown className="h-4 w-4 shrink-0" style={{ color: "#8B95A1" }} />}
+                  </div>
+
+                  {/* Keywords */}
+                  <div
+                    className="flex flex-wrap gap-1.5 px-4 py-3"
+                    style={{ borderBottom: "1px solid #F0F1F4" }}
+                  >
+                    {item.keywords.map((kw, kwIdx) => (
+                      <span
+                        key={kwIdx}
+                        className="inline-flex rounded text-xs font-medium px-2.5 py-1"
+                        style={{ backgroundColor: "#E8F1FF", color: "#0064FF", borderRadius: "6px" }}
+                      >
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Description */}
+                  <div className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm leading-relaxed" style={{ color: "#4E5968" }}>
+                        {item.description}
+                      </p>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); copyToClipboard(item.description, idx); }}
+                        className="shrink-0 rounded p-1.5 transition-colors"
+                        style={{ color: "#8B95A1" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "#F0F1F4";
+                          e.currentTarget.style.color = "#4E5968";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                          e.currentTarget.style.color = "#8B95A1";
+                        }}
+                        title="설명문 복사"
+                      >
+                        {copiedIdx === idx
+                          ? <Check className="h-4 w-4" style={{ color: "#00B386" }} />
+                          : <Copy className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded Details */}
+                  {expandedCards.has(idx) && (
+                    <div
+                      className="space-y-4 px-4 py-4"
+                      style={{ borderTop: "1px solid #F0F1F4", backgroundColor: "#F4F5F8" }}
+                    >
+                      {Object.keys(item.common).length > 0 && (
+                        <div>
+                          <p className="mb-2 text-xs font-semibold" style={{ color: "#8B95A1" }}>공통 정보</p>
+                          <div className="grid grid-cols-2 gap-1.5 text-xs">
+                            {Object.entries(item.common).map(([k, v]) => (
+                              <div key={k}>
+                                <span style={{ color: "#8B95A1" }}>{k}: </span>
+                                <span style={{ color: "#4E5968" }}>{v}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {item.columns.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-xs font-semibold" style={{ color: "#8B95A1" }}>
+                            컬럼 목록 ({item.columns.length}개)
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {item.columns.map((col, colIdx) => (
+                              <span
+                                key={colIdx}
+                                className="inline-flex px-1.5 py-0.5 text-xs"
+                                style={{ backgroundColor: "#E8E9ED", color: "#4E5968", borderRadius: "6px" }}
+                              >
+                                {col}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {item.prompt && (
+                        <div>
+                          <p className="mb-2 text-xs font-semibold" style={{ color: "#8B95A1" }}>프롬프트</p>
+                          <pre
+                            className="max-h-48 overflow-auto p-3 text-xs leading-relaxed font-mono"
+                            style={{ backgroundColor: "#F0F1F4", borderRadius: "10px", color: "#4E5968" }}
+                          >
+                            {item.prompt}
+                          </pre>
+                        </div>
+                      )}
+                      {item.rows && (
+                        <div>
+                          <p className="mb-2 text-xs font-semibold" style={{ color: "#8B95A1" }}>
+                            원본 행 ({item.rows.length}개)
+                          </p>
+                          <pre
+                            className="max-h-48 overflow-auto p-3 text-xs leading-relaxed font-mono"
+                            style={{ backgroundColor: "#F0F1F4", borderRadius: "10px", color: "#4E5968" }}
+                          >
+                            {JSON.stringify(item.rows, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {debug && (
+                <div
+                  className="rounded-lg p-4"
+                  style={{ backgroundColor: "#FFF5E6", border: "1px solid rgba(255,136,0,0.2)" }}
+                >
+                  <p className="mb-2 text-xs font-semibold" style={{ color: "#FF8800" }}>디버그 정보</p>
+                  <pre
+                    className="max-h-48 overflow-auto p-3 text-xs leading-relaxed font-mono"
+                    style={{ backgroundColor: "#F0F1F4", borderRadius: "10px", color: "#4E5968" }}
+                  >
+                    {JSON.stringify(debug, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function StageCells({
-  stage,
-  row,
-}: {
-  stage: number;
-  row: OpenDataStageRow;
-}) {
-  switch (stage) {
-    case 1:
-      return (
-        <>
-          <td className="px-4 py-3">
-            <span
-              className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
-              style={
-                row.openable === "가능"
-                  ? { backgroundColor: "#E6F9F3", color: "#00B386" }
-                  : row.openable === "불가능"
-                  ? { backgroundColor: "#FFF0F1", color: "#F04452" }
-                  : { backgroundColor: "#F0F1F4", color: "#8B95A1" }
-              }
-            >
-              {row.openable || "-"}
-            </span>
-          </td>
-          <td className="px-4 py-3" style={{ color: "#4E5968" }}>
-            {row.reason_numbers?.join(", ") || "-"}
-          </td>
-          <td className="px-4 py-3 max-w-xs truncate" style={{ color: "#4E5968" }}>
-            {row.reason_text || "-"}
-          </td>
-          <td className="px-4 py-3">
-            <span
-              className="text-xs font-medium"
-              style={{
-                color:
-                  row.data_quality === "high"
-                    ? "#00B386"
-                    : row.data_quality === "medium"
-                    ? "#FF8800"
-                    : "#F04452",
-              }}
-            >
-              {row.confidence ?? "-"}%
-            </span>
-          </td>
-        </>
-      );
-    case 2:
-      return (
-        <td className="px-4 py-3">
-          <span
-            className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
-            style={{ backgroundColor: "#E8F1FF", color: "#0064FF" }}
-          >
-            {row.subject_area || "-"}
+/* ------------------------------------------------------------------ */
+/* 공용 컴포넌트                                                         */
+/* ------------------------------------------------------------------ */
+
+function StatBadge({ label, value, bg, color }: { label: string; value: number; bg: string; color: string }) {
+  return (
+    <div className="px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: bg }}>
+      <span style={{ color }}>{label} </span>
+      <span className="font-semibold" style={{ color }}>{value}</span>
+    </div>
+  );
+}
+
+function GroupSection({ group }: { group: OpenDataGroup }) {
+  return (
+    <div className="px-6 py-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span
+          className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold"
+          style={{ backgroundColor: "#E8F1FF", color: "#0064FF" }}
+        >
+          {group.major_area}
+        </span>
+        <span className="text-xs" style={{ color: "#8B95A1" }}>{group.tables.length}개 테이블</span>
+      </div>
+      <div className="space-y-3">
+        {group.tables.map((row) => (
+          <OpenableRow key={row.key} row={row} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OpenableRow({ row }: { row: OpenDataTableRow }) {
+  const isPartial = row.bucket === "부분개방";
+  const bucketStyle = isPartial
+    ? { backgroundColor: "#FFF8E1", color: "#B78103" }
+    : { backgroundColor: "#E6F9F3", color: "#00B386" };
+
+  return (
+    <div className="rounded-lg p-4" style={{ backgroundColor: "#F8F9FB", border: "1px solid #E5E8EB" }}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-xs font-medium" style={bucketStyle}>
+            {row.bucket}
           </span>
-        </td>
-      );
-    case 3:
-      return (
-        <>
-          <td className="px-4 py-3 max-w-xs" style={{ color: "#4E5968" }}>
-            <div className="flex flex-wrap gap-1">
-              {row.core_columns?.map((col, i) => (
-                <span
-                  key={i}
-                  className="inline-flex px-1.5 py-0.5 rounded text-xs"
-                  style={{ backgroundColor: "#F0F1F4", color: "#4E5968" }}
-                >
-                  {col}
-                </span>
-              )) || "-"}
-            </div>
-          </td>
-          <td className="px-4 py-3 max-w-xs truncate" style={{ color: "#4E5968" }}>
-            {row.dataset_description || "-"}
-          </td>
-        </>
-      );
-    case 4:
-      return (
-        <>
-          <td className="px-4 py-3" style={{ color: "#4E5968" }}>
-            {row.join_table || "-"}
-          </td>
-          <td className="px-4 py-3" style={{ color: "#4E5968" }}>
-            {row.join_keys?.join(", ") || "-"}
-          </td>
-        </>
-      );
-    case 5:
-      return (
-        <>
-          <td className="px-4 py-3 font-medium" style={{ color: "#191F28" }}>
-            {row.dataset_name || "-"}
-          </td>
-          <td className="px-4 py-3">
-            <span
-              className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
-              style={
-                row.final_openable === "가능"
-                  ? { backgroundColor: "#E6F9F3", color: "#00B386" }
-                  : row.final_openable === "불가능"
-                  ? { backgroundColor: "#FFF0F1", color: "#F04452" }
-                  : { backgroundColor: "#F0F1F4", color: "#8B95A1" }
-              }
-            >
-              {row.final_openable || "-"}
+          <span className="font-medium text-sm truncate" style={{ color: "#191F28" }}>{row.table}</span>
+          {row.sub_area && (
+            <span className="text-xs shrink-0" style={{ color: "#8B95A1" }}>/ {row.sub_area}</span>
+          )}
+        </div>
+        <span className="text-xs shrink-0" style={{ color: "#8B95A1" }}>
+          {row.open_count}/{row.total_count} 컬럼
+        </span>
+      </div>
+      {row.dataset_name && (
+        <p className="mt-2 text-xs font-medium" style={{ color: "#4E5968" }}>{row.dataset_name}</p>
+      )}
+      <div className="mt-2 flex flex-wrap gap-1">
+        {row.open_columns.slice(0, 8).map((col, i) => (
+          <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-xs"
+            style={{ backgroundColor: "#E6F9F3", color: "#00B386" }}>
+            {col}
+          </span>
+        ))}
+        {row.open_columns.length > 8 && (
+          <span className="text-xs" style={{ color: "#8B95A1" }}>+{row.open_columns.length - 8}</span>
+        )}
+      </div>
+      {isPartial && row.closed_columns.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {row.closed_columns.slice(0, 4).map((col, i) => (
+            <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-xs"
+              title={col.reason}
+              style={{ backgroundColor: "#FFF0F1", color: "#F04452" }}>
+              ❌ {col.name}
             </span>
-          </td>
-          <td className="px-4 py-3 max-w-xs truncate" style={{ color: "#4E5968" }}>
-            {row.final_reason || "-"}
-          </td>
-        </>
-      );
-    default:
-      return null;
+          ))}
+          {row.closed_columns.length > 4 && (
+            <span className="text-xs" style={{ color: "#8B95A1" }}>+{row.closed_columns.length - 4} 제외</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type GuideContent = {
+  formats: string;
+  fields: { label: string; values: string[] }[];
+  inputs?: string[];
+  output: string;
+  notes?: string[];
+};
+
+const VERIFY_GUIDE: GuideContent = {
+  formats: ".xlsx, .xls (다중 업로드 가능)",
+  fields: [
+    { label: "테이블명", values: ["한글 테이블명", "영문 테이블명"] },
+    { label: "컬럼명", values: ["한글 컬럼명", "영문 컬럼명"] },
+  ],
+  output: "컬럼별 개방 가능 여부 + 주제분류 + 데이터셋명 제안",
+  notes: ["같은 테이블이 여러 파일에 있으면 자동 병합됩니다"],
+};
+
+const SUMMARY_GUIDE: GuideContent = {
+  formats: ".xlsx, .csv",
+  fields: [
+    { label: "그룹 키", values: ["개방 데이터셋명"] },
+    { label: "테이블명", values: ["테이블명(한글)", "테이블명(영문)"] },
+    { label: "컬럼명", values: ["컬럼명(한글)", "컬럼명(영문)"] },
+  ],
+  inputs: ["기관명"],
+  output: "데이터셋별 키워드 8개 + 한글 설명문",
+};
+
+function FormatGuide({
+  content,
+  compact = false,
+}: {
+  content: GuideContent;
+  compact?: boolean;
+}) {
+  if (compact) {
+    return (
+      <div
+        className="rounded-lg p-3.5 text-xs space-y-2"
+        style={{ backgroundColor: "#F4F5F8", border: "1px solid #E5E8EB" }}
+      >
+        <div className="flex items-center gap-1.5">
+          <FileSpreadsheet className="h-3.5 w-3.5" style={{ color: "#0064FF" }} />
+          <p className="font-semibold" style={{ color: "#191F28" }}>입력 양식</p>
+        </div>
+        <div className="space-y-1" style={{ color: "#4E5968" }}>
+          <p>
+            <span style={{ color: "#8B95A1" }}>형식: </span>
+            {content.formats}
+          </p>
+          <div>
+            <p style={{ color: "#8B95A1" }}>필수 컬럼:</p>
+            <ul className="ml-1 mt-0.5 space-y-0.5">
+              {content.fields.map((f, i) => (
+                <li key={i}>· {f.label}: {f.values.join(" / ")}</li>
+              ))}
+            </ul>
+          </div>
+          {content.inputs && content.inputs.length > 0 && (
+            <p>
+              <span style={{ color: "#8B95A1" }}>필수 입력: </span>
+              {content.inputs.join(", ")}
+            </p>
+          )}
+        </div>
+      </div>
+    );
   }
+
+  return (
+    <div
+      className="flex h-full min-h-[256px] flex-col gap-4 rounded-xl p-6"
+      style={{ border: "2px dashed #E5E8EB", backgroundColor: "#F4F5F8" }}
+    >
+      <div className="flex items-center gap-2">
+        <FileSpreadsheet className="h-5 w-5" style={{ color: "#0064FF" }} />
+        <p className="text-sm font-semibold" style={{ color: "#191F28" }}>
+          입력 파일 양식 안내
+        </p>
+      </div>
+      <div className="space-y-4 text-sm" style={{ color: "#4E5968" }}>
+        <div>
+          <p className="text-xs font-semibold mb-1" style={{ color: "#8B95A1" }}>
+            지원 형식
+          </p>
+          <p>{content.formats}</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold mb-2" style={{ color: "#8B95A1" }}>
+            필수 컬럼
+          </p>
+          <ul className="space-y-2">
+            {content.fields.map((f, i) => (
+              <li key={i} className="flex flex-wrap items-center gap-2">
+                <span className="font-medium" style={{ color: "#191F28" }}>
+                  {f.label}
+                </span>
+                <span style={{ color: "#8B95A1" }}>·</span>
+                <span className="flex flex-wrap gap-1.5">
+                  {f.values.map((v, vi) => (
+                    <code
+                      key={vi}
+                      className="px-2 py-0.5 text-xs"
+                      style={{
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid #E5E8EB",
+                        borderRadius: "6px",
+                        color: "#4E5968",
+                      }}
+                    >
+                      {v}
+                    </code>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {content.inputs && content.inputs.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold mb-1" style={{ color: "#8B95A1" }}>
+              필수 입력
+            </p>
+            <p>{content.inputs.join(", ")}</p>
+          </div>
+        )}
+        <div>
+          <p className="text-xs font-semibold mb-1" style={{ color: "#8B95A1" }}>
+            분석 결과
+          </p>
+          <p>{content.output}</p>
+        </div>
+        {content.notes && content.notes.length > 0 && (
+          <div className="pt-3" style={{ borderTop: "1px solid #E5E8EB" }}>
+            {content.notes.map((n, i) => (
+              <p key={i} className="text-xs" style={{ color: "#8B95A1" }}>
+                · {n}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NotOpenableRow({ row }: { row: OpenDataTableRow }) {
+  return (
+    <div className="px-6 py-3 flex items-start gap-4">
+      <div className="flex-1 min-w-0">
+        <span className="font-medium text-sm" style={{ color: "#191F28" }}>{row.table}</span>
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {row.closed_columns.slice(0, 6).map((col, i) => (
+            <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-xs"
+              title={col.reason}
+              style={{ backgroundColor: "#FFF0F1", color: "#F04452" }}>
+              {col.name}
+            </span>
+          ))}
+          {row.closed_columns.length > 6 && (
+            <span className="text-xs" style={{ color: "#8B95A1" }}>+{row.closed_columns.length - 6}</span>
+          )}
+        </div>
+      </div>
+      <span className="text-xs shrink-0" style={{ color: "#8B95A1" }}>
+        {row.open_count}/{row.total_count} 컬럼
+      </span>
+    </div>
+  );
 }

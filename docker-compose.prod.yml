@@ -13,7 +13,7 @@ services:
     volumes:
       - uploads_data:/app/uploads
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}}
       REDIS_URL: redis://redis:6379/0
       N8N_BASE_URL: http://n8n:5678
       N8N_WEBHOOK_BASE_1: ${N8N_WEBHOOK_BASE_1}

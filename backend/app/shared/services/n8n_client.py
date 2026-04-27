@@ -96,12 +96,17 @@ async def create_execution_record(
     project_slug: str,
     workflow_id: str,
     workflow_name: str = "",
+    input_metadata: dict | None = None,
+    input_summary: str = "",
 ) -> N8nExecutionModel:
     """Create a 'running' execution record in DB after triggering a webhook."""
     record = N8nExecutionModel(
         id=str(uuid.uuid4()),
         execution_id=execution_id,
         project_slug=project_slug,
+        process_type="n8n",
+        input_metadata=input_metadata,
+        input_summary=input_summary[:500] if input_summary else "",
         workflow_id=workflow_id,
         workflow_name=workflow_name,
         status="running",

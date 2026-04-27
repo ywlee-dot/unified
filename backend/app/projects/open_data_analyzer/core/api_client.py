@@ -32,7 +32,14 @@ def call_gemini(
         "x-goog-api-key": api_key,
         "Content-Type": "application/json",
     }
-    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.0,
+            "topP": 0.1,
+            "responseMimeType": "application/json",
+        },
+    }
 
     timeout = GEMINI_TIMEOUT_SECONDS
     max_retries = GEMINI_MAX_RETRIES

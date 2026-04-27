@@ -133,6 +133,71 @@ async def get_check_runs(limit: int = 20, db: AsyncSession = Depends(get_db_sess
 
 
 # ---------------------------------------------------------------------------
+# Cleanup (low/none/excluded 알림 + 고아 공고 보존 기간 후 삭제)
+# ---------------------------------------------------------------------------
+
+@router.post("/cleanup/trigger")
+async def trigger_cleanup():
+    """수동 정리 실행 — 매일 04:00 KST에 자동 실행되지만 즉시 실행할 때 사용."""
+    from app.projects.bid_monitor.core.scheduler import run_cleanup
+    return await run_cleanup()
+
+
+@router.get("/cleanup/preview")
+async def preview_cleanup():
+    """현재 보존 기간 기준으로 삭제 대상 카운트만 미리 보여줌 (실제 삭제 안 함)."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func as sa_func, select
+
+    from app.database import async_session_factory
+    from app.projects.bid_monitor.core.scheduler import (
+        LOW_VALUE_GRADES,
+        RETENTION_DAYS,
+    )
+    from app.projects.bid_monitor.models import BidAlertModel, BidNoticeModel
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
+    result: dict = {
+        "cutoff": cutoff.isoformat(),
+        "retention_days": RETENTION_DAYS,
+        "low_value_grades": LOW_VALUE_GRADES,
+        "alerts_to_delete_by_grade": {},
+        "alerts_total_to_delete": 0,
+        "notices_orphan_to_delete": 0,
+    }
+
+    async with async_session_factory() as db:
+        for grade in LOW_VALUE_GRADES:
+            count_stmt = (
+                select(sa_func.count())
+                .select_from(BidAlertModel)
+                .where(
+                    BidAlertModel.grade == grade,
+                    BidAlertModel.created_at < cutoff,
+                )
+            )
+            count = (await db.execute(count_stmt)).scalar() or 0
+            result["alerts_to_delete_by_grade"][grade] = count
+            result["alerts_total_to_delete"] += count
+
+        orphan_count_stmt = (
+            select(sa_func.count())
+            .select_from(BidNoticeModel)
+            .where(
+                BidNoticeModel.created_at < cutoff,
+                ~BidNoticeModel.id.in_(
+                    select(BidAlertModel.notice_id).distinct()
+                ),
+            )
+        )
+        result["notices_orphan_to_delete"] = (
+            (await db.execute(orphan_count_stmt)).scalar() or 0
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 

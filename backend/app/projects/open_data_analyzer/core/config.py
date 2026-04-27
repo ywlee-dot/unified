@@ -32,6 +32,10 @@ GEMINI_RETRY_BACKOFF = float(os.environ.get("GEMINI_RETRY_BACKOFF", "2.0"))
 
 DEFAULT_BATCH_SIZE = int(os.environ.get("GEMINI_MULTI_TABLE_CHUNK", "8"))
 
+# 배치·단건 호출을 동시에 몇 개까지 병렬로 실행할지
+# 3 정도가 안전한 초기값. Gemini rate limit 여유 있으면 5~8로 상향 가능.
+DEFAULT_CONCURRENCY = int(os.environ.get("GEMINI_CONCURRENCY", "3"))
+
 PROMPT_LOG_MAX_CHARS = int(os.environ.get("GEMINI_PROMPT_LOG_MAX_CHARS", "12000"))
 
 # ============================================================================

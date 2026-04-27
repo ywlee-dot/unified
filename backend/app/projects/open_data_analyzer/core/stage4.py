@@ -4,10 +4,11 @@ Stage 4: 주제영역별 조인 검토
 같은 주제영역의 테이블끼리 조인 가능성을 검토합니다.
 """
 
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 from .api_client import call_gemini
+from .config import DEFAULT_CONCURRENCY
 
 
 def build_stage4_prompt(subject: str, tables_in_subject: list) -> str:
@@ -38,10 +39,9 @@ def run_stage4(
 
     subject_groups: Dict[str, List[Any]] = {}
     for key, table in tables.items():
-        if hasattr(table, 'subject_area'):
-            subject = table.subject_area
-        elif stage2_results and key in stage2_results:
-            subject = stage2_results[key].get("subject_area", "")
+        if stage2_results and key in stage2_results:
+            s2 = stage2_results[key]
+            subject = s2.get("major_area") or s2.get("subject_area", "")
         else:
             subject = ""
 
@@ -63,7 +63,9 @@ def run_stage4(
     if not api_key:
         raise RuntimeError("Gemini API 키가 없습니다.")
 
-    for subject, tables_in_subject in valid_subjects.items():
+    concurrency = max(1, DEFAULT_CONCURRENCY)
+
+    def _run_subject(subject: str, tables_in_subject: List[Any]) -> List[Tuple[str, Dict[str, Any]]]:
         prompt = build_stage4_prompt(subject, tables_in_subject)
         result = call_gemini(prompt, api_key, model, base_url)
 
@@ -73,22 +75,28 @@ def run_stage4(
             display_map[table_display] = table.key
             display_map[table.key] = table.key
 
-        for join in result.get("joins", []):
+        collected: List[Tuple[str, Dict[str, Any]]] = []
+        for join in result.get("joins", []) or []:
             table_a = join.get("table_a")
             table_b = join.get("table_b")
-            join_keys = join.get("join_keys", [])
-
+            join_keys = join.get("join_keys", []) or []
             if not table_a or not table_b:
                 continue
-
             key_a = display_map.get(table_a)
             if key_a:
-                joins.setdefault(key_a, []).append({
-                    "table_b": table_b,
-                    "join_keys": join_keys,
-                })
+                collected.append((key_a, {"table_b": table_b, "join_keys": join_keys}))
+        return collected
 
-        if sleep:
-            time.sleep(sleep)
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [
+            executor.submit(_run_subject, subject, tables_in_subject)
+            for subject, tables_in_subject in valid_subjects.items()
+        ]
+        for fut in as_completed(futures):
+            try:
+                for key_a, payload in fut.result():
+                    joins.setdefault(key_a, []).append(payload)
+            except Exception:  # noqa: BLE001
+                pass
 
     return joins

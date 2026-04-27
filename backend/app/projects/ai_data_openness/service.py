@@ -4,11 +4,20 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.shared.services.execution_recorder import (
+    ExecutionRecorder,
+    serialize_execution,
+)
+
 from .parser import parse_excel
 from .evaluator import evaluate_datasets, generate_report
 from .phase2_parser import parse_phase2_excel
 from .phase2_evaluator import generate_phase2_report
 from .llm_provider import get_provider, PROVIDERS
+
+PROJECT_SLUG = "ai_data_openness"
 
 # 세션 저장 (메모리)
 SESSIONS: Dict[str, Dict[str, Any]] = {}
@@ -56,7 +65,9 @@ class AIDataOpennessService:
         representative_idx: int = 0,
         provider_name: str = "claude",
         api_key: str = "",
-    ) -> str:
+        institution: str = "공공기관",
+        db: AsyncSession | None = None,
+    ) -> dict:
         if session_id not in SESSIONS:
             raise ValueError("세션을 찾을 수 없습니다.")
 
@@ -69,9 +80,54 @@ class AIDataOpennessService:
             kwargs["api_key"] = api_key
         provider = get_provider(provider_name, **kwargs)
 
-        report_text = generate_report(provider, evaluation, representative_idx)
-        SESSIONS[session_id]["report"] = report_text
-        return report_text
+        execution = None
+        if db is not None:
+            execution = await ExecutionRecorder.create(
+                db,
+                project_slug=PROJECT_SLUG,
+                process_type="inprocess",
+                input_metadata={
+                    "phase": 1,
+                    "session_id": session_id,
+                    "institution": institution,
+                    "provider": provider_name,
+                    "representative_idx": representative_idx,
+                },
+                input_summary=f"[Phase1] {institution} · 대표후보#{representative_idx}",
+            )
+
+        try:
+            report_text = generate_report(provider, evaluation, representative_idx)
+            SESSIONS[session_id]["report"] = report_text
+
+            response = {"report": report_text}
+
+            if db is not None and execution is not None:
+                await ExecutionRecorder.mark_succeeded(
+                    db,
+                    execution_id=execution.execution_id,
+                    result_data={
+                        "phase": 1,
+                        "report": report_text,
+                        "institution": institution,
+                        "representative_idx": representative_idx,
+                        "evaluation": evaluation,
+                    },
+                )
+                response["execution_id"] = execution.execution_id
+
+            return response
+        except Exception as exc:
+            if db is not None and execution is not None:
+                try:
+                    await ExecutionRecorder.mark_failed(
+                        db,
+                        execution_id=execution.execution_id,
+                        error_message=str(exc),
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            raise
 
     # ── Phase 1 Demo ──────────────────────────────────────────────────────
 
@@ -108,6 +164,7 @@ class AIDataOpennessService:
         representative_idx: int = 0,
         provider_name: str = "claude",
         api_key: str = "",
+        db: AsyncSession | None = None,
     ) -> dict:
         if session_id not in SESSIONS:
             raise ValueError("세션을 찾을 수 없습니다. Excel을 다시 업로드해주세요.")
@@ -118,9 +175,94 @@ class AIDataOpennessService:
             kwargs["api_key"] = api_key
         provider = get_provider(provider_name, **kwargs)
 
-        result = generate_phase2_report(provider, parsed, institution, representative_idx)
-        SESSIONS[session_id]["result"] = result
-        return result
+        execution = None
+        if db is not None:
+            execution = await ExecutionRecorder.create(
+                db,
+                project_slug=PROJECT_SLUG,
+                process_type="inprocess",
+                input_metadata={
+                    "phase": 2,
+                    "session_id": session_id,
+                    "institution": institution,
+                    "provider": provider_name,
+                    "representative_idx": representative_idx,
+                    "filename": parsed.get("filename"),
+                    "total_count": parsed.get("total_count"),
+                },
+                input_summary=f"[Phase2] {institution} · {parsed.get('filename', '')}",
+            )
+
+        try:
+            result = generate_phase2_report(provider, parsed, institution, representative_idx)
+            SESSIONS[session_id]["result"] = result
+
+            if db is not None and execution is not None:
+                await ExecutionRecorder.mark_succeeded(
+                    db,
+                    execution_id=execution.execution_id,
+                    result_data={
+                        "phase": 2,
+                        "result": result,
+                        "parsed": parsed,
+                    },
+                )
+                result = {**result, "execution_id": execution.execution_id}
+
+            return result
+        except Exception as exc:
+            if db is not None and execution is not None:
+                try:
+                    await ExecutionRecorder.mark_failed(
+                        db,
+                        execution_id=execution.execution_id,
+                        error_message=str(exc),
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            raise
+
+    # ── Execution history ─────────────────────────────────────────────────
+
+    async def list_executions(
+        self,
+        db: AsyncSession,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        result = await ExecutionRecorder.list(
+            db,
+            project_slug=PROJECT_SLUG,
+            page=page,
+            page_size=page_size,
+        )
+        return {
+            "items": [serialize_execution(r) for r in result["items"]],
+            "total": result["total"],
+            "page": result["page"],
+            "page_size": result["page_size"],
+            "total_pages": result["total_pages"],
+        }
+
+    async def get_execution(
+        self,
+        db: AsyncSession,
+        execution_id: str,
+    ) -> dict | None:
+        record = await ExecutionRecorder.get(db, execution_id)
+        if record is None or record.project_slug != PROJECT_SLUG:
+            return None
+        return serialize_execution(record, include_result=True)
+
+    async def delete_execution(
+        self,
+        db: AsyncSession,
+        execution_id: str,
+    ) -> bool:
+        record = await ExecutionRecorder.get(db, execution_id)
+        if record is None or record.project_slug != PROJECT_SLUG:
+            return False
+        return await ExecutionRecorder.delete(db, execution_id)
 
     # ── Phase 2 Demo ──────────────────────────────────────────────────────
 

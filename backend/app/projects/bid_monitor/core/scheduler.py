@@ -11,8 +11,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from sqlalchemy import select
+from sqlalchemy import delete as sql_delete, func as sa_func, select
 
 from app.database import async_session_factory
 from app.projects.bid_monitor.core.discord_notifier import DiscordNotifier
@@ -409,6 +410,72 @@ async def _run_check_impl(trigger_type: str, window_minutes: int | None) -> dict
     return stats
 
 
+RETENTION_DAYS = 90
+LOW_VALUE_GRADES = ["low", "none", "excluded"]
+
+
+async def run_cleanup() -> dict:
+    """일일 정리: low/none/excluded 등급 알림과 고아 공고를 보존 기간 후 삭제.
+
+    high/medium 등급은 영구 보관. 보존 기간(기본 90일) 경과 후 다음을 삭제:
+    1. low/none/excluded 등급 bid_alerts
+    2. 어떤 alert도 참조하지 않는 bid_notices (고아)
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
+    stats: dict = {
+        "cutoff": cutoff.isoformat(),
+        "retention_days": RETENTION_DAYS,
+        "alerts_deleted_by_grade": {},
+        "alerts_total_deleted": 0,
+        "notices_orphan_deleted": 0,
+    }
+
+    async with async_session_factory() as db:
+        for grade in LOW_VALUE_GRADES:
+            count_stmt = (
+                select(sa_func.count())
+                .select_from(BidAlertModel)
+                .where(
+                    BidAlertModel.grade == grade,
+                    BidAlertModel.created_at < cutoff,
+                )
+            )
+            count = (await db.execute(count_stmt)).scalar() or 0
+            stats["alerts_deleted_by_grade"][grade] = count
+            stats["alerts_total_deleted"] += count
+
+        if stats["alerts_total_deleted"] > 0:
+            del_alerts_stmt = sql_delete(BidAlertModel).where(
+                BidAlertModel.grade.in_(LOW_VALUE_GRADES),
+                BidAlertModel.created_at < cutoff,
+            )
+            await db.execute(del_alerts_stmt)
+
+        orphan_subq = select(BidAlertModel.notice_id).distinct()
+        orphan_count_stmt = (
+            select(sa_func.count())
+            .select_from(BidNoticeModel)
+            .where(
+                BidNoticeModel.created_at < cutoff,
+                ~BidNoticeModel.id.in_(orphan_subq),
+            )
+        )
+        orphan_count = (await db.execute(orphan_count_stmt)).scalar() or 0
+        stats["notices_orphan_deleted"] = orphan_count
+
+        if orphan_count > 0:
+            del_notices_stmt = sql_delete(BidNoticeModel).where(
+                BidNoticeModel.created_at < cutoff,
+                ~BidNoticeModel.id.in_(select(BidAlertModel.notice_id).distinct()),
+            )
+            await db.execute(del_notices_stmt)
+
+        await db.commit()
+
+    logger.info("입찰 데이터 정리 완료: %s", stats)
+    return stats
+
+
 async def start_scheduler() -> None:
     """스케줄러 시작."""
     global _scheduler
@@ -423,8 +490,17 @@ async def start_scheduler() -> None:
         replace_existing=True,
         kwargs={"trigger_type": "scheduled"},
     )
+    _scheduler.add_job(
+        run_cleanup,
+        trigger=CronTrigger(hour=4, minute=0),
+        id="bid_monitor_cleanup",
+        replace_existing=True,
+    )
     _scheduler.start()
-    logger.info("입찰공고 모니터링 스케줄러 시작 (30분 간격)")
+    logger.info(
+        "입찰공고 모니터링 스케줄러 시작 (체크 30분 간격, 정리 매일 04:00 KST, 보존 %d일)",
+        RETENTION_DAYS,
+    )
 
 
 async def stop_scheduler() -> None:

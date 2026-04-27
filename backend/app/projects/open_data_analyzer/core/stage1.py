@@ -1,21 +1,21 @@
 """
-Stage 1: 개방가능 여부 판단
+Stage 1: 개방가능 여부 판단 (컬럼 단위)
 
-입력: 테이블명, 컬럼명 정보
-출력: 각 테이블별 개방가능여부, 불가능사유번호, 판단사유
+각 테이블의 컬럼별로 개방 가능 여부를 판단합니다.
+- 개방 가능 컬럼 수 == 전체 컬럼 수 → 전체개방
+- 개방 가능 컬럼 수 >= 3              → 부분개방
+- 개방 가능 컬럼 수 < 3               → 불가능
 """
 
 import re
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Tuple
 
 from .api_client import call_gemini
 from .config import (
-    GEMINI_BASE_URL,
-    GEMINI_MODEL,
-    DEFAULT_BATCH_SIZE,
+    DEFAULT_CONCURRENCY,
     SYSTEM_PATTERNS,
     SYSTEM_PREFIXES,
     SYSTEM_KOREAN_KEYWORDS,
@@ -23,9 +23,34 @@ from .config import (
 from .file_utils import read_sheet_rows, find_col, normalize_spaces
 
 
+OPEN_COLUMN_THRESHOLD = 3  # 부분개방 최소 컬럼 수
+
+STANDARD_CATEGORIES = [
+    "교통 및 물류", "환경·기상", "재정·금융·세제", "문화·체육·관광",
+    "보건·의료", "국토관리", "농·축·수산", "교육",
+    "과학·기술", "산업·중소기업·고용", "통일·외교·안보", "법무·법제",
+    "일반공공행정", "사회복지", "재난·방재·안전", "에너지",
+]
+
+EXCLUSION_GUIDE = (
+    "[개방 불가 컬럼 판단 기준]\n"
+    "- 개인식별: 주민번호, 성명, 생년월일, 전화번호, 이메일, 주소, 여권번호 등\n"
+    "- 금융정보: 계좌번호, 카드번호, 금융거래내역 등\n"
+    "- 민감정보: 의료기록, 진료내용, 상담내용, 수사정보, 징계내역 등\n"
+    "- 시스템내부: 암호화키, 세션토큰, 내부인증코드 등\n"
+    "- 단순 PK·FK·시퀀스 ID는 개방 불가로 판단하지 말 것 (코드성 ID는 가능)\n"
+)
+
+PRINCIPLES = (
+    "[판정 원칙]\n"
+    "- 컬럼명만으로 판단이 어려울 때는 개방 가능(true)으로 처리하세요.\n"
+    "- reason은 개방 불가(false)인 경우에만 작성하고, 가능이면 빈 문자열.\n"
+    "- 출력은 JSON만, 앞뒤 설명 텍스트 없이.\n"
+)
+
+
 @dataclass
 class SimpleTable:
-    """최소한의 테이블 정보"""
     key: str
     table_kr: str
     table_en: str
@@ -33,7 +58,6 @@ class SimpleTable:
 
 
 def is_system_table(table_name: str) -> bool:
-    """시스템 테이블 판별"""
     upper = table_name.upper()
     if any(upper.startswith(prefix) for prefix in SYSTEM_PREFIXES):
         return True
@@ -71,9 +95,8 @@ def merge_table_data(existing: dict, new: dict, new_source: str) -> dict:
         'key': existing.get('key', ''),
         'table_kr': existing.get('table_kr', ''),
         'table_en': existing.get('table_en', ''),
-        'columns': []
+        'columns': [],
     }
-
     if new.get('table_kr') and len(new['table_kr']) > len(merged['table_kr']):
         merged['table_kr'] = new['table_kr']
     if new.get('table_en') and len(new['table_en']) > len(merged['table_en']):
@@ -83,8 +106,7 @@ def merge_table_data(existing: dict, new: dict, new_source: str) -> dict:
     new_cols = set(new.get('columns', []))
     merged['columns'] = sorted(list(existing_cols | new_cols))
 
-    if 'file_sources' not in merged:
-        merged['file_sources'] = existing.get('file_sources', [])
+    merged['file_sources'] = existing.get('file_sources', [])
     if new_source not in merged['file_sources']:
         merged['file_sources'].append(new_source)
 
@@ -95,7 +117,6 @@ def calculate_confidence(table_kr: str, table_en: str, columns: List[str]) -> Di
     score = 0
     has_columns = len(columns) > 0
     column_count = len(columns)
-
     if table_kr and table_kr.strip():
         score += 20
     if table_en and table_en.strip():
@@ -103,24 +124,21 @@ def calculate_confidence(table_kr: str, table_en: str, columns: List[str]) -> Di
     if has_columns:
         score += 30
         score += min(30, column_count * 2)
-
     if score >= 80:
         quality = 'high'
     elif score >= 50:
         quality = 'medium'
     else:
         quality = 'low'
-
     return {
         'confidence': score,
         'has_columns': has_columns,
         'column_count': column_count,
-        'data_quality': quality
+        'data_quality': quality,
     }
 
 
-def extract_tables_from_excel(excel_path: str, sheet_name: Optional[str]) -> Dict[str, SimpleTable]:
-    """엑셀에서 테이블 정보 추출"""
+def extract_tables_from_excel(excel_path: str, sheet_name: Optional[str]) -> Dict[str, "SimpleTable"]:
     headers, rows = read_sheet_rows(excel_path, sheet_name)
 
     idx_table_kr = find_col(headers, ["한글 테이블명", "테이블한글명", "테이블명(한글)", "테이블명"])
@@ -146,7 +164,6 @@ def extract_tables_from_excel(excel_path: str, sheet_name: Optional[str]) -> Dic
             continue
 
         key = normalize_table_key(table_kr, table_en)
-
         if key not in tables:
             tables[key] = SimpleTable(key=key, table_kr=table_kr, table_en=table_en, columns=[])
             col_buffers[key] = []
@@ -154,11 +171,14 @@ def extract_tables_from_excel(excel_path: str, sheet_name: Optional[str]) -> Dic
         if has_columns:
             col_kr = str(row[idx_col_kr]).strip() if idx_col_kr is not None and row[idx_col_kr] else ""
             col_en = str(row[idx_col_en]).strip() if idx_col_en is not None and row[idx_col_en] else ""
-
             if col_kr or col_en:
                 col_kr_norm = normalize_spaces(col_kr) if col_kr else ""
                 col_en_norm = normalize_spaces(col_en) if col_en else ""
-                col_display = f"{col_kr_norm}({col_en_norm})" if col_kr_norm and col_en_norm else (col_kr_norm or col_en_norm)
+                col_display = (
+                    f"{col_kr_norm}({col_en_norm})"
+                    if col_kr_norm and col_en_norm
+                    else (col_kr_norm or col_en_norm)
+                )
                 if col_display not in col_buffers[key]:
                     col_buffers[key].append(col_display)
 
@@ -168,90 +188,91 @@ def extract_tables_from_excel(excel_path: str, sheet_name: Optional[str]) -> Dic
     return tables
 
 
-def build_stage1_prompt(table: SimpleTable, reasons: List[str]) -> str:
-    columns_preview = table.columns[:60]
+def build_stage1_prompt(table: SimpleTable) -> str:
     table_display = table.table_kr or table.table_en or table.key
-    has_columns = len(table.columns) > 0
+    cols = table.columns or []
+    columns_text = ", ".join(cols) if cols else "(컬럼 정보 없음)"
+    std_cats = ", ".join(STANDARD_CATEGORIES)
 
-    if has_columns:
-        prompt = (
-            "다음 테이블을 공공데이터로 개방 가능한지 판단하세요. "
-            "불가능이면 1~9번 사유 번호를 하나 이상 선택하세요.\n"
-            "9번은 시스템 테이블(임시/백업/로그/뷰/관리)입니다.\n"
-            "반드시 아래 '불가 사유 목록'을 규칙/체크리스트로 우선 적용하고, "
-            "해당되면 '불가능'으로 판정하세요.\n"
-            f"테이블명: {table_display}\n"
-            f"컬럼: {', '.join(columns_preview)}\n"
-        )
-    else:
-        prompt = (
-            "다음 테이블을 공공데이터로 개방 가능한지 판단하세요. "
-            "불가능이면 1~9번 사유 번호를 하나 이상 선택하세요.\n"
-            "9번은 시스템 테이블(임시/백업/로그/뷰/관리)입니다.\n"
-            "반드시 아래 '불가 사유 목록'을 규칙/체크리스트로 우선 적용하고, "
-            "해당되면 '불가능'으로 판정하세요.\n"
-            f"테이블명: {table_display}\n"
-            "컬럼 정보 없음 - 테이블명만으로 판단\n"
-        )
-
-    if reasons:
-        prompt += "\n불가 사유 목록(번호 포함, 규칙으로 적용):\n" + "\n".join(reasons)
-        prompt += (
-            "\n\n판정 규칙:\n"
-            "- 사유 목록에 해당하면 openable은 반드시 '불가능'.\n"
-            "- reason_numbers는 목록에 있는 번호만 사용.\n"
-            "- 근거는 reason_text에 간단히 요약."
-        )
-
-    prompt += "\n\n출력은 JSON만: {\"openable\":\"가능/불가능\", \"reason_numbers\":[1,2], \"reason_text\":\"...\"}"
-    return prompt
-
-
-def build_stage1_multi_prompt(chunk: List[Tuple[str, SimpleTable]], reasons: List[str]) -> str:
-    lines: List[str] = []
-    for key, table in chunk:
-        table_display = table.table_kr or table.table_en or table.key
-        has_columns = len(table.columns) > 0
-
-        if has_columns:
-            cols = ", ".join(table.columns[:40])
-            lines.append(f"- key: {key}\n  table: {table_display}\n  columns: {cols}")
-        else:
-            lines.append(f"- key: {key}\n  table: {table_display}\n  columns: 컬럼 정보 없음")
-
-    body = "\n".join(lines)
-
-    prompt = (
-        "아래 여러 테이블에 대해 공공데이터 개방 가능 여부를 각각 판단하세요.\n"
-        "반드시 아래 '불가 사유 목록'을 규칙/체크리스트로 우선 적용하고, "
-        "해당되면 '불가능'으로 판정하세요.\n"
-        "출력은 JSON만, 다음 형식을 정확히 따르세요:\n"
-        "{\"results\":[{\"key\":\"...\",\"openable\":\"가능/불가능\","
-        "\"reason_numbers\":[1,2],\"reason_text\":\"...\"}]}\n\n"
-        f"{body}"
+    return (
+        "당신은 공공데이터 개방 심사 전문가입니다.\n"
+        "아래 테이블의 각 컬럼 개방 가능 여부를 판단하고, 주제영역과 데이터셋명을 제안하세요.\n\n"
+        f"{EXCLUSION_GUIDE}\n"
+        f"{PRINCIPLES}\n"
+        f"[테이블명] {table_display}\n"
+        f"[컬럼 목록] {columns_text}\n\n"
+        "[주제영역 참고 - 16대 표준 분류]\n"
+        f"{std_cats}\n"
+        "major_area: 위 분류 중 가장 가까운 것 선택. 없으면 짧은 구로 자유 작성.\n"
+        "sub_area: major_area 내 더 구체적인 주제(한 단어 또는 짧은 구).\n"
+        "dataset_name: 개방 가능 컬럼 기준 데이터셋명 제안. 전부 불가면 빈 문자열.\n\n"
+        "[출력 JSON만]\n"
+        '{"columns": [{"name": "컬럼명", "openable": true, "reason": ""}], '
+        '"major_area": "...", "sub_area": "...", "dataset_name": "..."}'
     )
 
-    if reasons:
-        prompt += "\n\n불가 사유 목록(번호 포함, 규칙으로 적용):\n" + "\n".join(reasons)
-        prompt += (
-            "\n\n판정 규칙:\n"
-            "- 사유 목록에 해당하면 openable은 반드시 '불가능'.\n"
-            "- reason_numbers는 목록에 있는 번호만 사용.\n"
-            "- 근거는 reason_text에 간단히 요약."
-        )
 
-    return prompt
+def classify_bucket(open_count: int, total_count: int) -> str:
+    if total_count == 0:
+        return "불가능"
+    if open_count >= total_count:
+        return "전체개방"
+    if open_count >= OPEN_COLUMN_THRESHOLD:
+        return "부분개방"
+    return "불가능"
 
 
-def _chunked(items: list, size: int) -> list:
-    if size <= 0:
-        return [items]
-    return [items[i : i + size] for i in range(0, len(items), size)]
+# kept for backward compat with __init__.py exports
+HIGH_SCORE_THRESHOLD = 8
+LOW_SCORE_THRESHOLD = 3
+normalize_table_key = normalize_table_key
+
+
+def _parse_column_result(
+    table: SimpleTable,
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    col_judgments = result.get("columns", []) or []
+    all_col_names = {c: c for c in table.columns}
+
+    open_columns: List[str] = []
+    closed_columns: List[Dict[str, str]] = []
+
+    judged_names = set()
+    for item in col_judgments:
+        name = str(item.get("name", "")).strip()
+        if not name:
+            continue
+        judged_names.add(name)
+        if item.get("openable", True):
+            open_columns.append(name)
+        else:
+            closed_columns.append({"name": name, "reason": str(item.get("reason", ""))})
+
+    # Columns the LLM didn't mention → treat as openable
+    for col in table.columns:
+        if col not in judged_names:
+            open_columns.append(col)
+
+    open_count = len(open_columns)
+    total_count = len(table.columns) or len(col_judgments)
+    bucket = classify_bucket(open_count, total_count)
+
+    return {
+        "bucket": bucket,
+        "open_columns": open_columns,
+        "closed_columns": closed_columns,
+        "open_count": open_count,
+        "total_count": total_count,
+        "major_area": str(result.get("major_area", "") or "").strip(),
+        "sub_area": str(result.get("sub_area", "") or "").strip(),
+        "dataset_name": str(result.get("dataset_name", "") or "").strip(),
+    }
 
 
 def run_stage1(
     tables: Dict[str, SimpleTable],
-    reasons: List[str],
+    reasons: List[str],  # kept for API compat, not used
     api_key: Optional[str],
     base_url: str,
     model: str,
@@ -259,16 +280,17 @@ def run_stage1(
     mock: bool,
 ) -> Dict[str, Dict[str, Any]]:
     stage1: Dict[str, Dict[str, Any]] = {}
-    items = list(tables.items())
 
     llm_items: List[Tuple[str, SimpleTable]] = []
-    for key, table in items:
+    for key, table in tables.items():
         display_name = table.table_kr or table.table_en or key
         if is_system_table(display_name):
             stage1[key] = {
-                "openable": "불가능",
-                "reason_numbers": [9],
-                "reason_text": "시스템 테이블 자동 필터링",
+                "bucket": "불가능",
+                "open_columns": [],
+                "closed_columns": [{"name": "(전체)", "reason": "시스템 테이블 자동 필터링"}],
+                "open_count": 0,
+                "total_count": len(table.columns),
             }
         else:
             llm_items.append((key, table))
@@ -277,46 +299,42 @@ def run_stage1(
         return stage1
 
     if mock:
-        for key, _table in llm_items:
-            stage1[key] = {"openable": "가능", "reason_numbers": [], "reason_text": "모의 판정"}
+        for key, table in llm_items:
+            open_cols = table.columns
+            table_display = table.table_kr or table.table_en or key
+            stage1[key] = {
+                "bucket": classify_bucket(len(open_cols), len(open_cols)),
+                "open_columns": open_cols,
+                "closed_columns": [],
+                "open_count": len(open_cols),
+                "total_count": len(open_cols),
+                "major_area": "일반공공행정",
+                "sub_area": "모의분류",
+                "dataset_name": f"{table_display} 데이터셋",
+            }
         return stage1
 
     if not api_key:
         raise RuntimeError("Gemini API 키가 없습니다. GEMINI_API_KEY를 설정하세요.")
 
-    chunk_size = max(1, DEFAULT_BATCH_SIZE)
-    display_to_key = {(tables[k].table_kr or tables[k].table_en or k): k for k, _t in llm_items}
+    concurrency = max(1, DEFAULT_CONCURRENCY)
 
-    for chunk in _chunked(llm_items, chunk_size):
-        prompt = build_stage1_multi_prompt(chunk, reasons)
+    def _run_one(key: str, table: SimpleTable) -> Tuple[str, Dict[str, Any]]:
+        prompt = build_stage1_prompt(table)
         result = call_gemini(prompt, api_key, model, base_url)
-        results = result.get("results", [])
+        return key, _parse_column_result(table, result)
 
-        for row in results:
-            row_key = str(row.get("key", "")).strip()
-            if not row_key:
-                row_table = str(row.get("table", "")).strip()
-                row_key = display_to_key.get(row_table, "")
-            if not row_key or row_key not in tables:
-                continue
-            stage1[row_key] = {
-                "openable": row.get("openable", ""),
-                "reason_numbers": row.get("reason_numbers", []),
-                "reason_text": row.get("reason_text", ""),
-            }
+    errors: List[Exception] = []
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = {executor.submit(_run_one, key, table): key for key, table in llm_items}
+        for fut in as_completed(futures):
+            try:
+                key, payload = fut.result()
+                stage1[key] = payload
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
 
-        missing = [k for k, _t in chunk if k not in stage1]
-        for key in missing:
-            table = tables[key]
-            prompt_single = build_stage1_prompt(table, reasons)
-            single = call_gemini(prompt_single, api_key, model, base_url)
-            stage1[key] = {
-                "openable": single.get("openable", ""),
-                "reason_numbers": single.get("reason_numbers", []),
-                "reason_text": single.get("reason_text", ""),
-            }
-
-        if sleep:
-            time.sleep(sleep)
+    if errors and not stage1:
+        raise errors[0]
 
     return stage1

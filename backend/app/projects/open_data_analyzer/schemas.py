@@ -12,6 +12,7 @@ class StageResponse(BaseModel):
     total: int
     openable_count: int | None = None
     not_openable_count: int | None = None
+    review_count: int | None = None
     file_count: int | None = None
     total_columns: int | None = None
     final_openable: int | None = None

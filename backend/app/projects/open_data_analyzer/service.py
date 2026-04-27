@@ -6,30 +6,33 @@ import asyncio
 import os
 import tempfile
 import uuid
+from collections import Counter, defaultdict
+from difflib import SequenceMatcher
 from typing import Any, Dict, List
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.projects.open_data_analyzer.core import (
     GEMINI_BASE_URL,
     GEMINI_MODEL,
+    STANDARD_CATEGORIES,
     SimpleTable,
-    calculate_confidence,
     extract_tables_from_excel,
     find_matching_table,
     merge_table_data,
     normalize_table_key,
     run_stage1,
-    run_stage2,
-    run_stage3,
-    run_stage4,
-    run_stage5,
 )
 from app.projects.open_data_analyzer.reasons import REASONS
 from app.projects.open_data_analyzer.schemas import AnalyzerStats
+from app.shared.services.execution_recorder import (
+    ExecutionRecorder,
+    serialize_execution,
+)
 
-# 고정 서버 설정
+PROJECT_SLUG = "open_data_analyzer"
 FIXED_SLEEP_SECONDS = 1.0
 
-# 세션 저장소
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 
 
@@ -41,107 +44,156 @@ def _save_upload_bytes(data: bytes, suffix: str) -> str:
     return handle.name
 
 
-def _build_stage1_rows(
+def _snap_to_standard(label: str, threshold: float = 0.82) -> str:
+    best_ratio, best_cat = 0.0, label
+    for cat in STANDARD_CATEGORIES:
+        r = SequenceMatcher(None, label, cat).ratio()
+        if r > best_ratio:
+            best_ratio, best_cat = r, cat
+    return best_cat if best_ratio >= threshold else label
+
+
+def _consolidate_major_areas(stage1: Dict[str, Dict[str, Any]]) -> None:
+    """In-place: snap major_area to nearest standard, then merge near-duplicates."""
+    for s1 in stage1.values():
+        ma = s1.get("major_area", "")
+        if ma:
+            s1["major_area"] = _snap_to_standard(ma)
+
+    freq = Counter(s1.get("major_area", "") for s1 in stage1.values() if s1.get("major_area"))
+    label_map: Dict[str, str] = {}
+    for label in freq:
+        if label in STANDARD_CATEGORIES:
+            label_map[label] = label
+            continue
+        best_ratio, best_target = 0.0, label
+        for other in freq:
+            if other == label:
+                continue
+            r = SequenceMatcher(None, label, other).ratio()
+            if r > best_ratio:
+                best_ratio, best_target = r, other
+        label_map[label] = best_target if best_ratio >= 0.82 and freq[best_target] >= freq[label] else label
+
+    for s1 in stage1.values():
+        ma = s1.get("major_area", "")
+        if ma in label_map:
+            s1["major_area"] = label_map[ma]
+
+
+def _build_analysis_result(
     tables: Dict[str, SimpleTable],
     stage1: Dict[str, Dict[str, Any]],
     file_sources: Dict[str, str] | None = None,
-) -> List[Dict[str, Any]]:
-    rows = []
+) -> tuple[list, list]:
+    """Returns (groups, not_openable). Groups are sorted by major_area."""
+    group_map: Dict[str, list] = defaultdict(list)
+    not_openable: list = []
+
     for key, table in tables.items():
         s1 = stage1.get(key, {})
-        table_display = table.table_kr or table.table_en or table.key
-        quality_info = calculate_confidence(table.table_kr, table.table_en, table.columns)
-
-        row = {
+        if not s1:
+            continue
+        table_display = table.table_kr or table.table_en or key
+        row: Dict[str, Any] = {
             "table": table_display,
             "key": key,
-            "openable": s1.get("openable", ""),
-            "reason_numbers": s1.get("reason_numbers", []),
-            "reason_text": s1.get("reason_text", ""),
-            "confidence": quality_info["confidence"],
-            "has_columns": quality_info["has_columns"],
-            "column_count": quality_info["column_count"],
-            "data_quality": quality_info["data_quality"],
+            "bucket": s1.get("bucket", ""),
+            "open_columns": s1.get("open_columns", []),
+            "closed_columns": s1.get("closed_columns", []),
+            "open_count": s1.get("open_count", 0),
+            "total_count": s1.get("total_count", len(table.columns)),
+            "major_area": s1.get("major_area", ""),
+            "sub_area": s1.get("sub_area", ""),
+            "dataset_name": s1.get("dataset_name", ""),
         }
-
         if file_sources and key in file_sources:
             row["source_file"] = file_sources[key]
-        if hasattr(table, "file_sources") and isinstance(table.file_sources, list):
-            row["file_sources"] = table.file_sources
 
-        rows.append(row)
-    return rows
+        bucket = s1.get("bucket", "")
+        if bucket in ("전체개방", "부분개방"):
+            major = s1.get("major_area") or "미분류"
+            group_map[major].append(row)
+        else:
+            not_openable.append(row)
+
+    groups = [
+        {"major_area": major, "tables": rows}
+        for major, rows in sorted(group_map.items())
+    ]
+    return groups, not_openable
 
 
-def _build_stage2_rows(
-    tables: Dict[str, SimpleTable], stage2: Dict[str, Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    rows = []
-    for key, table in tables.items():
-        s2 = stage2.get(key)
-        if not s2:
+def _serialize_tables(tables: Dict[str, SimpleTable]) -> Dict[str, Dict[str, Any]]:
+    return {
+        key: {
+            "key": t.key,
+            "table_kr": t.table_kr,
+            "table_en": t.table_en,
+            "columns": list(t.columns),
+            "file_sources": list(getattr(t, "file_sources", []) or []),
+        }
+        for key, t in tables.items()
+    }
+
+
+def _build_excel_workbook(
+    tables_serialized: Dict[str, Dict[str, Any]],
+    stage1: Dict[str, Dict[str, Any]],
+) -> str:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    ws_open = wb.create_sheet("개방가능_데이터셋")
+    ws_open.append([
+        "주제(대분류)", "주제(소분류)", "테이블명(한글)", "테이블명(영문)",
+        "판정", "데이터셋명", "개방가능컬럼수", "전체컬럼수",
+        "개방가능컬럼", "제외컬럼(사유)",
+    ])
+    for key, table_dict in tables_serialized.items():
+        s1 = stage1.get(key, {})
+        if s1.get("bucket") not in ("전체개방", "부분개방"):
             continue
-        table_display = table.table_kr or table.table_en or table.key
-        rows.append({"table": table_display, "key": key, "subject_area": s2.get("subject_area", "")})
-    return rows
+        closed_str = "; ".join(
+            f"{c['name']}({c['reason']})" for c in s1.get("closed_columns", [])
+        )
+        ws_open.append([
+            s1.get("major_area", ""),
+            s1.get("sub_area", ""),
+            table_dict.get("table_kr", ""),
+            table_dict.get("table_en", ""),
+            s1.get("bucket", ""),
+            s1.get("dataset_name", ""),
+            s1.get("open_count", 0),
+            s1.get("total_count", 0),
+            ",".join(s1.get("open_columns", [])),
+            closed_str,
+        ])
 
-
-def _build_stage3_rows(
-    tables: Dict[str, SimpleTable], stage3: Dict[str, Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    rows = []
-    for key, table in tables.items():
-        s3 = stage3.get(key)
-        if not s3:
+    ws_no = wb.create_sheet("개방불가_목록")
+    ws_no.append(["테이블명(한글)", "테이블명(영문)", "제외컬럼(사유)"])
+    for key, table_dict in tables_serialized.items():
+        s1 = stage1.get(key, {})
+        if s1.get("bucket") != "불가능":
             continue
-        table_display = table.table_kr or table.table_en or table.key
-        rows.append({
-            "table": table_display,
-            "key": key,
-            "core_columns": s3.get("core_columns", []),
-            "dataset_description": s3.get("dataset_description", ""),
-        })
-    return rows
+        closed_str = "; ".join(
+            f"{c['name']}({c['reason']})" for c in s1.get("closed_columns", [])
+        )
+        ws_no.append([
+            table_dict.get("table_kr", ""),
+            table_dict.get("table_en", ""),
+            closed_str,
+        ])
 
-
-def _build_stage4_rows(
-    tables: Dict[str, SimpleTable], joins: Dict[str, List[Dict[str, Any]]]
-) -> List[Dict[str, Any]]:
-    rows = []
-    for key, table in tables.items():
-        for join in joins.get(key, []):
-            table_display = table.table_kr or table.table_en or table.key
-            rows.append({
-                "table": table_display,
-                "key": key,
-                "join_table": join.get("table_b", ""),
-                "join_keys": join.get("join_keys", []),
-            })
-    return rows
-
-
-def _build_stage5_rows(
-    tables: Dict[str, SimpleTable], stage5: Dict[str, Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    rows = []
-    for key, table in tables.items():
-        s5 = stage5.get(key)
-        if not s5:
-            continue
-        table_display = table.table_kr or table.table_en or table.key
-        rows.append({
-            "table": table_display,
-            "key": key,
-            "dataset_name": s5.get("dataset_name", ""),
-            "final_columns": s5.get("final_columns", []),
-            "final_openable": s5.get("final_openable", ""),
-            "final_reason": s5.get("final_reason", ""),
-        })
-    return rows
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    wb.save(temp_file.name)
+    temp_file.close()
+    return temp_file.name
 
 
 class OpenDataAnalyzerService:
-    """Service for analyzing open data eligibility."""
 
     def _get_api_key(self) -> str | None:
         return os.environ.get("GEMINI_API_KEY")
@@ -157,14 +209,19 @@ class OpenDataAnalyzerService:
         files_data: List[tuple[bytes, str]],
         session_id: str | None = None,
         mock: bool = False,
+        db: AsyncSession | None = None,
     ) -> dict:
         api_key = self._get_api_key()
         if not api_key and not mock:
             raise ValueError("Missing GEMINI_API_KEY.")
 
-        if session_id and session_id in SESSIONS:
+        new_file_names = [name for _, name in files_data]
+        is_new_session = not (session_id and session_id in SESSIONS)
+
+        if not is_new_session:
             state = SESSIONS[session_id]
             tables = state["tables"]
+            file_sources = state.get("file_sources", {})
         else:
             if not files_data:
                 raise ValueError("At least one file is required.")
@@ -175,35 +232,26 @@ class OpenDataAnalyzerService:
             for file_bytes, filename in files_data:
                 suffix = "." + filename.rsplit(".", 1)[-1] if "." in filename else ".xlsx"
                 tmp_path = _save_upload_bytes(file_bytes, suffix)
-
                 try:
                     file_tables = await asyncio.to_thread(
                         extract_tables_from_excel, tmp_path, None
                     )
-
                     for orig_key, table in file_tables.items():
                         norm_key = normalize_table_key(table.table_kr, table.table_en)
                         matched_key = find_matching_table(norm_key, all_tables)
-
                         if matched_key:
-                            table_dict = {
-                                "key": orig_key,
-                                "table_kr": table.table_kr,
-                                "table_en": table.table_en,
-                                "columns": table.columns,
-                            }
-                            existing_table = all_tables[matched_key]
-                            existing_dict = {
-                                "key": existing_table.key,
-                                "table_kr": existing_table.table_kr,
-                                "table_en": existing_table.table_en,
-                                "columns": existing_table.columns,
-                                "file_sources": getattr(
-                                    existing_table, "file_sources",
-                                    [file_sources.get(matched_key, "")]
-                                ),
-                            }
-                            merged = merge_table_data(existing_dict, table_dict, filename)
+                            existing = all_tables[matched_key]
+                            merged = merge_table_data(
+                                {
+                                    "key": existing.key,
+                                    "table_kr": existing.table_kr,
+                                    "table_en": existing.table_en,
+                                    "columns": existing.columns,
+                                    "file_sources": getattr(existing, "file_sources", [file_sources.get(matched_key, "")]),
+                                },
+                                {"key": orig_key, "table_kr": table.table_kr, "table_en": table.table_en, "columns": table.columns},
+                                filename,
+                            )
                             merged_table = SimpleTable(
                                 key=merged["key"],
                                 table_kr=merged["table_kr"],
@@ -227,279 +275,164 @@ class OpenDataAnalyzerService:
             SESSIONS[session_id] = {
                 "tables": tables,
                 "file_sources": file_sources,
-                "reasons": REASONS,
                 "stage1": {},
-                "stage2": {},
-                "stage3": {},
-                "joins": {},
-                "stage5": {},
             }
             state = SESSIONS[session_id]
 
-        stage1 = await asyncio.to_thread(
-            run_stage1,
-            tables,
-            state.get("reasons", REASONS),
-            api_key,
-            self._get_base_url(),
-            self._get_model(),
-            FIXED_SLEEP_SECONDS,
-            mock,
-        )
+        execution = None
+        if db is not None:
+            summary = (
+                ", ".join(new_file_names)
+                if new_file_names
+                else f"세션 재실행 ({session_id[:8]})"
+            )
+            execution = await ExecutionRecorder.create(
+                db,
+                project_slug=PROJECT_SLUG,
+                process_type="inprocess",
+                input_metadata={
+                    "file_names": new_file_names,
+                    "mock": mock,
+                    "session_id": session_id,
+                    "is_new_session": is_new_session,
+                },
+                input_summary=summary,
+            )
 
-        state["stage1"].update(stage1)
-        file_sources = state.get("file_sources", {})
-        rows = _build_stage1_rows(tables, stage1, file_sources)
+        try:
+            stage1 = await asyncio.to_thread(
+                run_stage1,
+                tables,
+                REASONS,
+                api_key,
+                self._get_base_url(),
+                self._get_model(),
+                FIXED_SLEEP_SECONDS,
+                mock,
+            )
 
-        openable_count = sum(1 for r in stage1.values() if r.get("openable") == "가능")
-        not_openable_count = sum(1 for r in stage1.values() if r.get("openable") == "불가능")
+            _consolidate_major_areas(stage1)
+            state["stage1"].update(stage1)
 
-        return {
-            "session_id": session_id,
-            "stage": 1,
-            "rows": rows,
-            "total": len(tables),
-            "openable_count": openable_count,
-            "not_openable_count": not_openable_count,
-            "file_count": len(file_sources) if file_sources else 1,
-        }
+            groups, not_openable = _build_analysis_result(tables, stage1, file_sources)
 
-    async def run_stage2(self, session_id: str, mock: bool = False) -> dict:
-        if session_id not in SESSIONS:
-            raise ValueError("Invalid session_id.")
-        api_key = self._get_api_key()
-        if not api_key and not mock:
-            raise ValueError("Missing GEMINI_API_KEY.")
+            full_open_count = sum(1 for r in stage1.values() if r.get("bucket") == "전체개방")
+            partial_count = sum(1 for r in stage1.values() if r.get("bucket") == "부분개방")
+            not_open_count = sum(1 for r in stage1.values() if r.get("bucket") == "불가능")
 
-        state = SESSIONS[session_id]
-        if not state.get("stage1"):
-            raise ValueError("Run stage 1 first.")
+            response = {
+                "session_id": session_id,
+                "total": len(tables),
+                "full_open_count": full_open_count,
+                "partial_count": partial_count,
+                "not_openable_count": not_open_count,
+                "file_count": len(file_sources) if file_sources else 1,
+                "groups": groups,
+                "not_openable": not_openable,
+            }
 
-        tables = state["tables"]
-        stage1 = state["stage1"]
+            if db is not None and execution is not None:
+                snapshot = {
+                    "response": response,
+                    "raw": {
+                        "tables": _serialize_tables(tables),
+                        "stage1": state["stage1"],
+                        "file_sources": file_sources,
+                    },
+                }
+                await ExecutionRecorder.mark_succeeded(
+                    db,
+                    execution_id=execution.execution_id,
+                    result_data=snapshot,
+                )
+                response["execution_id"] = execution.execution_id
 
-        stage2 = await asyncio.to_thread(
-            run_stage2,
-            tables,
-            api_key,
-            self._get_base_url(),
-            self._get_model(),
-            FIXED_SLEEP_SECONDS,
-            mock,
-            stage1_results=stage1,
-        )
-
-        state["stage2"].update(stage2)
-        rows = _build_stage2_rows(tables, stage2)
-
-        return {
-            "session_id": session_id,
-            "stage": 2,
-            "rows": rows,
-            "total": len(stage2),
-        }
-
-    async def run_stage3(self, session_id: str, mock: bool = False) -> dict:
-        if session_id not in SESSIONS:
-            raise ValueError("Invalid session_id.")
-        api_key = self._get_api_key()
-        if not api_key and not mock:
-            raise ValueError("Missing GEMINI_API_KEY.")
-
-        state = SESSIONS[session_id]
-        if not state.get("stage1"):
-            raise ValueError("Run stage 1 first.")
-
-        tables = state["tables"]
-        stage1 = state["stage1"]
-
-        stage3 = await asyncio.to_thread(
-            run_stage3,
-            tables,
-            api_key,
-            self._get_base_url(),
-            self._get_model(),
-            FIXED_SLEEP_SECONDS,
-            mock,
-            stage1_results=stage1,
-        )
-
-        state["stage3"].update(stage3)
-        rows = _build_stage3_rows(tables, stage3)
-
-        total_columns = sum(len(r.get("core_columns", [])) for r in stage3.values())
-
-        return {
-            "session_id": session_id,
-            "stage": 3,
-            "rows": rows,
-            "total": len(stage3),
-            "total_columns": total_columns,
-        }
-
-    async def run_stage4(self, session_id: str, mock: bool = False) -> dict:
-        if session_id not in SESSIONS:
-            raise ValueError("Invalid session_id.")
-        api_key = self._get_api_key()
-        if not api_key and not mock:
-            raise ValueError("Missing GEMINI_API_KEY.")
-
-        state = SESSIONS[session_id]
-        if not state.get("stage2"):
-            raise ValueError("Run stage 2 first.")
-
-        tables = state["tables"]
-        stage2 = state["stage2"]
-
-        joins = await asyncio.to_thread(
-            run_stage4,
-            tables,
-            api_key,
-            self._get_base_url(),
-            self._get_model(),
-            FIXED_SLEEP_SECONDS,
-            mock,
-            stage2_results=stage2,
-        )
-
-        state["joins"].update(joins)
-        rows = _build_stage4_rows(tables, joins)
-
-        join_pairs = sum(len(v) for v in joins.values())
-
-        return {
-            "session_id": session_id,
-            "stage": 4,
-            "rows": rows,
-            "total": join_pairs,
-        }
-
-    async def run_stage5(self, session_id: str, mock: bool = False) -> dict:
-        if session_id not in SESSIONS:
-            raise ValueError("Invalid session_id.")
-        api_key = self._get_api_key()
-        if not api_key and not mock:
-            raise ValueError("Missing GEMINI_API_KEY.")
-
-        state = SESSIONS[session_id]
-        if not state.get("stage3"):
-            raise ValueError("Run stage 3 first.")
-
-        tables = state["tables"]
-        stage1 = state["stage1"]
-        stage2 = state.get("stage2", {})
-        stage3 = state.get("stage3", {})
-        joins = state.get("joins", {})
-
-        stage5 = await asyncio.to_thread(
-            run_stage5,
-            tables,
-            api_key,
-            self._get_base_url(),
-            self._get_model(),
-            FIXED_SLEEP_SECONDS,
-            mock,
-            stage1_results=stage1,
-            stage2_results=stage2,
-            stage3_results=stage3,
-            joins_results=joins,
-        )
-
-        state["stage5"].update(stage5)
-        rows = _build_stage5_rows(tables, stage5)
-
-        final_openable = sum(1 for r in stage5.values() if r.get("final_openable") == "가능")
-        final_not_openable = sum(1 for r in stage5.values() if r.get("final_openable") == "불가능")
-
-        return {
-            "session_id": session_id,
-            "stage": 5,
-            "rows": rows,
-            "total": len(stage5),
-            "final_openable": final_openable,
-            "final_not_openable": final_not_openable,
-        }
+            return response
+        except Exception as exc:
+            if db is not None and execution is not None:
+                try:
+                    await ExecutionRecorder.mark_failed(
+                        db,
+                        execution_id=execution.execution_id,
+                        error_message=str(exc),
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            raise
 
     async def export_excel(self, session_id: str) -> str:
         if session_id not in SESSIONS:
             raise ValueError("Invalid session_id.")
-
-        from openpyxl import Workbook
-
         state = SESSIONS[session_id]
         tables = state["tables"]
         stage1 = state.get("stage1", {})
-        stage2 = state.get("stage2", {})
-        stage3 = state.get("stage3", {})
-        joins = state.get("joins", {})
-        stage5 = state.get("stage5", {})
+        return await asyncio.to_thread(
+            _build_excel_workbook, _serialize_tables(tables), stage1
+        )
 
-        def _build_workbook() -> str:
-            wb = Workbook()
-            wb.remove(wb.active)
+    async def export_excel_from_execution(
+        self,
+        db: AsyncSession,
+        execution_id: str,
+    ) -> str:
+        record = await ExecutionRecorder.get(db, execution_id)
+        if record is None or record.project_slug != PROJECT_SLUG:
+            raise ValueError("Invalid execution_id.")
+        if record.status != "succeeded" or not record.result_data:
+            raise ValueError("Execution has no result to export.")
 
-            ws1 = wb.create_sheet("1단계_개방가능여부")
-            ws1.append(["테이블명(한글)", "테이블명(영문)", "개방가능여부", "불가능사유번호", "판단사유"])
-            for key, table in tables.items():
-                s1 = stage1.get(key, {})
-                ws1.append([
-                    table.table_kr, table.table_en, s1.get("openable", ""),
-                    ",".join(str(x) for x in s1.get("reason_numbers", [])),
-                    s1.get("reason_text", ""),
-                ])
+        raw = record.result_data.get("raw", {})
+        tables_serialized = raw.get("tables", {})
+        stage1 = raw.get("stage1", {})
 
-            ws2 = wb.create_sheet("2단계_주제영역")
-            ws2.append(["테이블명(한글)", "테이블명(영문)", "주제영역"])
-            for key, table in tables.items():
-                s2 = stage2.get(key, {})
-                if s2:
-                    ws2.append([table.table_kr, table.table_en, s2.get("subject_area", "")])
+        return await asyncio.to_thread(
+            _build_excel_workbook, tables_serialized, stage1
+        )
 
-            ws3 = wb.create_sheet("3단계_개방데이터셋")
-            ws3.append(["테이블명(한글)", "테이블명(영문)", "핵심컬럼", "데이터셋설명"])
-            for key, table in tables.items():
-                s3 = stage3.get(key, {})
-                if s3:
-                    ws3.append([
-                        table.table_kr, table.table_en,
-                        ",".join(s3.get("core_columns", [])),
-                        s3.get("dataset_description", ""),
-                    ])
+    async def list_executions(
+        self,
+        db: AsyncSession,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        result = await ExecutionRecorder.list(
+            db,
+            project_slug=PROJECT_SLUG,
+            page=page,
+            page_size=page_size,
+        )
+        return {
+            "items": [serialize_execution(r) for r in result["items"]],
+            "total": result["total"],
+            "page": result["page"],
+            "page_size": result["page_size"],
+            "total_pages": result["total_pages"],
+        }
 
-            ws4 = wb.create_sheet("4단계_조인검토")
-            ws4.append(["테이블명(한글)", "테이블명(영문)", "조인가능테이블", "조인키"])
-            for key, table in tables.items():
-                for join in joins.get(key, []):
-                    ws4.append([
-                        table.table_kr, table.table_en,
-                        join.get("table_b", ""),
-                        ",".join(join.get("join_keys", [])),
-                    ])
+    async def get_execution(
+        self,
+        db: AsyncSession,
+        execution_id: str,
+    ) -> dict | None:
+        record = await ExecutionRecorder.get(db, execution_id)
+        if record is None or record.project_slug != PROJECT_SLUG:
+            return None
+        return serialize_execution(record, include_result=True)
 
-            ws5 = wb.create_sheet("5단계_최종점검")
-            ws5.append(["테이블명(한글)", "테이블명(영문)", "개방데이터셋명", "최종컬럼", "최종개방여부", "판정사유"])
-            for key, table in tables.items():
-                s5 = stage5.get(key, {})
-                if s5:
-                    ws5.append([
-                        table.table_kr, table.table_en,
-                        s5.get("dataset_name", ""),
-                        ",".join(s5.get("final_columns", [])),
-                        s5.get("final_openable", ""),
-                        s5.get("final_reason", ""),
-                    ])
-
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-            wb.save(temp_file.name)
-            temp_file.close()
-            return temp_file.name
-
-        return await asyncio.to_thread(_build_workbook)
+    async def delete_execution(
+        self,
+        db: AsyncSession,
+        execution_id: str,
+    ) -> bool:
+        record = await ExecutionRecorder.get(db, execution_id)
+        if record is None or record.project_slug != PROJECT_SLUG:
+            return False
+        return await ExecutionRecorder.delete(db, execution_id)
 
     async def get_stats(self) -> AnalyzerStats:
         return AnalyzerStats(
             active_sessions=len(SESSIONS),
             supported_formats=[".xlsx"],
             mock_available=True,
-            stages=["1단계: 개방가능 여부", "2단계: 주제영역", "3단계: 핵심컬럼", "4단계: 조인검토", "5단계: 최종점검"],
+            stages=["1단계: 컬럼 단위 개방 가능 여부 판단 + 주제분류 + 데이터셋명"],
         )

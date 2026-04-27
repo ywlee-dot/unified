@@ -1,6 +1,9 @@
 """API router for AI Data Openness project."""
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dependencies import get_db_session
 
 from .service import AIDataOpennessService
 
@@ -53,11 +56,19 @@ async def report(
     representative_idx: int = Form(0),
     provider_name: str = Form("claude"),
     api_key: str = Form(""),
+    institution: str = Form("공공기관"),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """평가 결과로 첨부2 보고서를 생성."""
     try:
-        report_text = await _service.report(session_id, representative_idx, provider_name, api_key)
-        return {"report": report_text}
+        return await _service.report(
+            session_id,
+            representative_idx,
+            provider_name,
+            api_key,
+            institution=institution,
+            db=db,
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
@@ -105,16 +116,51 @@ async def phase2_generate(
     representative_idx: int = Form(0),
     provider_name: str = Form("claude"),
     api_key: str = Form(""),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Phase 2 3-에이전트 파이프라인으로 첨부2 보고서를 생성."""
     try:
         return await _service.phase2_generate(
             session_id, institution, representative_idx, provider_name, api_key,
+            db=db,
         )
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:
         raise HTTPException(500, f"보고서 생성 실패: {str(e)}")
+
+
+# ── Execution history ────────────────────────────────────────────────────────
+
+@router.get("/runs")
+async def list_runs(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await _service.list_executions(db, page=page, page_size=page_size)
+
+
+@router.get("/runs/{execution_id}")
+async def get_run(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    record = await _service.get_execution(db, execution_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Execution not found.")
+    return record
+
+
+@router.delete("/runs/{execution_id}")
+async def delete_run(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    deleted = await _service.delete_execution(db, execution_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Execution not found.")
+    return {"deleted": True}
 
 
 # ── Phase 2 Demo ──────────────────────────────────────────────────────────────
