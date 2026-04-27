@@ -193,12 +193,18 @@ export interface GovNewsStats {
 
 // --- Open Data Analyzer ---
 
+export interface OpenDataClosedColumn {
+  name: string;
+  reason: string;
+  reason_codes?: number[];
+}
+
 export interface OpenDataTableRow {
   table: string;
   key: string;
   bucket: string;
   open_columns: string[];
-  closed_columns: { name: string; reason: string }[];
+  closed_columns: OpenDataClosedColumn[];
   open_count: number;
   total_count: number;
   major_area?: string;

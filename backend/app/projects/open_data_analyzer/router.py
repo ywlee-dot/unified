@@ -30,7 +30,7 @@ async def stage1(
                 data = await f.read()
                 files_data.append((data, f.filename or "upload.xlsx"))
 
-        result = await _service.run_stage1(
+        result = await _service.start_stage1_background(
             files_data=files_data,
             session_id=session_id,
             mock=mock,
@@ -42,6 +42,14 @@ async def stage1(
     except Exception as exc:
         logger.exception("stage1 failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/stage1/progress/{execution_id}")
+async def get_stage1_progress(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await _service.get_stage1_progress(execution_id, db=db)
 
 
 @router.post("/export")

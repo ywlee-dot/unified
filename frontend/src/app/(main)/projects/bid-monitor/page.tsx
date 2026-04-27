@@ -294,8 +294,8 @@ function BidMonitorPageContent() {
   // Search filters
   const [keyword, setKeyword] = useState("");
   const [bidType, setBidType] = useState("");
-  const [sort, setSort] = useState("score");
-  const [gradeFilters, setGradeFilters] = useState<string[]>(initialGrade ? [initialGrade] : []);
+  const [sort, setSort] = useState("date");
+  const [gradeFilters, setGradeFilters] = useState<string[]>(initialGrade ? [initialGrade] : ["high"]);
   const pageSize = 15;
   const abortControllerRef = useRef<AbortController | null>(null);
 

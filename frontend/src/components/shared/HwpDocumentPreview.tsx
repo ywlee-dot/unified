@@ -8,9 +8,26 @@ import { Printer, FileText, X } from 'lucide-react';
 type FontType = 'gothic' | 'myeongjo';
 type ZoomLevel = 75 | 100 | 125;
 
+export interface HwpTableCell {
+  value: string;
+  bold?: boolean;
+  align?: "left" | "center" | "right";
+  bg?: string;
+  rowspan?: number;
+  colspan?: number;
+}
+
+export interface HwpTable {
+  headers?: (string | HwpTableCell)[];
+  rows: (string | HwpTableCell)[][];
+  columnWidths?: (string | number)[];
+  caption?: string;
+}
+
 export interface HwpSection {
   heading: string;
-  content: string;
+  content?: string;
+  table?: HwpTable;
 }
 
 export interface HwpTabData {
@@ -468,14 +485,103 @@ function StructuredDocBody({
           }}>
             {s.heading}
           </h2>
-          <p style={{
-            fontSize: '10.5pt', lineHeight: 1.8, fontFamily,
-            whiteSpace: 'pre-line', color: '#111',
-          }}>
-            {s.content}
-          </p>
+          {s.content && (
+            <p style={{
+              fontSize: '10.5pt', lineHeight: 1.8, fontFamily,
+              whiteSpace: 'pre-line', color: '#111',
+              marginBottom: s.table ? '6pt' : 0,
+            }}>
+              {s.content}
+            </p>
+          )}
+          {s.table && <HwpTableRender table={s.table} fontFamily={fontFamily} />}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── HWP-style table renderer ───────────────────────────────────────────────
+
+function HwpTableRender({
+  table, fontFamily,
+}: {
+  table: HwpTable;
+  fontFamily: string;
+}) {
+  const normCell = (c: string | HwpTableCell): HwpTableCell =>
+    typeof c === "string" ? { value: c } : c;
+
+  const cellStyle = (c: HwpTableCell, isHeader: boolean) => ({
+    border: '0.5pt solid #888',
+    padding: '4pt 6pt',
+    fontSize: '9.5pt',
+    fontFamily,
+    verticalAlign: 'top' as const,
+    textAlign: c.align ?? (isHeader ? 'center' : 'left') as 'left' | 'center' | 'right',
+    fontWeight: c.bold ?? isHeader ? 700 : 400,
+    background: c.bg ?? (isHeader ? '#F0F0F0' : 'transparent'),
+    whiteSpace: 'pre-line' as const,
+    wordBreak: 'break-word' as const,
+  });
+
+  return (
+    <div>
+      {table.caption && (
+        <p style={{
+          fontSize: '9.5pt', fontFamily, color: '#444',
+          marginBottom: '4pt', fontStyle: 'italic',
+        }}>
+          {table.caption}
+        </p>
+      )}
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '8pt' }}>
+        {table.columnWidths && (
+          <colgroup>
+            {table.columnWidths.map((w, i) => (
+              <col key={i} style={{ width: typeof w === 'number' ? `${w}%` : w }} />
+            ))}
+          </colgroup>
+        )}
+        {table.headers && table.headers.length > 0 && (
+          <thead>
+            <tr>
+              {table.headers.map((h, i) => {
+                const c = normCell(h);
+                return (
+                  <th
+                    key={i}
+                    rowSpan={c.rowspan}
+                    colSpan={c.colspan}
+                    style={cellStyle(c, true)}
+                  >
+                    {c.value}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {table.rows.map((row, ri) => (
+            <tr key={ri}>
+              {row.map((cell, ci) => {
+                const c = normCell(cell);
+                return (
+                  <td
+                    key={ci}
+                    rowSpan={c.rowspan}
+                    colSpan={c.colspan}
+                    style={cellStyle(c, false)}
+                  >
+                    {c.value}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

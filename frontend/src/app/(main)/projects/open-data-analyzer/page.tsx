@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Sparkles, Upload, FileSpreadsheet, X,
-  ChevronDown, ChevronUp, Copy, Check,
+  ChevronDown, ChevronUp, Copy, Check, History,
 } from "lucide-react";
 import type {
   OpenDataTableRow, OpenDataGroup, OpenDataAnalysisResult, DatasetSummaryResult,
@@ -12,6 +12,10 @@ import { BranchingPipeline, type PipelineGraph } from "@/components/architecture
 import { api } from "@/lib/api";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import RunHistoryPanel from "@/components/shared/RunHistoryPanel";
+import {
+  HwpDocumentPreview,
+  type HwpDocumentData,
+} from "@/components/shared/HwpDocumentPreview";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -106,7 +110,197 @@ const PROCESS_PIPELINE: PipelineGraph = {
   ],
 };
 
+const EXCLUSION_REASON_LABELS: Record<number, string> = {
+  1: "법률상 비공개",
+  2: "국가안보·외교",
+  3: "국민 생명·재산",
+  4: "재판·수사",
+  5: "감사·검사·인사",
+  6: "개인정보",
+  7: "영업비밀",
+  8: "부동산투기",
+  9: "시스템 테이블",
+};
+
+const EXCLUSION_REASON_FULL: Record<number, string> = {
+  1: "다른 법률에 따라 비공개",
+  2: "국가안전보장·국방·외교",
+  3: "국민 생명·신체·재산 보호",
+  4: "재판·수사·형 집행",
+  5: "감사·감독·시험·인사관리",
+  6: "개인정보 (성명·주민번호·연락처 등)",
+  7: "법인·개인 영업비밀",
+  8: "부동산 투기·매점매석 우려",
+  9: "시스템 테이블·시스템 내부 컬럼",
+};
+
+function formatReasonShort(closed: { reason: string; reason_codes?: number[] }): string {
+  const codes = closed.reason_codes ?? [];
+  if (codes.length > 0) {
+    const labels = codes.map((c) => `${c}.${EXCLUSION_REASON_LABELS[c] ?? "?"}`).join(", ");
+    return labels;
+  }
+  return closed.reason || "";
+}
+
+function formatReasonFull(closed: { reason: string; reason_codes?: number[] }): string {
+  const codes = closed.reason_codes ?? [];
+  if (codes.length > 0) {
+    return codes.map((c) => `${c}. ${EXCLUSION_REASON_FULL[c] ?? "?"}`).join("\n");
+  }
+  return closed.reason || "";
+}
+
+function buildVerifyHwpData(result: OpenDataAnalysisResult): HwpDocumentData {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}년 ${now.getMonth() + 1}월`;
+
+  const total = result.total || 1;
+  const pct = (n: number) => `${((n / total) * 100).toFixed(1)}%`;
+
+  const sections: HwpDocumentData["sections"] = [];
+
+  // 1. 분석 요약 표
+  sections.push({
+    heading: "분석 요약",
+    table: {
+      headers: [
+        { value: "구분", align: "center" },
+        { value: "건수", align: "center" },
+        { value: "비율", align: "center" },
+      ],
+      columnWidths: [50, 25, 25],
+      rows: [
+        [
+          { value: "전체 테이블" },
+          { value: result.total.toLocaleString(), align: "right" },
+          { value: "100.0%", align: "right" },
+        ],
+        [
+          { value: "전체개방" },
+          { value: result.full_open_count.toLocaleString(), align: "right" },
+          { value: pct(result.full_open_count), align: "right" },
+        ],
+        [
+          { value: "부분개방" },
+          { value: result.partial_count.toLocaleString(), align: "right" },
+          { value: pct(result.partial_count), align: "right" },
+        ],
+        [
+          { value: "개방불가" },
+          { value: result.not_openable_count.toLocaleString(), align: "right" },
+          { value: pct(result.not_openable_count), align: "right" },
+        ],
+      ],
+    },
+  });
+
+  // 2. 그룹별 테이블 — 한 컬럼당 한 행으로 전개, 좌측 4개 셀은 rowspan
+  type Cell = string | import("@/components/shared/HwpDocumentPreview").HwpTableCell;
+  for (const group of result.groups) {
+    const rows: Cell[][] = [];
+    for (const t of group.tables) {
+      const cols: { name: string; reason: string }[] = [
+        ...t.open_columns.map((name) => ({ name, reason: "" })),
+        ...t.closed_columns.map((c) => ({ name: c.name, reason: formatReasonShort(c) })),
+      ];
+      const span = Math.max(1, cols.length);
+
+      const firstRow: Cell[] = [
+        { value: t.table, rowspan: span },
+        {
+          value: t.bucket,
+          align: "center",
+          bold: true,
+          bg: t.bucket === "전체개방" ? "#E6F9F3" : "#FFF8E1",
+          rowspan: span,
+        },
+        { value: `${t.open_count}/${t.total_count}`, align: "center", rowspan: span },
+        { value: t.dataset_name || "-", rowspan: span },
+        { value: cols[0]?.name ?? "-" },
+        { value: cols[0]?.reason ?? "" },
+      ];
+      rows.push(firstRow);
+
+      for (let i = 1; i < cols.length; i++) {
+        rows.push([{ value: cols[i].name }, { value: cols[i].reason }]);
+      }
+    }
+
+    sections.push({
+      heading: `[${group.major_area}] ${group.tables.length}개 테이블`,
+      table: {
+        headers: [
+          { value: "테이블명", align: "center" },
+          { value: "판정", align: "center" },
+          { value: "컬럼", align: "center" },
+          { value: "데이터셋명", align: "center" },
+          { value: "주요 개방 컬럼", align: "center" },
+          { value: "사유", align: "center" },
+        ],
+        columnWidths: [22, 8, 7, 22, 21, 20],
+        rows,
+      },
+    });
+  }
+
+  // 3. 개방 불가 목록 — 동일 구조 (전체 컬럼이 closed라 모두 사유 채워짐)
+  if (result.not_openable.length) {
+    type Cell2 = string | import("@/components/shared/HwpDocumentPreview").HwpTableCell;
+    const rows: Cell2[][] = [];
+    for (const t of result.not_openable) {
+      const cols: { name: string; reason: string }[] = [
+        ...t.open_columns.map((name) => ({ name, reason: "" })),
+        ...t.closed_columns.map((c) => ({ name: c.name, reason: formatReasonShort(c) })),
+      ];
+      const span = Math.max(1, cols.length);
+
+      rows.push([
+        { value: t.table, rowspan: span },
+        {
+          value: "개방불가",
+          align: "center",
+          bold: true,
+          bg: "#FFF0F1",
+          rowspan: span,
+        },
+        { value: `${t.open_count}/${t.total_count}`, align: "center", rowspan: span },
+        { value: t.dataset_name || "-", rowspan: span },
+        { value: cols[0]?.name ?? "-" },
+        { value: cols[0]?.reason ?? "" },
+      ]);
+      for (let i = 1; i < cols.length; i++) {
+        rows.push([{ value: cols[i].name }, { value: cols[i].reason }]);
+      }
+    }
+
+    sections.push({
+      heading: `개방 불가 목록 (${result.not_openable.length}건)`,
+      table: {
+        headers: [
+          { value: "테이블명", align: "center" },
+          { value: "판정", align: "center" },
+          { value: "컬럼", align: "center" },
+          { value: "데이터셋명", align: "center" },
+          { value: "주요 개방 컬럼", align: "center" },
+          { value: "사유", align: "center" },
+        ],
+        columnWidths: [22, 8, 7, 22, 21, 20],
+        rows,
+      },
+    });
+  }
+
+  return {
+    title: "개방데이터 분석 결과",
+    subtitle: "컬럼 단위 개방 가능 여부 판단",
+    date: dateStr,
+    sections,
+  };
+}
+
 type Tab = "verify" | "summary";
+type ResultViewMode = "default" | "hwp";
 
 export default function OpenDataAnalyzerPage() {
   const [activeTab, setActiveTab] = useState<Tab>("verify");
@@ -179,6 +373,30 @@ function TabButton({
   );
 }
 
+function ViewModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap"
+      style={{
+        backgroundColor: active ? "#FFFFFF" : "transparent",
+        color: active ? "#191F28" : "#8B95A1",
+        boxShadow: active ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* 탭 1 — 개방가능검증                                                  */
 /* ------------------------------------------------------------------ */
@@ -193,7 +411,13 @@ function VerifyTab() {
   const [mockMode, setMockMode] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [viewMode, setViewMode] = useState<ResultViewMode>("default");
+  const [showHistory, setShowHistory] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { if (pollingRef.current) clearInterval(pollingRef.current); }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) setFiles(Array.from(e.target.files));
@@ -207,9 +431,15 @@ function VerifyTab() {
     if (dropped.length > 0) setFiles(dropped);
   }, []);
 
+  const stopPolling = () => {
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+  };
+
   const runAnalysis = async () => {
     setLoading(true);
     setError(null);
+    setProgress(null);
+    stopPolling();
     try {
       const formData = new FormData();
       if (files.length === 0 && !sessionId) throw new Error("파일을 선택해주세요.");
@@ -224,18 +454,52 @@ function VerifyTab() {
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || `분석 실패 (${resp.status})`);
+        throw new Error(err.detail || `분석 시작 실패 (${resp.status})`);
       }
-      const data: OpenDataAnalysisResult = await resp.json();
-      setSessionId(data.session_id);
-      setExecutionId(data.execution_id || null);
+      const { execution_id, session_id: newSessionId } = await resp.json();
+      setExecutionId(execution_id);
+      setSessionId(newSessionId);
       setViewingHistory(false);
-      setResult(data);
-      setHistoryRefresh((v) => v + 1);
+
+      pollingRef.current = setInterval(async () => {
+        try {
+          const pResp = await fetch(
+            `${API_BASE}/projects/open-data-analyzer/stage1/progress/${execution_id}`,
+            { credentials: "include" }
+          );
+          if (!pResp.ok) return;
+          const prog = await pResp.json();
+          if (prog.total > 0) setProgress({ done: prog.done, total: prog.total });
+
+          if (prog.status === "succeeded") {
+            stopPolling();
+            const rResp = await fetch(
+              `${API_BASE}/projects/open-data-analyzer/runs/${execution_id}`,
+              { credentials: "include" }
+            );
+            if (!rResp.ok) throw new Error("결과 불러오기 실패");
+            const detail = await rResp.json();
+            const response = detail.result_data?.response;
+            if (!response) throw new Error("결과 데이터가 없습니다.");
+            setResult(response as OpenDataAnalysisResult);
+            setHistoryRefresh((v) => v + 1);
+            setLoading(false);
+            setProgress(null);
+          } else if (prog.status === "failed") {
+            stopPolling();
+            setError(prog.error || "분석 실패");
+            setLoading(false);
+            setProgress(null);
+          }
+        } catch {
+          // transient polling error — keep trying
+        }
+      }, 1500);
     } catch (err: any) {
+      stopPolling();
       setError(err.message || "알 수 없는 오류가 발생했습니다.");
-    } finally {
       setLoading(false);
+      setProgress(null);
     }
   };
 
@@ -304,12 +568,14 @@ function VerifyTab() {
   };
 
   const reset = () => {
+    stopPolling();
     setSessionId(null);
     setExecutionId(null);
     setViewingHistory(false);
     setResult(null);
     setFiles([]);
     setError(null);
+    setProgress(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -328,6 +594,14 @@ function VerifyTab() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className="flex items-center gap-1.5 text-sm transition-colors"
+            style={{ color: showHistory ? "#0064FF" : "#8B95A1" }}
+          >
+            <History className="w-4 h-4" />
+            히스토리
+          </button>
           <label
             className="flex items-center gap-2 text-sm cursor-pointer select-none"
             style={{ color: "#4E5968" }}
@@ -375,12 +649,15 @@ function VerifyTab() {
         </div>
       </div>
 
-      <RunHistoryPanel
-        projectSlug="open-data-analyzer"
-        onSelect={loadFromHistory}
-        refreshKey={historyRefresh}
-        selectedExecutionId={executionId}
-      />
+      {showHistory && (
+        <RunHistoryPanel
+          projectSlug="open-data-analyzer"
+          onSelect={(id) => { setShowHistory(false); loadFromHistory(id); }}
+          onClose={() => setShowHistory(false)}
+          refreshKey={historyRefresh}
+          selectedExecutionId={executionId}
+        />
+      )}
 
       {viewingHistory && result && (
         <div
@@ -512,22 +789,50 @@ function VerifyTab() {
                 <p className="mt-3 text-sm" style={{ color: "#8B95A1" }}>
                   컬럼 단위로 개방 가능 여부를 분석하고 있습니다...
                 </p>
+                {progress && progress.total > 0 && (
+                  <p className="mt-1 text-xs" style={{ color: "#B0B8C1" }}>
+                    ({Math.round((progress.done / progress.total) * 100)}%)
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           {result && (
             <div className="space-y-5">
-              <div className="flex flex-wrap gap-3">
-                <StatBadge label="전체" value={result.total} bg="#F4F5F8" color="#191F28" />
-                <StatBadge label="전체개방" value={result.full_open_count} bg="#E6F9F3" color="#00B386" />
-                {result.partial_count > 0 && (
-                  <StatBadge label="부분개방" value={result.partial_count} bg="#FFF8E1" color="#B78103" />
-                )}
-                <StatBadge label="개방불가" value={result.not_openable_count} bg="#FFF0F1" color="#F04452" />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-3">
+                  <StatBadge label="전체" value={result.total} bg="#F4F5F8" color="#191F28" />
+                  <StatBadge label="전체개방" value={result.full_open_count} bg="#E6F9F3" color="#00B386" />
+                  {result.partial_count > 0 && (
+                    <StatBadge label="부분개방" value={result.partial_count} bg="#FFF8E1" color="#B78103" />
+                  )}
+                  <StatBadge label="개방불가" value={result.not_openable_count} bg="#FFF0F1" color="#F04452" />
+                </div>
+                <div
+                  className="inline-flex gap-1 p-1 rounded-lg"
+                  style={{ backgroundColor: "#F0F1F4" }}
+                >
+                  <ViewModeButton
+                    active={viewMode === "default"}
+                    onClick={() => setViewMode("default")}
+                  >
+                    기본 보기
+                  </ViewModeButton>
+                  <ViewModeButton
+                    active={viewMode === "hwp"}
+                    onClick={() => setViewMode("hwp")}
+                  >
+                    HWP 보기
+                  </ViewModeButton>
+                </div>
               </div>
 
-              {result.groups.length > 0 && (
+              {viewMode === "hwp" && (
+                <HwpDocumentPreview data={buildVerifyHwpData(result)} />
+              )}
+
+              {viewMode === "default" && result.groups.length > 0 && (
                 <div className="rounded-xl shadow-md" style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E8EB" }}>
                   <div className="px-6 py-4 border-b" style={{ borderColor: "#E5E8EB" }}>
                     <h2 className="text-base font-semibold" style={{ color: "#191F28" }}>
@@ -545,7 +850,7 @@ function VerifyTab() {
                 </div>
               )}
 
-              {result.not_openable.length > 0 && (
+              {viewMode === "default" && result.not_openable.length > 0 && (
                 <div className="rounded-xl shadow-md" style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E8EB" }}>
                   <div className="px-6 py-4 border-b" style={{ borderColor: "#E5E8EB" }}>
                     <h2 className="text-base font-semibold" style={{ color: "#191F28" }}>
@@ -555,9 +860,9 @@ function VerifyTab() {
                       {result.not_openable_count}건
                     </p>
                   </div>
-                  <div className="divide-y" style={{ borderColor: "#F0F1F4" }}>
+                  <div className="space-y-3 px-6 py-4">
                     {result.not_openable.map((row) => (
-                      <NotOpenableRow key={row.key} row={row} />
+                      <TableDetailRow key={row.key} row={{ ...row, bucket: "개방불가" }} />
                     ))}
                   </div>
                 </div>
@@ -601,6 +906,7 @@ function SummaryTab() {
   const [executionId, setExecutionId] = useState<string | null>(null);
   const [viewingHistory, setViewingHistory] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [showHistory, setShowHistory] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -735,6 +1041,14 @@ function SummaryTab() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className="flex items-center gap-1.5 text-sm transition-colors"
+            style={{ color: showHistory ? "#0064FF" : "#8B95A1" }}
+          >
+            <History className="w-4 h-4" />
+            히스토리
+          </button>
           <label
             className="flex items-center gap-2 text-sm cursor-pointer select-none"
             style={{ color: "#4E5968" }}
@@ -759,12 +1073,15 @@ function SummaryTab() {
         </div>
       </div>
 
-      <RunHistoryPanel
-        projectSlug="dataset-summary"
-        onSelect={loadFromHistory}
-        refreshKey={historyRefresh}
-        selectedExecutionId={executionId}
-      />
+      {showHistory && (
+        <RunHistoryPanel
+          projectSlug="dataset-summary"
+          onSelect={(id) => { setShowHistory(false); loadFromHistory(id); }}
+          onClose={() => setShowHistory(false)}
+          refreshKey={historyRefresh}
+          selectedExecutionId={executionId}
+        />
+      )}
 
       {viewingHistory && results.length > 0 && (
         <div
@@ -1213,61 +1530,88 @@ function GroupSection({ group }: { group: OpenDataGroup }) {
       </div>
       <div className="space-y-3">
         {group.tables.map((row) => (
-          <OpenableRow key={row.key} row={row} />
+          <TableDetailRow key={row.key} row={row} />
         ))}
       </div>
     </div>
   );
 }
 
-function OpenableRow({ row }: { row: OpenDataTableRow }) {
-  const isPartial = row.bucket === "부분개방";
-  const bucketStyle = isPartial
-    ? { backgroundColor: "#FFF8E1", color: "#B78103" }
-    : { backgroundColor: "#E6F9F3", color: "#00B386" };
+function bucketColors(bucket: string): { bg: string; color: string } {
+  if (bucket === "전체개방") return { bg: "#E6F9F3", color: "#00B386" };
+  if (bucket === "부분개방") return { bg: "#FFF8E1", color: "#B78103" };
+  return { bg: "#FFF0F1", color: "#F04452" }; // 불가능 / 개방불가
+}
+
+function TableDetailRow({ row }: { row: OpenDataTableRow }) {
+  const bs = bucketColors(row.bucket);
+  const allColumns: { name: string; reason: string; reasonFull: string }[] = [
+    ...row.open_columns.map((name) => ({ name, reason: "", reasonFull: "" })),
+    ...row.closed_columns.map((c) => ({
+      name: c.name,
+      reason: formatReasonShort(c),
+      reasonFull: formatReasonFull(c),
+    })),
+  ];
 
   return (
-    <div className="rounded-lg p-4" style={{ backgroundColor: "#F8F9FB", border: "1px solid #E5E8EB" }}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-xs font-medium" style={bucketStyle}>
-            {row.bucket}
-          </span>
-          <span className="font-medium text-sm truncate" style={{ color: "#191F28" }}>{row.table}</span>
-          {row.sub_area && (
-            <span className="text-xs shrink-0" style={{ color: "#8B95A1" }}>/ {row.sub_area}</span>
-          )}
-        </div>
-        <span className="text-xs shrink-0" style={{ color: "#8B95A1" }}>
-          {row.open_count}/{row.total_count} 컬럼
+    <div
+      className="overflow-hidden rounded-lg"
+      style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E8EB" }}
+    >
+      <div
+        className="flex flex-wrap items-center gap-3 px-4 py-3"
+        style={{ backgroundColor: "#F8F9FB", borderBottom: "1px solid #E5E8EB" }}
+      >
+        <span className="text-sm font-semibold" style={{ color: "#191F28" }}>
+          {row.table}
         </span>
-      </div>
-      {row.dataset_name && (
-        <p className="mt-2 text-xs font-medium" style={{ color: "#4E5968" }}>{row.dataset_name}</p>
-      )}
-      <div className="mt-2 flex flex-wrap gap-1">
-        {row.open_columns.slice(0, 8).map((col, i) => (
-          <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-xs"
-            style={{ backgroundColor: "#E6F9F3", color: "#00B386" }}>
-            {col}
+        <span
+          className="inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
+          style={{ backgroundColor: bs.bg, color: bs.color }}
+        >
+          {row.bucket}
+        </span>
+        <span className="text-xs shrink-0" style={{ color: "#8B95A1" }}>
+          {row.open_count}/{row.total_count}
+        </span>
+        {row.dataset_name && (
+          <span className="text-xs truncate" style={{ color: "#4E5968" }}>
+            · {row.dataset_name}
           </span>
-        ))}
-        {row.open_columns.length > 8 && (
-          <span className="text-xs" style={{ color: "#8B95A1" }}>+{row.open_columns.length - 8}</span>
         )}
       </div>
-      {isPartial && row.closed_columns.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {row.closed_columns.slice(0, 4).map((col, i) => (
-            <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-xs"
-              title={col.reason}
-              style={{ backgroundColor: "#FFF0F1", color: "#F04452" }}>
-              ❌ {col.name}
-            </span>
-          ))}
-          {row.closed_columns.length > 4 && (
-            <span className="text-xs" style={{ color: "#8B95A1" }}>+{row.closed_columns.length - 4} 제외</span>
-          )}
+      {allColumns.length > 0 && (
+        <div>
+          {allColumns.map((col, i) => {
+            const isClosed = !!col.reason;
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-3 px-4 py-2 text-xs"
+                style={{
+                  borderTop: i > 0 ? "1px solid #F0F1F4" : "none",
+                  backgroundColor: isClosed ? "#FFFAFA" : "#FFFFFF",
+                }}
+              >
+                <span
+                  className="flex-1 truncate"
+                  style={{ color: isClosed ? "#F04452" : "#191F28" }}
+                >
+                  {col.name}
+                </span>
+                {isClosed && (
+                  <span
+                    className="shrink-0 max-w-[45%] truncate"
+                    style={{ color: "#F04452" }}
+                    title={col.reasonFull || col.reason}
+                  >
+                    {col.reason}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1421,27 +1765,3 @@ function FormatGuide({
   );
 }
 
-function NotOpenableRow({ row }: { row: OpenDataTableRow }) {
-  return (
-    <div className="px-6 py-3 flex items-start gap-4">
-      <div className="flex-1 min-w-0">
-        <span className="font-medium text-sm" style={{ color: "#191F28" }}>{row.table}</span>
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {row.closed_columns.slice(0, 6).map((col, i) => (
-            <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-xs"
-              title={col.reason}
-              style={{ backgroundColor: "#FFF0F1", color: "#F04452" }}>
-              {col.name}
-            </span>
-          ))}
-          {row.closed_columns.length > 6 && (
-            <span className="text-xs" style={{ color: "#8B95A1" }}>+{row.closed_columns.length - 6}</span>
-          )}
-        </div>
-      </div>
-      <span className="text-xs shrink-0" style={{ color: "#8B95A1" }}>
-        {row.open_count}/{row.total_count} 컬럼
-      </span>
-    </div>
-  );
-}
