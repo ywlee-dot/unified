@@ -438,6 +438,79 @@ export interface BidMonitorStats {
   high_count?: number;
   medium_count?: number;
   low_count?: number;
+  // 발주계획 / 사전규격
+  total_order_plans?: number;
+  total_pre_specs?: number;
+  high_count_order_plans?: number;
+  medium_count_order_plans?: number;
+  low_count_order_plans?: number;
+  high_count_pre_specs?: number;
+  medium_count_pre_specs?: number;
+  low_count_pre_specs?: number;
   recent_runs: BidCheckRun[];
   scheduler_running: boolean;
+}
+
+// ────────────────────────────────────────────────────────────
+// 발주계획 / 사전규격 / 파이프라인
+// ────────────────────────────────────────────────────────────
+
+export interface BidOrderPlan {
+  id: string;
+  order_plan_unty_no: string;
+  bid_type: string;
+  prdct_clsfc_no_nm: string | null;
+  asign_bdgt_amt: number | null;
+  ordr_plan_dt: string | null;
+  ordr_yymm: string | null;
+  ordr_instt_cd: string | null;
+  ordr_instt_nm: string | null;
+  source_keyword: string | null;
+  match_reasons?: string[] | null;
+  best_score?: number | null;
+  best_grade?: BidGrade;
+  created_at: string;
+}
+
+export interface BidPreSpec {
+  id: string;
+  bf_spec_rgst_no: string;
+  bid_type: string;
+  prdct_clsfc_no_nm: string | null;
+  asign_bdgt_amt: number | null;
+  rcept_bgn_dt: string | null;
+  rcept_clse_dt: string | null;
+  rgst_dt: string | null;
+  ntce_instt_cd: string | null;
+  ntce_instt_nm: string | null;
+  dminstt_cd: string | null;
+  dminstt_nm: string | null;
+  source_keyword: string | null;
+  match_reasons?: string[] | null;
+  best_score?: number | null;
+  best_grade?: BidGrade;
+  created_at: string;
+}
+
+export interface BidPipelineLink {
+  id: string;
+  bid_type: string | null;
+  prcrmnt_req_no: string | null;
+  order_plan_unty_no: string | null;
+  bf_spec_rgst_no: string | null;
+  bid_ntce_no: string | null;
+  bid_ntce_ord: string | null;
+  cntrct_no: string | null;
+  notice_id: string | null;
+  order_plan_id: string | null;
+  pre_spec_id: string | null;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
+export interface BidPipelineTimeline {
+  link: BidPipelineLink | null;
+  order_plan: BidOrderPlan | null;
+  pre_spec: BidPreSpec | null;
+  notice: BidNotice | null;
 }

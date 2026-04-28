@@ -1,6 +1,7 @@
 """API router for Dataset Summary project."""
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db_session
@@ -15,14 +16,10 @@ _service = DatasetSummaryService()
 async def summarize(
     file: UploadFile = File(...),
     sheet: str | None = Form(default=None),
-    group_key: str | None = Form(default=None),
     org_name: str | None = Form(default=None),
     include_rows: bool = Form(default=False),
     mock: bool = Form(default=False),
     include_prompt: bool = Form(default=False),
-    include_debug: bool = Form(default=False),
-    header_start: str | None = Form(default=None),
-    header_end: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db_session),
 ):
     if not org_name or not org_name.strip():
@@ -32,24 +29,28 @@ async def summarize(
 
     data = await file.read()
     try:
-        result = await _service.summarize(
+        result = await _service.start_summarize_background(
             file_bytes=data,
             filename=file.filename,
             sheet=sheet,
-            group_key=group_key,
             org_name=org_name,
             include_rows=include_rows,
             mock=mock,
             include_prompt=include_prompt,
-            include_debug=include_debug,
-            header_start=header_start,
-            header_end=header_end,
             db=db,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return result
+
+
+@router.get("/summarize/progress/{execution_id}")
+async def get_summarize_progress(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await _service.get_summarize_progress(execution_id, db=db)
 
 
 # ── Execution history ────────────────────────────────────────────────────────
@@ -72,6 +73,22 @@ async def get_run(
     if record is None:
         raise HTTPException(status_code=404, detail="Execution not found.")
     return record
+
+
+@router.get("/runs/{execution_id}/export")
+async def export_run(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    try:
+        file_path = await _service.export_excel_from_execution(db, execution_id)
+        return FileResponse(
+            file_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=f"데이터셋설명키워드_{execution_id[:8]}.xlsx",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/runs/{execution_id}")

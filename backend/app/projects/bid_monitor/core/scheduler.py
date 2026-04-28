@@ -25,6 +25,9 @@ from app.projects.bid_monitor.models import (
     BidKeywordModel,
     BidMonitorConfigModel,
     BidNoticeModel,
+    BidOrderPlanModel,
+    BidPipelineLinkModel,
+    BidPreSpecModel,
 )
 
 logger = logging.getLogger(__name__)
@@ -185,6 +188,141 @@ async def _collect_all_notices(
     return _dedup_items(all_fetches)
 
 
+async def _collect_order_plans(
+    g2b: G2BClient, bid_types: list[str], start_dt: str, end_dt: str,
+) -> list[dict]:
+    """발주계획 — bid_type별 1회씩 수집 + (order_plan_unty_no) 중복 제거."""
+    all_items: list[dict] = []
+    for bid_type in bid_types:
+        items, _ = await g2b.fetch_order_plans(
+            bid_type=bid_type, start_dt=start_dt, end_dt=end_dt, num_of_rows=100,
+        )
+        all_items.extend(items)
+    seen: set[str] = set()
+    out: list[dict] = []
+    for it in all_items:
+        key = it.get("order_plan_unty_no") or ""
+        if key and key not in seen:
+            seen.add(key)
+            out.append(it)
+    return out
+
+
+async def _collect_pre_specs(
+    g2b: G2BClient, bid_types: list[str], start_dt: str, end_dt: str,
+) -> list[dict]:
+    """사전규격 — bid_type별 1회씩 수집 + (bf_spec_rgst_no) 중복 제거."""
+    all_items: list[dict] = []
+    for bid_type in bid_types:
+        items, _ = await g2b.fetch_pre_specs(
+            bid_type=bid_type, start_dt=start_dt, end_dt=end_dt, num_of_rows=100,
+        )
+        all_items.extend(items)
+    seen: set[str] = set()
+    out: list[dict] = []
+    for it in all_items:
+        key = it.get("bf_spec_rgst_no") or ""
+        if key and key not in seen:
+            seen.add(key)
+            out.append(it)
+    return out
+
+
+def _to_scoring_input(target_type: str, item: dict) -> dict:
+    """발주계획/사전규격 item을 scoring engine이 기대하는 notice-style dict로 어댑트.
+
+    scoring/filter는 item['bid_ntce_nm']을 title로, presmpt_prce|asign_bdgt_amt를 가격으로,
+    metadata_json의 카테고리/플래그를 본다.
+    """
+    if target_type == "notice":
+        return item
+    if target_type == "order_plan":
+        return {
+            "bid_ntce_nm": item.get("prdct_clsfc_no_nm") or "",
+            "ntce_instt_nm": item.get("ordr_instt_nm"),
+            "dminstt_nm": item.get("ordr_instt_nm"),
+            "presmpt_prce": None,
+            "asign_bdgt_amt": item.get("asign_bdgt_amt"),
+            "metadata_json": item.get("metadata_json", {}) or {},
+        }
+    if target_type == "pre_spec":
+        return {
+            "bid_ntce_nm": item.get("prdct_clsfc_no_nm") or "",
+            "ntce_instt_nm": item.get("ntce_instt_nm"),
+            "dminstt_nm": item.get("dminstt_nm"),
+            "presmpt_prce": None,
+            "asign_bdgt_amt": item.get("asign_bdgt_amt"),
+            "metadata_json": item.get("metadata_json", {}) or {},
+        }
+    return item
+
+
+async def _upsert_pipeline_link(
+    db,
+    *,
+    bid_type: str,
+    link: dict,
+    notice_id: str | None = None,
+    order_plan_id: str | None = None,
+    pre_spec_id: str | None = None,
+) -> None:
+    """4단계 식별자 묶음 upsert. 어떤 단계의 ID라도 일치하면 갱신, 아니면 insert."""
+    or_clauses = []
+    if link.get("bid_ntce_no"):
+        or_clauses.append(BidPipelineLinkModel.bid_ntce_no == link["bid_ntce_no"])
+    if link.get("bf_spec_rgst_no"):
+        or_clauses.append(BidPipelineLinkModel.bf_spec_rgst_no == link["bf_spec_rgst_no"])
+    if link.get("order_plan_unty_no"):
+        or_clauses.append(BidPipelineLinkModel.order_plan_unty_no == link["order_plan_unty_no"])
+    if link.get("prcrmnt_req_no"):
+        or_clauses.append(BidPipelineLinkModel.prcrmnt_req_no == link["prcrmnt_req_no"])
+    if not or_clauses:
+        return
+
+    from sqlalchemy import or_ as sql_or
+    existing = (await db.execute(
+        select(BidPipelineLinkModel).where(sql_or(*or_clauses))
+    )).scalar_one_or_none()
+
+    now_ts = datetime.now(KST)
+    if existing:
+        # 부족한 필드만 채워주기 (이미 있는 값은 보존)
+        for fk, val in (
+            ("prcrmnt_req_no", link.get("prcrmnt_req_no")),
+            ("order_plan_unty_no", link.get("order_plan_unty_no")),
+            ("bf_spec_rgst_no", link.get("bf_spec_rgst_no")),
+            ("bid_ntce_no", link.get("bid_ntce_no")),
+            ("bid_ntce_ord", link.get("bid_ntce_ord")),
+            ("cntrct_no", link.get("cntrct_no")),
+        ):
+            if val and not getattr(existing, fk):
+                setattr(existing, fk, val)
+        if notice_id and not existing.notice_id:
+            existing.notice_id = notice_id
+        if order_plan_id and not existing.order_plan_id:
+            existing.order_plan_id = order_plan_id
+        if pre_spec_id and not existing.pre_spec_id:
+            existing.pre_spec_id = pre_spec_id
+        existing.last_synced_at = now_ts
+        existing.raw_response = link.get("raw_response") or existing.raw_response
+        existing.bid_type = existing.bid_type or bid_type
+    else:
+        db.add(BidPipelineLinkModel(
+            bid_type=bid_type,
+            prcrmnt_req_no=link.get("prcrmnt_req_no"),
+            order_plan_unty_no=link.get("order_plan_unty_no"),
+            bf_spec_rgst_no=link.get("bf_spec_rgst_no"),
+            bid_ntce_no=link.get("bid_ntce_no"),
+            bid_ntce_ord=link.get("bid_ntce_ord"),
+            cntrct_no=link.get("cntrct_no"),
+            notice_id=notice_id,
+            order_plan_id=order_plan_id,
+            pre_spec_id=pre_spec_id,
+            last_synced_at=now_ts,
+            raw_response=link.get("raw_response") or {},
+        ))
+
+
 async def run_check(
     trigger_type: str = "scheduled",
     window_minutes: int | None = None,
@@ -229,6 +367,22 @@ async def _run_check_impl(trigger_type: str, window_minutes: int | None) -> dict
             "grade_excluded": 0,
             "total_alerts": 0,
             "total_error": 0,
+            # 발주계획
+            "order_plans_fetched": 0,
+            "order_plans_new": 0,
+            "order_plans_alerts": 0,
+            "order_plans_grade_high": 0,
+            "order_plans_grade_medium": 0,
+            "order_plans_grade_low": 0,
+            # 사전규격
+            "pre_specs_fetched": 0,
+            "pre_specs_new": 0,
+            "pre_specs_alerts": 0,
+            "pre_specs_grade_high": 0,
+            "pre_specs_grade_medium": 0,
+            "pre_specs_grade_low": 0,
+            # 연결 API
+            "pipeline_links_synced": 0,
         }
 
         try:
@@ -361,6 +515,207 @@ async def _run_check_impl(trigger_type: str, window_minutes: int | None) -> dict
                 elif do_notify:
                     stats["total_error"] += 1
 
+            # ─────────────────────────────────────────────────────────────
+            # Stage 4: 발주계획 수집 + 스코어링 + 알림
+            # ─────────────────────────────────────────────────────────────
+            new_order_plans: list[tuple[BidOrderPlanModel, dict]] = []
+            try:
+                op_items = await _collect_order_plans(g2b, bid_types_list, start_dt, end_dt)
+                stats["order_plans_fetched"] = len(op_items)
+
+                for item in op_items:
+                    op_no = item.get("order_plan_unty_no") or ""
+                    if not op_no:
+                        continue
+
+                    existing = (await db.execute(
+                        select(BidOrderPlanModel.id).where(
+                            BidOrderPlanModel.order_plan_unty_no == op_no
+                        )
+                    )).scalar_one_or_none()
+                    if existing:
+                        continue
+
+                    op_obj = BidOrderPlanModel(
+                        order_plan_unty_no=op_no,
+                        bid_type=item.get("bid_type", "services"),
+                        prdct_clsfc_no_nm=item.get("prdct_clsfc_no_nm"),
+                        asign_bdgt_amt=item.get("asign_bdgt_amt"),
+                        ordr_plan_dt=item.get("ordr_plan_dt"),
+                        ordr_yymm=item.get("ordr_yymm"),
+                        ordr_instt_cd=item.get("ordr_instt_cd"),
+                        ordr_instt_nm=item.get("ordr_instt_nm"),
+                        metadata_json=item.get("metadata_json", {}),
+                        source_keyword="auto",
+                    )
+                    db.add(op_obj)
+                    await db.flush()
+                    stats["order_plans_new"] += 1
+                    new_order_plans.append((op_obj, item))
+
+                    # scoring (재사용 — title을 prdct_clsfc_no_nm으로 어댑트)
+                    score_input = _to_scoring_input("order_plan", item)
+                    result = compute_score(score_input, scoring_fc)
+                    stats[f"order_plans_grade_{result.grade}"] = (
+                        stats.get(f"order_plans_grade_{result.grade}", 0) + 1
+                    )
+
+                    do_notify = (
+                        notifier is not None
+                        and _should_notify(result.grade, notify_threshold)
+                    )
+                    sent = False
+                    err = None
+                    if do_notify:
+                        sent = await notifier.send_order_plan_alert(
+                            default_kw.keyword, item,
+                            match_reasons=result.reason_labels,
+                        )
+                        if not sent:
+                            err = "Discord 전송 실패"
+
+                    db.add(BidAlertModel(
+                        keyword_id=default_kw.id,
+                        target_type="order_plan",
+                        order_plan_id=op_obj.id,
+                        channel="discord" if do_notify else "none",
+                        status="sent" if sent else ("pending" if not do_notify else "failed"),
+                        error_message=err,
+                        match_reasons=result.reason_labels,
+                        score=result.score,
+                        grade=result.grade,
+                        signals=result.signals,
+                    ))
+                    if sent:
+                        stats["order_plans_alerts"] += 1
+                    elif do_notify:
+                        stats["total_error"] += 1
+            except Exception:
+                logger.exception("발주계획 stage 실패")
+
+            # ─────────────────────────────────────────────────────────────
+            # Stage 5: 사전규격 수집 + 스코어링 + 알림
+            # ─────────────────────────────────────────────────────────────
+            new_pre_specs: list[tuple[BidPreSpecModel, dict]] = []
+            try:
+                ps_items = await _collect_pre_specs(g2b, bid_types_list, start_dt, end_dt)
+                stats["pre_specs_fetched"] = len(ps_items)
+
+                for item in ps_items:
+                    ps_no = item.get("bf_spec_rgst_no") or ""
+                    if not ps_no:
+                        continue
+
+                    existing = (await db.execute(
+                        select(BidPreSpecModel.id).where(
+                            BidPreSpecModel.bf_spec_rgst_no == ps_no
+                        )
+                    )).scalar_one_or_none()
+                    if existing:
+                        continue
+
+                    ps_obj = BidPreSpecModel(
+                        bf_spec_rgst_no=ps_no,
+                        bid_type=item.get("bid_type", "services"),
+                        prdct_clsfc_no_nm=item.get("prdct_clsfc_no_nm"),
+                        asign_bdgt_amt=item.get("asign_bdgt_amt"),
+                        rcept_bgn_dt=item.get("rcept_bgn_dt"),
+                        rcept_clse_dt=item.get("rcept_clse_dt"),
+                        rgst_dt=item.get("rgst_dt"),
+                        ntce_instt_cd=item.get("ntce_instt_cd"),
+                        ntce_instt_nm=item.get("ntce_instt_nm"),
+                        dminstt_cd=item.get("dminstt_cd"),
+                        dminstt_nm=item.get("dminstt_nm"),
+                        metadata_json=item.get("metadata_json", {}),
+                        source_keyword="auto",
+                    )
+                    db.add(ps_obj)
+                    await db.flush()
+                    stats["pre_specs_new"] += 1
+                    new_pre_specs.append((ps_obj, item))
+
+                    score_input = _to_scoring_input("pre_spec", item)
+                    result = compute_score(score_input, scoring_fc)
+                    stats[f"pre_specs_grade_{result.grade}"] = (
+                        stats.get(f"pre_specs_grade_{result.grade}", 0) + 1
+                    )
+
+                    do_notify = (
+                        notifier is not None
+                        and _should_notify(result.grade, notify_threshold)
+                    )
+                    sent = False
+                    err = None
+                    if do_notify:
+                        sent = await notifier.send_pre_spec_alert(
+                            default_kw.keyword, item,
+                            match_reasons=result.reason_labels,
+                        )
+                        if not sent:
+                            err = "Discord 전송 실패"
+
+                    db.add(BidAlertModel(
+                        keyword_id=default_kw.id,
+                        target_type="pre_spec",
+                        pre_spec_id=ps_obj.id,
+                        channel="discord" if do_notify else "none",
+                        status="sent" if sent else ("pending" if not do_notify else "failed"),
+                        error_message=err,
+                        match_reasons=result.reason_labels,
+                        score=result.score,
+                        grade=result.grade,
+                        signals=result.signals,
+                    ))
+                    if sent:
+                        stats["pre_specs_alerts"] += 1
+                    elif do_notify:
+                        stats["total_error"] += 1
+            except Exception:
+                logger.exception("사전규격 stage 실패")
+
+            # ─────────────────────────────────────────────────────────────
+            # Stage 6: 연결 API — 신규 항목별 4단계 식별자 묶음 채우기
+            # ─────────────────────────────────────────────────────────────
+            try:
+                # 신규 공고
+                for n in new_high_notices:
+                    link = await g2b.fetch_pipeline(
+                        bid_type=n.bid_type,
+                        bid_ntce_no=n.bid_ntce_no,
+                        bid_ntce_ord=n.bid_ntce_ord,
+                    )
+                    if link:
+                        await _upsert_pipeline_link(
+                            db, bid_type=n.bid_type, link=link, notice_id=n.id,
+                        )
+                        stats["pipeline_links_synced"] += 1
+
+                # 신규 발주계획
+                for op_obj, _src in new_order_plans:
+                    link = await g2b.fetch_pipeline(
+                        bid_type=op_obj.bid_type,
+                        order_plan_no=op_obj.order_plan_unty_no,
+                    )
+                    if link:
+                        await _upsert_pipeline_link(
+                            db, bid_type=op_obj.bid_type, link=link, order_plan_id=op_obj.id,
+                        )
+                        stats["pipeline_links_synced"] += 1
+
+                # 신규 사전규격
+                for ps_obj, _src in new_pre_specs:
+                    link = await g2b.fetch_pipeline(
+                        bid_type=ps_obj.bid_type,
+                        bf_spec_rgst_no=ps_obj.bf_spec_rgst_no,
+                    )
+                    if link:
+                        await _upsert_pipeline_link(
+                            db, bid_type=ps_obj.bid_type, link=link, pre_spec_id=ps_obj.id,
+                        )
+                        stats["pipeline_links_synced"] += 1
+            except Exception:
+                logger.exception("연결 API stage 실패")
+
             # High-grade 신규 공고 → 과거 유사 공고 사전 수집
             if new_high_notices:
                 kws_for_similar = []
@@ -386,12 +741,18 @@ async def _run_check_impl(trigger_type: str, window_minutes: int | None) -> dict
             for kw in keywords:
                 kw.last_checked_at = now_ts
 
-            # 요약 전송
-            if notifier and stats["total_new"] > 0:
+            # 요약 전송 (3종 중 하나라도 신규 있으면)
+            if notifier and (
+                stats["total_new"] > 0
+                or stats["order_plans_new"] > 0
+                or stats["pre_specs_new"] > 0
+            ):
                 await notifier.send_summary(
                     stats["total_new"],
                     stats["total_alerts"],
                     len(keywords),
+                    new_order_plans=stats["order_plans_new"],
+                    new_pre_specs=stats["pre_specs_new"],
                 )
 
             run.status = "completed"

@@ -7,11 +7,14 @@ Stage 1: 개방가능 여부 판단 (컬럼 단위)
 - 개방 가능 컬럼 수 < 3               → 불가능
 """
 
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from .api_client import call_gemini
 from .config import (
@@ -350,9 +353,10 @@ def run_stage1(
     model: str,
     sleep: float,
     mock: bool,
-    progress_callback: Optional[Any] = None,  # Callable[[int, int], None]
-) -> Dict[str, Dict[str, Any]]:
+    progress_callback: Optional[Any] = None,  # Callable[[int, int, int], None]
+) -> Tuple[Dict[str, Dict[str, Any]], List[Dict[str, str]]]:
     stage1: Dict[str, Dict[str, Any]] = {}
+    failed: List[Dict[str, str]] = []
 
     llm_items: List[Tuple[str, SimpleTable]] = []
     for key, table in tables.items():
@@ -379,8 +383,8 @@ def run_stage1(
 
     if not llm_items:
         if progress_callback:
-            progress_callback(0, 0)
-        return stage1
+            progress_callback(0, 0, 0)
+        return stage1, failed
 
     total_count = len(llm_items)
 
@@ -399,8 +403,8 @@ def run_stage1(
                 "dataset_name": f"{table_display} 데이터셋",
             }
             if progress_callback:
-                progress_callback(i + 1, total_count)
-        return stage1
+                progress_callback(i + 1, total_count, 0)
+        return stage1, failed
 
     if not api_key:
         raise RuntimeError("Gemini API 키가 없습니다. GEMINI_API_KEY를 설정하세요.")
@@ -412,23 +416,26 @@ def run_stage1(
         result = call_gemini(prompt, api_key, model, base_url)
         return key, _parse_column_result(table, result)
 
-    errors: List[Exception] = []
     done_count = 0
     if progress_callback:
-        progress_callback(0, total_count)
+        progress_callback(0, total_count, 0)
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = {executor.submit(_run_one, key, table): key for key, table in llm_items}
         for fut in as_completed(futures):
+            key = futures[fut]
             try:
-                key, payload = fut.result()
+                _, payload = fut.result()
                 stage1[key] = payload
             except Exception as exc:  # noqa: BLE001
-                errors.append(exc)
+                logger.exception("stage1 LLM call failed for key=%s", key)
+                failed.append({"key": key, "error": f"{type(exc).__name__}: {exc}"})
             done_count += 1
             if progress_callback:
-                progress_callback(done_count, total_count)
+                progress_callback(done_count, total_count, len(failed))
 
-    if errors and not stage1:
-        raise errors[0]
+    if failed and not any(stage1.get(k, {}).get("bucket") in ("전체개방", "부분개방", "불가능") for k, _ in llm_items if k in stage1):
+        raise RuntimeError(
+            f"LLM 분석이 모두 실패했습니다 ({len(failed)}건). 첫 오류: {failed[0]['error']}"
+        )
 
-    return stage1
+    return stage1, failed

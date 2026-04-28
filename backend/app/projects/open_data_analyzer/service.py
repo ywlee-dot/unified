@@ -351,13 +351,13 @@ def _build_excel_workbook(
 class OpenDataAnalyzerService:
 
     def _get_api_key(self) -> str | None:
-        return os.environ.get("GEMINI_API_KEY")
+        return os.environ.get("GEMINI_API_KEY") or None
 
     def _get_base_url(self) -> str:
-        return os.environ.get("GEMINI_BASE_URL", GEMINI_BASE_URL)
+        return os.environ.get("GEMINI_BASE_URL") or GEMINI_BASE_URL
 
     def _get_model(self) -> str:
-        return os.environ.get("GEMINI_MODEL", GEMINI_MODEL)
+        return os.environ.get("GEMINI_MODEL") or GEMINI_MODEL
 
     async def start_stage1_background(
         self,
@@ -485,12 +485,17 @@ class OpenDataAnalyzerService:
         api_key: str | None,
     ) -> None:
         """Background coroutine: run LLM analysis and persist result to DB."""
-        def _progress_cb(done: int, total: int) -> None:
-            _PROGRESS[exec_id] = {"done": done, "total": total, "status": "running"}
+        def _progress_cb(done: int, total: int, failed: int = 0) -> None:
+            _PROGRESS[exec_id] = {
+                "done": done,
+                "total": total,
+                "failed": failed,
+                "status": "running",
+            }
 
         async with async_session_factory() as db:
             try:
-                stage1 = await asyncio.to_thread(
+                stage1, failed_calls = await asyncio.to_thread(
                     run_stage1,
                     tables,
                     REASONS,
@@ -521,6 +526,8 @@ class OpenDataAnalyzerService:
                     "file_count": len(file_sources) if file_sources else 1,
                     "groups": groups,
                     "not_openable": not_openable,
+                    "failed_count": len(failed_calls),
+                    "failed": failed_calls,
                 }
                 state["result"] = response
 
@@ -530,12 +537,18 @@ class OpenDataAnalyzerService:
                         "tables": _serialize_tables(tables),
                         "stage1": state["stage1"],
                         "file_sources": file_sources,
+                        "failed": failed_calls,
                     },
                 }
                 await ExecutionRecorder.mark_succeeded(db, execution_id=exec_id, result_data=snapshot)
 
                 total = _PROGRESS.get(exec_id, {}).get("total", len(tables))
-                _PROGRESS[exec_id] = {"done": total, "total": total, "status": "succeeded"}
+                _PROGRESS[exec_id] = {
+                    "done": total,
+                    "total": total,
+                    "failed": len(failed_calls),
+                    "status": "succeeded",
+                }
 
             except Exception as exc:
                 logger.exception("Background stage1 failed exec_id=%s", exec_id)
@@ -553,17 +566,22 @@ class OpenDataAnalyzerService:
             percent = round(done / total * 100) if total > 0 else 0
             return {
                 "done": done, "total": total, "percent": percent,
+                "failed": info.get("failed", 0),
                 "status": info.get("status", "running"), "error": info.get("error"),
             }
         if db is not None:
             record = await ExecutionRecorder.get(db, execution_id)
             if record:
                 is_done = record.status in ("succeeded", "failed")
+                failed_count = 0
+                if record.result_data:
+                    failed_count = len(record.result_data.get("raw", {}).get("failed", []))
                 return {
                     "done": 0, "total": 0, "percent": 100 if is_done else 0,
+                    "failed": failed_count,
                     "status": record.status, "error": record.error_message,
                 }
-        return {"done": 0, "total": 0, "percent": 0, "status": "unknown", "error": None}
+        return {"done": 0, "total": 0, "percent": 0, "failed": 0, "status": "unknown", "error": None}
 
     async def export_excel(self, session_id: str) -> str:
         if session_id not in SESSIONS:

@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { BidMonitorStats, BidMonitorConfig, BidNotice, BidKeyword, FilterConditions } from "@/lib/types";
+import { BidMonitorStats, BidMonitorConfig, BidNotice, BidKeyword, FilterConditions, BidOrderPlan, BidPreSpec, BidPipelineTimeline } from "@/lib/types";
 import { formatKst, timeAgoKst } from "@/lib/datetime";
 
 const API_BASE = "/api";
@@ -291,6 +291,19 @@ function BidMonitorPageContent() {
   }>>([]);
   const [pastLoading, setPastLoading] = useState(false);
 
+  // Tab state: 입찰공고 / 발주계획 / 사전규격
+  const [activeTab, setActiveTab] = useState<"notice" | "order_plan" | "pre_spec">("notice");
+
+  // 발주계획 / 사전규격 state
+  const [orderPlans, setOrderPlans] = useState<BidOrderPlan[]>([]);
+  const [preSpecs, setPreSpecs] = useState<BidPreSpec[]>([]);
+  const [selectedOrderPlan, setSelectedOrderPlan] = useState<BidOrderPlan | null>(null);
+  const [selectedPreSpec, setSelectedPreSpec] = useState<BidPreSpec | null>(null);
+
+  // Pipeline timeline (선택 항목의 단계 임베드)
+  const [pipeline, setPipeline] = useState<BidPipelineTimeline | null>(null);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
+
   // Search filters
   const [keyword, setKeyword] = useState("");
   const [bidType, setBidType] = useState("");
@@ -359,6 +372,54 @@ function BidMonitorPageContent() {
     }
   }, [keyword, bidType, sort, gradeFilters]);
 
+  const fetchOrderPlans = useCallback(async (pageNum: number) => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setNoticesLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(pageNum), page_size: String(pageSize), sort });
+      if (keyword.trim()) params.set("keyword", keyword.trim());
+      if (bidType) params.set("bid_type", bidType);
+      for (const g of gradeFilters) params.append("grade", g);
+      const res = await fetch(`${API_BASE}/projects/bid-monitor/order-plans?${params}`, { credentials: "include", signal: controller.signal });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setOrderPlans(data.items ?? []);
+      setTotal(data.total ?? 0);
+      setTotalPages(data.total_pages ?? 1);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setOrderPlans([]);
+    } finally {
+      if (!controller.signal.aborted) setNoticesLoading(false);
+    }
+  }, [keyword, bidType, sort, gradeFilters]);
+
+  const fetchPreSpecs = useCallback(async (pageNum: number) => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setNoticesLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(pageNum), page_size: String(pageSize), sort });
+      if (keyword.trim()) params.set("keyword", keyword.trim());
+      if (bidType) params.set("bid_type", bidType);
+      for (const g of gradeFilters) params.append("grade", g);
+      const res = await fetch(`${API_BASE}/projects/bid-monitor/pre-specs?${params}`, { credentials: "include", signal: controller.signal });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setPreSpecs(data.items ?? []);
+      setTotal(data.total ?? 0);
+      setTotalPages(data.total_pages ?? 1);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setPreSpecs([]);
+    } finally {
+      if (!controller.signal.aborted) setNoticesLoading(false);
+    }
+  }, [keyword, bidType, sort, gradeFilters]);
+
   async function fetchKeywords() {
     setKwLoading(true);
     try {
@@ -374,8 +435,12 @@ function BidMonitorPageContent() {
   // ── Effects ──────────────────────────────────────────────────────────────
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
-  useEffect(() => { setPage(1); }, [keyword, bidType, sort, gradeFilters]);
-  useEffect(() => { fetchNotices(page); }, [fetchNotices, page]);
+  useEffect(() => { setPage(1); }, [keyword, bidType, sort, gradeFilters, activeTab]);
+  useEffect(() => {
+    if (activeTab === "notice") fetchNotices(page);
+    else if (activeTab === "order_plan") fetchOrderPlans(page);
+    else fetchPreSpecs(page);
+  }, [activeTab, page, fetchNotices, fetchOrderPlans, fetchPreSpecs]);
 
   useEffect(() => {
     if (!selectedNotice) { setPastNotices([]); return; }
@@ -389,6 +454,24 @@ function BidMonitorPageContent() {
       .finally(() => { if (!cancelled) setPastLoading(false); });
     return () => { cancelled = true; };
   }, [selectedNotice]);
+
+  // Pipeline timeline — 어느 탭에서든 항목 선택 시 해당 사업의 4단계 조회
+  useEffect(() => {
+    let target: "notice" | "order_plan" | "pre_spec" | null = null;
+    let id: string | null = null;
+    if (selectedNotice) { target = "notice"; id = selectedNotice.id; }
+    else if (selectedOrderPlan) { target = "order_plan"; id = selectedOrderPlan.id; }
+    else if (selectedPreSpec) { target = "pre_spec"; id = selectedPreSpec.id; }
+    if (!target || !id) { setPipeline(null); return; }
+    let cancelled = false;
+    setPipelineLoading(true);
+    fetch(`${API_BASE}/projects/bid-monitor/pipeline/${target}/${id}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setPipeline(d); })
+      .catch(() => { if (!cancelled) setPipeline(null); })
+      .finally(() => { if (!cancelled) setPipelineLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedNotice, selectedOrderPlan, selectedPreSpec]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -564,18 +647,51 @@ function BidMonitorPageContent() {
         <button onClick={openSettings} className="inline-flex h-9 items-center rounded-md bg-surface-secondary px-4 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-tertiary">설정</button>
       </div>
 
+      {/* Tabs — 입찰공고 / 발주계획 / 사전규격 */}
+      <div className="flex items-center gap-1 border-b border-border-secondary">
+        {([
+          { value: "notice" as const, label: "📢 입찰공고", count: stats?.total_notices },
+          { value: "order_plan" as const, label: "📋 발주계획", count: stats?.total_order_plans ?? 0 },
+          { value: "pre_spec" as const, label: "📑 사전규격", count: stats?.total_pre_specs ?? 0 },
+        ]).map((t) => (
+          <button
+            key={t.value}
+            onClick={() => { setActiveTab(t.value); setSelectedNotice(null); setSelectedOrderPlan(null); setSelectedPreSpec(null); }}
+            className={`relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === t.value
+                ? "text-brand"
+                : "text-text-secondary hover:text-text-primary"
+            }`}>
+            <span>{t.label}</span>
+            {t.count !== undefined && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                activeTab === t.value ? "bg-brand/10 text-brand" : "bg-surface-secondary text-text-tertiary"
+              }`}>{t.count.toLocaleString()}</span>
+            )}
+            {activeTab === t.value && <span className="absolute -bottom-px left-0 right-0 h-0.5 bg-brand" />}
+          </button>
+        ))}
+      </div>
+
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
           <div className="rounded-lg bg-surface-elevated shadow-md lg:col-span-5">
             <div className="grid grid-cols-2 divide-x divide-y divide-border-secondary sm:grid-cols-5 sm:divide-y-0">
-              {[
-                { label: "활성 키워드", value: stats.active_keywords, suffix: `/ ${stats.total_keywords}`, cls: "text-text-primary" },
-                { label: "수집된 공고", value: stats.total_notices.toLocaleString(), cls: "text-text-primary" },
-                { label: "High", value: (stats.high_count ?? 0).toLocaleString(), cls: "text-red-600", dot: "bg-red-500" },
-                { label: "Medium", value: (stats.medium_count ?? 0).toLocaleString(), cls: "text-amber-600", dot: "bg-amber-500" },
-                { label: "Low", value: (stats.low_count ?? 0).toLocaleString(), cls: "text-slate-600", dot: "bg-slate-400" },
-              ].map((s, i) => (
+              {(() => {
+                const tabStats = activeTab === "notice"
+                  ? { collected: stats.total_notices, high: stats.high_count ?? 0, medium: stats.medium_count ?? 0, low: stats.low_count ?? 0, label: "수집된 공고" }
+                  : activeTab === "order_plan"
+                  ? { collected: stats.total_order_plans ?? 0, high: stats.high_count_order_plans ?? 0, medium: stats.medium_count_order_plans ?? 0, low: stats.low_count_order_plans ?? 0, label: "수집된 발주계획" }
+                  : { collected: stats.total_pre_specs ?? 0, high: stats.high_count_pre_specs ?? 0, medium: stats.medium_count_pre_specs ?? 0, low: stats.low_count_pre_specs ?? 0, label: "수집된 사전규격" };
+                return [
+                  { label: "활성 키워드", value: stats.active_keywords, suffix: `/ ${stats.total_keywords}`, cls: "text-text-primary" },
+                  { label: tabStats.label, value: tabStats.collected.toLocaleString(), cls: "text-text-primary" },
+                  { label: "High", value: tabStats.high.toLocaleString(), cls: "text-red-600", dot: "bg-red-500" },
+                  { label: "Medium", value: tabStats.medium.toLocaleString(), cls: "text-amber-600", dot: "bg-amber-500" },
+                  { label: "Low", value: tabStats.low.toLocaleString(), cls: "text-slate-600", dot: "bg-slate-400" },
+                ];
+              })().map((s, i) => (
                 <div key={i} className="flex flex-col gap-2 px-5 py-4">
                   <p className="h-4 inline-flex items-center gap-1.5 text-[12px] leading-4 text-text-tertiary">
                     {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />}{s.label}
@@ -636,22 +752,29 @@ function BidMonitorPageContent() {
 
         <div className="flex items-center justify-between border-b border-border-primary px-6 py-3">
           <h2 className="text-[14px] font-semibold text-text-primary">
-            {gradeFilters.length === 1 ? ({ high: "High 등급 공고", medium: "Medium 등급 공고", low: "Low 등급 공고" }[gradeFilters[0]] ?? "검색 결과")
-              : gradeFilters.length > 1 ? gradeFilters.map((g) => g.charAt(0).toUpperCase() + g.slice(1)).join(" · ") + " 등급 공고"
-              : "검색 결과"}
+            {(() => {
+              const el = activeTab === "order_plan" ? "발주계획" : activeTab === "pre_spec" ? "사전규격" : "공고";
+              return gradeFilters.length === 1
+                ? ({ high: `High 등급 ${el}`, medium: `Medium 등급 ${el}`, low: `Low 등급 ${el}` }[gradeFilters[0]] ?? "검색 결과")
+                : gradeFilters.length > 1
+                ? gradeFilters.map((g) => g.charAt(0).toUpperCase() + g.slice(1)).join(" · ") + ` 등급 ${el}`
+                : "검색 결과";
+            })()}
             {total > 0 && <span className="ml-2 text-sm font-normal text-text-tertiary">{total.toLocaleString()}건</span>}
           </h2>
         </div>
 
         {noticesLoading ? (
           <div className="flex h-48 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand border-t-transparent" /></div>
-        ) : notices.length === 0 ? (
+        ) : (activeTab === "notice" ? notices.length === 0 : activeTab === "order_plan" ? orderPlans.length === 0 : preSpecs.length === 0) ? (
           <div className="flex h-48 items-center justify-center text-sm text-text-tertiary">
-            {gradeFilters.length > 0 ? `${gradeFilters.join(", ")} 등급 공고가 없습니다.` : "검색 결과가 없습니다."}
+            {gradeFilters.length > 0
+              ? `${gradeFilters.join(", ")} 등급 ${activeTab === "order_plan" ? "발주계획" : activeTab === "pre_spec" ? "사전규격" : "공고"}가 없습니다.`
+              : "검색 결과가 없습니다."}
           </div>
         ) : (
           <div className="divide-y divide-border-secondary">
-            {notices.map((notice) => (
+            {activeTab === "notice" && notices.map((notice) => (
               <div key={notice.id} className="cursor-pointer px-6 py-4 transition-colors hover:bg-surface-secondary" onClick={() => setSelectedNotice(notice)}>
                 <h3 className="text-[15px] font-semibold text-text-primary line-clamp-2">{notice.bid_ntce_nm}</h3>
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -663,6 +786,36 @@ function BidMonitorPageContent() {
                   {notice.presmpt_prce !== null && <span>추정가격: <span className="font-medium text-text-secondary">{formatPrice(notice.presmpt_prce)}</span></span>}
                   {notice.bid_clse_dt && <span>마감: <span className="font-medium text-text-secondary">{formatKst(notice.bid_clse_dt)}</span></span>}
                   {notice.bid_ntce_dt && <span>공고일: <span className="font-medium text-text-secondary">{formatKst(notice.bid_ntce_dt)}</span></span>}
+                </div>
+              </div>
+            ))}
+            {activeTab === "order_plan" && orderPlans.map((op) => (
+              <div key={op.id} className="cursor-pointer px-6 py-4 transition-colors hover:bg-surface-secondary" onClick={() => setSelectedOrderPlan(op)}>
+                <h3 className="text-[15px] font-semibold text-text-primary line-clamp-2">{op.prdct_clsfc_no_nm ?? "—"}</h3>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <BidTypeBadge type={op.bid_type} />
+                  <ScoreBadge score={op.best_score} grade={op.best_grade} />
+                  {op.ordr_instt_nm && <span className="text-xs text-text-secondary">{op.ordr_instt_nm}</span>}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-4 text-xs text-text-tertiary">
+                  {op.asign_bdgt_amt !== null && <span>예산: <span className="font-medium text-text-secondary">{formatPrice(op.asign_bdgt_amt)}</span></span>}
+                  {op.ordr_yymm && <span>발주예정: <span className="font-medium text-text-secondary">{op.ordr_yymm.slice(0,4)}년 {op.ordr_yymm.slice(4)}월</span></span>}
+                  {op.ordr_plan_dt && <span>공고예정: <span className="font-medium text-text-secondary">{formatKst(op.ordr_plan_dt)}</span></span>}
+                </div>
+              </div>
+            ))}
+            {activeTab === "pre_spec" && preSpecs.map((ps) => (
+              <div key={ps.id} className="cursor-pointer px-6 py-4 transition-colors hover:bg-surface-secondary" onClick={() => setSelectedPreSpec(ps)}>
+                <h3 className="text-[15px] font-semibold text-text-primary line-clamp-2">{ps.prdct_clsfc_no_nm ?? "—"}</h3>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <BidTypeBadge type={ps.bid_type} />
+                  <ScoreBadge score={ps.best_score} grade={ps.best_grade} />
+                  {ps.ntce_instt_nm && <span className="text-xs text-text-secondary">{ps.ntce_instt_nm}</span>}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-4 text-xs text-text-tertiary">
+                  {ps.asign_bdgt_amt !== null && <span>예산: <span className="font-medium text-text-secondary">{formatPrice(ps.asign_bdgt_amt)}</span></span>}
+                  {ps.rcept_clse_dt && <span>의견마감: <span className="font-medium text-text-secondary">{formatKst(ps.rcept_clse_dt)}</span></span>}
+                  {ps.rgst_dt && <span>등록일: <span className="font-medium text-text-secondary">{formatKst(ps.rgst_dt)}</span></span>}
                 </div>
               </div>
             ))}
@@ -765,6 +918,178 @@ function BidMonitorPageContent() {
                           ))}
                         </ul>
                       )}
+                  </dd>
+                </div>
+                <div className="rounded-md bg-surface-primary p-3">
+                  <dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">조달 파이프라인</dt>
+                  <dd className="mt-2">
+                    {pipelineLoading ? (
+                      <p className="text-xs text-text-tertiary">조회 중...</p>
+                    ) : pipeline ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {([
+                          { label: "발주계획", data: pipeline.order_plan, color: "text-amber-700 bg-amber-50 border-amber-200" },
+                          { label: "사전규격", data: pipeline.pre_spec, color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+                          { label: "입찰공고", data: pipeline.notice, color: "text-brand bg-brand/10 border-brand/20" },
+                        ] as const).map((stage, i) => (
+                          <div key={stage.label} className="flex items-center gap-1">
+                            {i > 0 && <span className="text-xs text-text-disabled">→</span>}
+                            <span className={`rounded border px-2 py-0.5 text-xs font-medium ${stage.data ? stage.color : "border-border-secondary bg-surface-secondary text-text-disabled"}`}>
+                              {stage.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-text-tertiary">연결 정보 없음</p>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Plan Detail Modal */}
+      {selectedOrderPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) setSelectedOrderPlan(null); }}>
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl bg-surface-elevated shadow-xl">
+            <div className="flex items-start justify-between border-b border-border-primary p-6">
+              <div className="min-w-0 flex-1 pr-4">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <BidTypeBadge type={selectedOrderPlan.bid_type} />
+                  <ScoreBadge score={selectedOrderPlan.best_score} grade={selectedOrderPlan.best_grade} />
+                </div>
+                <h2 className="text-[17px] font-semibold text-text-primary leading-snug">{selectedOrderPlan.prdct_clsfc_no_nm ?? "—"}</h2>
+                {selectedOrderPlan.ordr_instt_nm && <p className="mt-1 text-sm text-text-tertiary">{selectedOrderPlan.ordr_instt_nm}</p>}
+              </div>
+              <CloseBtn onClick={() => setSelectedOrderPlan(null)} />
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <dl className="space-y-3 text-sm">
+                {selectedOrderPlan.match_reasons && selectedOrderPlan.match_reasons.length > 0 && (
+                  <div className="rounded-md bg-surface-primary p-3">
+                    <dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">매칭 시그널</dt>
+                    <dd className="mt-1.5 flex flex-wrap gap-1.5">
+                      {selectedOrderPlan.match_reasons.map((r, i) => <span key={i} className="inline-flex items-center rounded-sm bg-surface-secondary px-2 py-0.5 text-xs font-medium text-text-secondary">{r}</span>)}
+                    </dd>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">통합번호</dt><dd className="mt-1 font-medium text-text-primary">{selectedOrderPlan.order_plan_unty_no}</dd></div>
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">예산</dt><dd className="mt-1 font-semibold text-text-primary">{formatPrice(selectedOrderPlan.asign_bdgt_amt)}</dd></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">발주기관</dt><dd className="mt-1 text-text-primary">{selectedOrderPlan.ordr_instt_nm ?? "—"}</dd></div>
+                  <div className="rounded-md bg-surface-primary p-3">
+                    <dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">발주예정</dt>
+                    <dd className="mt-1 text-text-primary">
+                      {selectedOrderPlan.ordr_yymm ? `${selectedOrderPlan.ordr_yymm.slice(0,4)}년 ${selectedOrderPlan.ordr_yymm.slice(4)}월` : "—"}
+                    </dd>
+                  </div>
+                </div>
+                {selectedOrderPlan.ordr_plan_dt && (
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">공고예정일</dt><dd className="mt-1 text-text-primary">{formatKst(selectedOrderPlan.ordr_plan_dt)}</dd></div>
+                )}
+                {selectedOrderPlan.source_keyword && (
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">매칭 키워드</dt><dd className="mt-1 text-text-primary">{selectedOrderPlan.source_keyword}</dd></div>
+                )}
+                <div className="rounded-md bg-surface-primary p-3">
+                  <dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">조달 파이프라인</dt>
+                  <dd className="mt-2">
+                    {pipelineLoading ? (
+                      <p className="text-xs text-text-tertiary">조회 중...</p>
+                    ) : pipeline ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {([
+                          { label: "발주계획", data: pipeline.order_plan, color: "text-amber-700 bg-amber-50 border-amber-200" },
+                          { label: "사전규격", data: pipeline.pre_spec, color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+                          { label: "입찰공고", data: pipeline.notice, color: "text-brand bg-brand/10 border-brand/20" },
+                        ] as const).map((stage, i) => (
+                          <div key={stage.label} className="flex items-center gap-1">
+                            {i > 0 && <span className="text-xs text-text-disabled">→</span>}
+                            <span className={`rounded border px-2 py-0.5 text-xs font-medium ${stage.data ? stage.color : "border-border-secondary bg-surface-secondary text-text-disabled"}`}>
+                              {stage.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-text-tertiary">연결 정보 없음</p>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-Spec Detail Modal */}
+      {selectedPreSpec && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) setSelectedPreSpec(null); }}>
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl bg-surface-elevated shadow-xl">
+            <div className="flex items-start justify-between border-b border-border-primary p-6">
+              <div className="min-w-0 flex-1 pr-4">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <BidTypeBadge type={selectedPreSpec.bid_type} />
+                  <ScoreBadge score={selectedPreSpec.best_score} grade={selectedPreSpec.best_grade} />
+                </div>
+                <h2 className="text-[17px] font-semibold text-text-primary leading-snug">{selectedPreSpec.prdct_clsfc_no_nm ?? "—"}</h2>
+                {selectedPreSpec.ntce_instt_nm && <p className="mt-1 text-sm text-text-tertiary">{selectedPreSpec.ntce_instt_nm}</p>}
+              </div>
+              <CloseBtn onClick={() => setSelectedPreSpec(null)} />
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <dl className="space-y-3 text-sm">
+                {selectedPreSpec.match_reasons && selectedPreSpec.match_reasons.length > 0 && (
+                  <div className="rounded-md bg-surface-primary p-3">
+                    <dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">매칭 시그널</dt>
+                    <dd className="mt-1.5 flex flex-wrap gap-1.5">
+                      {selectedPreSpec.match_reasons.map((r, i) => <span key={i} className="inline-flex items-center rounded-sm bg-surface-secondary px-2 py-0.5 text-xs font-medium text-text-secondary">{r}</span>)}
+                    </dd>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">규격등록번호</dt><dd className="mt-1 font-medium text-text-primary">{selectedPreSpec.bf_spec_rgst_no}</dd></div>
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">예산</dt><dd className="mt-1 font-semibold text-text-primary">{formatPrice(selectedPreSpec.asign_bdgt_amt)}</dd></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">공고기관</dt><dd className="mt-1 text-text-primary">{selectedPreSpec.ntce_instt_nm ?? "—"}</dd></div>
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">수요기관</dt><dd className="mt-1 text-text-primary">{selectedPreSpec.dminstt_nm ?? "—"}</dd></div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">등록일</dt><dd className="mt-1 text-text-primary">{formatKst(selectedPreSpec.rgst_dt)}</dd></div>
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">의견접수시작</dt><dd className="mt-1 text-text-primary">{formatKst(selectedPreSpec.rcept_bgn_dt)}</dd></div>
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">의견마감</dt><dd className="mt-1 text-text-primary">{formatKst(selectedPreSpec.rcept_clse_dt)}</dd></div>
+                </div>
+                {selectedPreSpec.source_keyword && (
+                  <div className="rounded-md bg-surface-primary p-3"><dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">매칭 키워드</dt><dd className="mt-1 text-text-primary">{selectedPreSpec.source_keyword}</dd></div>
+                )}
+                <div className="rounded-md bg-surface-primary p-3">
+                  <dt className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">조달 파이프라인</dt>
+                  <dd className="mt-2">
+                    {pipelineLoading ? (
+                      <p className="text-xs text-text-tertiary">조회 중...</p>
+                    ) : pipeline ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {([
+                          { label: "발주계획", data: pipeline.order_plan, color: "text-amber-700 bg-amber-50 border-amber-200" },
+                          { label: "사전규격", data: pipeline.pre_spec, color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+                          { label: "입찰공고", data: pipeline.notice, color: "text-brand bg-brand/10 border-brand/20" },
+                        ] as const).map((stage, i) => (
+                          <div key={stage.label} className="flex items-center gap-1">
+                            {i > 0 && <span className="text-xs text-text-disabled">→</span>}
+                            <span className={`rounded border px-2 py-0.5 text-xs font-medium ${stage.data ? stage.color : "border-border-secondary bg-surface-secondary text-text-disabled"}`}>
+                              {stage.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-text-tertiary">연결 정보 없음</p>
+                    )}
                   </dd>
                 </div>
               </dl>

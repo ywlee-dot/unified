@@ -226,6 +226,83 @@ async def update_scoring_config(data: ScoringConfigUpdate, db: AsyncSession = De
 
 
 # ---------------------------------------------------------------------------
+# Order Plans (발주계획)
+# ---------------------------------------------------------------------------
+
+@router.get("/order-plans")
+async def search_order_plans(
+    keyword: str | None = None,
+    bid_type: str | None = None,
+    sort: str = "date",
+    page: int = 1,
+    page_size: int = 20,
+    grade: list[str] = Query(default=[]),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await _service.search_order_plans(
+        db, keyword=keyword, bid_type=bid_type, sort=sort,
+        page=page, page_size=page_size, grade=grade,
+    )
+
+
+@router.get("/order-plans/{op_id}")
+async def get_order_plan(op_id: str, db: AsyncSession = Depends(get_db_session)):
+    op = await _service.get_order_plan(db, op_id)
+    if not op:
+        raise HTTPException(status_code=404, detail="발주계획을 찾을 수 없습니다")
+    return op
+
+
+# ---------------------------------------------------------------------------
+# Pre-Specs (사전규격)
+# ---------------------------------------------------------------------------
+
+@router.get("/pre-specs")
+async def search_pre_specs(
+    keyword: str | None = None,
+    bid_type: str | None = None,
+    sort: str = "date",
+    page: int = 1,
+    page_size: int = 20,
+    grade: list[str] = Query(default=[]),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await _service.search_pre_specs(
+        db, keyword=keyword, bid_type=bid_type, sort=sort,
+        page=page, page_size=page_size, grade=grade,
+    )
+
+
+@router.get("/pre-specs/{ps_id}")
+async def get_pre_spec(ps_id: str, db: AsyncSession = Depends(get_db_session)):
+    ps = await _service.get_pre_spec(db, ps_id)
+    if not ps:
+        raise HTTPException(status_code=404, detail="사전규격을 찾을 수 없습니다")
+    return ps
+
+
+# ---------------------------------------------------------------------------
+# Pipeline (4단계 통합 타임라인)
+# ---------------------------------------------------------------------------
+
+@router.get("/pipeline/{target_type}/{target_id}")
+async def get_pipeline_for(
+    target_type: str,
+    target_id: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """target_type: 'notice' | 'order_plan' | 'pre_spec'"""
+    if target_type not in ("notice", "order_plan", "pre_spec"):
+        raise HTTPException(status_code=400, detail="잘못된 target_type")
+    timeline = await _service.get_pipeline_for(
+        db, target_type=target_type, target_id=target_id,
+    )
+    if not timeline:
+        return {"link": None, "order_plan": None, "pre_spec": None, "notice": None}
+    return timeline
+
+
+# ---------------------------------------------------------------------------
 # Stats
 # ---------------------------------------------------------------------------
 

@@ -13,12 +13,12 @@ from typing import List, Tuple
 # Gemini API 설정
 # ============================================================================
 
-GEMINI_BASE_URL = os.environ.get(
-    "GEMINI_BASE_URL",
-    "https://generativelanguage.googleapis.com/v1beta"
+GEMINI_BASE_URL = (
+    os.environ.get("GEMINI_BASE_URL")
+    or "https://generativelanguage.googleapis.com/v1beta"
 )
 
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL") or "gemini-2.5-flash"
 
 GEMINI_TIMEOUT_SECONDS = float(os.environ.get("GEMINI_TIMEOUT", "180"))
 

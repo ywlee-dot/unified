@@ -151,13 +151,99 @@ class NoticeDetailResponse(NoticeResponse):
 
 
 # ---------------------------------------------------------------------------
+# Order Plans (발주계획)
+# ---------------------------------------------------------------------------
+
+class OrderPlanResponse(BaseModel):
+    id: str
+    order_plan_unty_no: str
+    bid_type: str
+    prdct_clsfc_no_nm: str | None = None
+    asign_bdgt_amt: float | None = None
+    ordr_plan_dt: datetime | None = None
+    ordr_yymm: str | None = None
+    ordr_instt_cd: str | None = None
+    ordr_instt_nm: str | None = None
+    source_keyword: str | None = None
+    match_reasons: list[str] | None = None
+    best_score: float | None = None
+    best_grade: str | None = None
+    created_at: datetime
+
+
+class OrderPlanDetailResponse(OrderPlanResponse):
+    metadata_json: dict = {}
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Pre-Specs (사전규격공개)
+# ---------------------------------------------------------------------------
+
+class PreSpecResponse(BaseModel):
+    id: str
+    bf_spec_rgst_no: str
+    bid_type: str
+    prdct_clsfc_no_nm: str | None = None
+    asign_bdgt_amt: float | None = None
+    rcept_bgn_dt: datetime | None = None
+    rcept_clse_dt: datetime | None = None
+    rgst_dt: datetime | None = None
+    ntce_instt_cd: str | None = None
+    ntce_instt_nm: str | None = None
+    dminstt_cd: str | None = None
+    dminstt_nm: str | None = None
+    source_keyword: str | None = None
+    match_reasons: list[str] | None = None
+    best_score: float | None = None
+    best_grade: str | None = None
+    created_at: datetime
+
+
+class PreSpecDetailResponse(PreSpecResponse):
+    metadata_json: dict = {}
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Pipeline Links (4단계 통합 타임라인)
+# ---------------------------------------------------------------------------
+
+class PipelineLinkResponse(BaseModel):
+    id: str
+    bid_type: str | None = None
+    prcrmnt_req_no: str | None = None
+    order_plan_unty_no: str | None = None
+    bf_spec_rgst_no: str | None = None
+    bid_ntce_no: str | None = None
+    bid_ntce_ord: str | None = None
+    cntrct_no: str | None = None
+    notice_id: str | None = None
+    order_plan_id: str | None = None
+    pre_spec_id: str | None = None
+    last_synced_at: datetime | None = None
+    created_at: datetime
+
+
+class PipelineTimelineResponse(BaseModel):
+    """한 사업의 4단계 타임라인 — 각 단계별 우리 DB 행이 있으면 임베드."""
+    link: PipelineLinkResponse
+    order_plan: OrderPlanResponse | None = None
+    pre_spec: PreSpecResponse | None = None
+    notice: "NoticeResponse | None" = None  # forward ref
+
+
+# ---------------------------------------------------------------------------
 # Alerts
 # ---------------------------------------------------------------------------
 
 class AlertResponse(BaseModel):
     id: str
     keyword_id: str
-    notice_id: str
+    target_type: str = "notice"  # "notice" | "order_plan" | "pre_spec"
+    notice_id: str | None = None
+    order_plan_id: str | None = None
+    pre_spec_id: str | None = None
     channel: str
     status: str
     error_message: str | None = None
@@ -167,7 +253,7 @@ class AlertResponse(BaseModel):
     signals: list[dict] | None = None
     created_at: datetime
     keyword_text: str | None = None
-    notice_title: str | None = None
+    target_title: str | None = None  # 통합 — 어느 단계든 사업명/공고명
 
 
 # ---------------------------------------------------------------------------
@@ -222,5 +308,18 @@ class BidMonitorStats(BaseModel):
     high_count: int = 0
     medium_count: int = 0
     low_count: int = 0
+    # 신규: 발주계획·사전규격 카운트
+    total_order_plans: int = 0
+    total_pre_specs: int = 0
+    high_count_order_plans: int = 0
+    medium_count_order_plans: int = 0
+    low_count_order_plans: int = 0
+    high_count_pre_specs: int = 0
+    medium_count_pre_specs: int = 0
+    low_count_pre_specs: int = 0
     recent_runs: list[CheckRunResponse] = []
     scheduler_running: bool = False
+
+
+# Resolve forward refs (PipelineTimelineResponse references NoticeResponse defined earlier)
+PipelineTimelineResponse.model_rebuild()

@@ -5,25 +5,105 @@ import { Sparkles, Upload, FileSpreadsheet, X, ChevronDown, ChevronUp, Copy, Che
 import { api } from "@/lib/api";
 import type { DatasetSummaryResult } from "@/lib/types";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import {
+  HwpDocumentPreview,
+  type HwpDocumentData,
+} from "@/components/shared/HwpDocumentPreview";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
+
+type ResultViewMode = "default" | "hwp";
+
+function buildSummaryHwpData(
+  results: DatasetSummaryResult[],
+  orgName: string,
+  filename: string,
+): HwpDocumentData {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}년 ${now.getMonth() + 1}월`;
+
+  const labelStyle = { bold: true, bg: "#F4F5F8", align: "center" as const };
+
+  return {
+    title: "데이터셋 설명·키워드 자동생성 결과",
+    subtitle: `${orgName} · ${filename}`,
+    date: dateStr,
+    sections: results.map((item) => {
+      const common = item.common || {};
+      return {
+        heading: `[${item.row_index}] ${common["데이터셋명"] || "(데이터셋명 없음)"}`,
+        table: {
+          columnWidths: Array(24).fill(1),
+          rows: [
+            [
+              { value: "번호", colspan: 4, ...labelStyle },
+              { value: String(item.row_index ?? "-"), colspan: 4, align: "center" },
+              { value: "대분류", colspan: 4, ...labelStyle },
+              { value: common["대분류"] || "-", colspan: 4 },
+              { value: "소분류", colspan: 4, ...labelStyle },
+              { value: common["소분류"] || "-", colspan: 4 },
+            ],
+            [
+              { value: "데이터셋명", colspan: 4, ...labelStyle },
+              { value: common["데이터셋명"] || "-", bold: true, colspan: 8 },
+              { value: "테이블명", colspan: 4, ...labelStyle },
+              { value: common["테이블명"] || "-", colspan: 8 },
+            ],
+            [
+              { value: "키워드", colspan: 4, ...labelStyle },
+              { value: (item.keywords || []).join(", "), colspan: 20 },
+            ],
+            [
+              { value: "설명", colspan: 4, ...labelStyle },
+              { value: item.description || "", colspan: 20 },
+            ],
+          ],
+        },
+      };
+    }),
+  };
+}
+
+function ViewModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap"
+      style={{
+        backgroundColor: active ? "#FFFFFF" : "transparent",
+        color: active ? "#191F28" : "#8B95A1",
+        boxShadow: active ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function DatasetSummaryPage() {
   const [file, setFile] = useState<File | null>(null);
   const [orgName, setOrgName] = useState("");
   const [sheet, setSheet] = useState("");
-  const [groupKey, setGroupKey] = useState("");
-  const [headerStart, setHeaderStart] = useState("");
-  const [headerEnd, setHeaderEnd] = useState("");
   const [useMock, setUseMock] = useState(false);
   const [includePrompt, setIncludePrompt] = useState(false);
   const [includeRows, setIncludeRows] = useState(false);
-  const [includeDebug, setIncludeDebug] = useState(false);
 
   const [results, setResults] = useState<DatasetSummaryResult[]>([]);
-  const [debug, setDebug] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [executionId, setExecutionId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ResultViewMode>("default");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -62,31 +142,74 @@ export default function DatasetSummaryPage() {
     setLoading(true);
     setError(null);
     setResults([]);
-    setDebug(null);
+    setProgress(null);
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("org_name", orgName.trim());
     if (sheet.trim()) formData.append("sheet", sheet.trim());
-    if (groupKey.trim()) formData.append("group_key", groupKey.trim());
-    if (headerStart.trim()) formData.append("header_start", headerStart.trim());
-    if (headerEnd.trim()) formData.append("header_end", headerEnd.trim());
     formData.append("mock", String(useMock));
     formData.append("include_prompt", String(includePrompt));
     formData.append("include_rows", String(includeRows));
-    formData.append("include_debug", String(includeDebug));
 
     try {
-      const res = await api.postFormData<{
-        results: DatasetSummaryResult[];
-        debug?: Record<string, unknown>;
+      const start = await api.postFormData<{
+        execution_id: string;
+        status: string;
+        total: number;
       }>("/projects/dataset-summary/summarize", formData);
-      setResults(res.results);
-      if (res.debug) setDebug(res.debug);
+
+      const execId = start.execution_id;
+      setExecutionId(execId);
+      setProgress({ done: 0, total: start.total });
+
+      while (true) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const prog = await api.get<{
+          done: number;
+          total: number;
+          status: string;
+          error: string | null;
+        }>(`/projects/dataset-summary/summarize/progress/${execId}`);
+
+        if (prog.total > 0) setProgress({ done: prog.done, total: prog.total });
+
+        if (prog.status === "succeeded") {
+          const detail = await api.get<{
+            result_data: { response: { results: DatasetSummaryResult[] } };
+          }>(`/projects/dataset-summary/runs/${execId}`);
+          setResults(detail.result_data?.response?.results ?? []);
+          break;
+        }
+        if (prog.status === "failed") {
+          throw new Error(prog.error || "생성 실패");
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "요청 중 오류가 발생했습니다.");
     } finally {
       setLoading(false);
+      setProgress(null);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!executionId) return;
+    try {
+      const resp = await fetch(
+        `${API_BASE}/projects/dataset-summary/runs/${executionId}/export`,
+        { credentials: "include" }
+      );
+      if (!resp.ok) throw new Error("내보내기 실패");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `데이터셋설명키워드_${executionId.slice(0, 8)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "내보내기 실패");
     }
   };
 
@@ -129,7 +252,7 @@ export default function DatasetSummaryPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         {/* Left: Upload + Settings */}
         <div className="space-y-4 lg:col-span-1">
           {/* Settings panel */}
@@ -180,7 +303,7 @@ export default function DatasetSummaryPage() {
                 {file ? (
                   <div className="flex items-center gap-2">
                     <FileSpreadsheet className="h-5 w-5" style={{ color: "#00B386" }} />
-                    <span className="text-sm font-medium" style={{ color: "#00B386" }}>
+                    <span className="text-sm font-medium truncate max-w-[160px]" style={{ color: "#00B386" }}>
                       {file.name}
                     </span>
                     <button
@@ -188,7 +311,7 @@ export default function DatasetSummaryPage() {
                         e.stopPropagation();
                         setFile(null);
                       }}
-                      className="ml-1 rounded p-0.5 transition-colors"
+                      className="ml-1 rounded p-0.5 transition-colors shrink-0"
                       style={{ color: "#8B95A1" }}
                       onMouseEnter={(e) => (e.currentTarget.style.color = "#4E5968")}
                       onMouseLeave={(e) => (e.currentTarget.style.color = "#8B95A1")}
@@ -233,7 +356,6 @@ export default function DatasetSummaryPage() {
                   }}
                 />
               </div>
-
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
                   시트명 (선택)
@@ -252,64 +374,6 @@ export default function DatasetSummaryPage() {
                   }}
                 />
               </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
-                  그룹 키 컬럼 (선택)
-                </label>
-                <input
-                  type="text"
-                  value={groupKey}
-                  onChange={(e) => setGroupKey(e.target.value)}
-                  placeholder="자동 감지"
-                  style={inputStyle}
-                  onFocus={(e) => {
-                    e.currentTarget.style.boxShadow = "0 0 0 2px rgba(0,100,255,0.2)";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
-                    헤더 시작 셀
-                  </label>
-                  <input
-                    type="text"
-                    value={headerStart}
-                    onChange={(e) => setHeaderStart(e.target.value)}
-                    placeholder="예: A1"
-                    style={inputStyle}
-                    onFocus={(e) => {
-                      e.currentTarget.style.boxShadow = "0 0 0 2px rgba(0,100,255,0.2)";
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#4E5968" }}>
-                    헤더 끝 셀
-                  </label>
-                  <input
-                    type="text"
-                    value={headerEnd}
-                    onChange={(e) => setHeaderEnd(e.target.value)}
-                    placeholder="예: J2"
-                    style={inputStyle}
-                    onFocus={(e) => {
-                      e.currentTarget.style.boxShadow = "0 0 0 2px rgba(0,100,255,0.2)";
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
-                  />
-                </div>
-              </div>
             </div>
 
             {/* Options (checkboxes) */}
@@ -318,11 +382,10 @@ export default function DatasetSummaryPage() {
                 { label: "모의 테스트 (LLM 미호출)", checked: useMock, onChange: setUseMock },
                 { label: "프롬프트 보기", checked: includePrompt, onChange: setIncludePrompt },
                 { label: "원본 행 보기", checked: includeRows, onChange: setIncludeRows },
-                { label: "디버그 정보", checked: includeDebug, onChange: setIncludeDebug },
               ].map(({ label, checked, onChange }) => (
                 <label
                   key={label}
-                  className="flex items-center gap-2.5 text-sm cursor-pointer select-none"
+                  className="relative flex items-center gap-2.5 text-sm cursor-pointer select-none"
                   style={{ color: "#4E5968" }}
                 >
                   <span
@@ -360,16 +423,16 @@ export default function DatasetSummaryPage() {
           {/* Submit */}
           <button
             onClick={handleSubmit}
-            disabled={loading || !file}
+            disabled={loading || !file || !orgName.trim()}
             className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed"
             style={{
-              backgroundColor: loading || !file ? "#B0B8C1" : "#0064FF",
+              backgroundColor: loading || !file || !orgName.trim() ? "#B0B8C1" : "#0064FF",
             }}
             onMouseEnter={(e) => {
-              if (!loading && file) e.currentTarget.style.backgroundColor = "#0050CC";
+              if (!loading && file && orgName.trim()) e.currentTarget.style.backgroundColor = "#0050CC";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = loading || !file ? "#B0B8C1" : "#0064FF";
+              e.currentTarget.style.backgroundColor = loading || !file || !orgName.trim() ? "#B0B8C1" : "#0064FF";
             }}
           >
             {loading ? (
@@ -400,7 +463,7 @@ export default function DatasetSummaryPage() {
         </div>
 
         {/* Right: Results */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           {results.length === 0 && !loading && (
             <div
               className="flex h-64 flex-col items-center justify-center rounded-xl"
@@ -423,13 +486,18 @@ export default function DatasetSummaryPage() {
                 <p className="mt-3 text-sm" style={{ color: "#8B95A1" }}>
                   LLM이 설명문과 키워드를 생성하고 있습니다...
                 </p>
+                {progress && progress.total > 0 && (
+                  <p className="mt-1 text-xs" style={{ color: "#B0B8C1" }}>
+                    {progress.done} / {progress.total} ({Math.round((progress.done / progress.total) * 100)}%)
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           {results.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold" style={{ color: "#191F28" }}>
                   생성 결과{" "}
                   <span
@@ -439,9 +507,45 @@ export default function DatasetSummaryPage() {
                     ({results.length}건)
                   </span>
                 </h2>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="inline-flex gap-1 p-1 rounded-lg"
+                    style={{ backgroundColor: "#F0F1F4" }}
+                  >
+                    <ViewModeButton
+                      active={viewMode === "default"}
+                      onClick={() => setViewMode("default")}
+                    >
+                      기본 보기
+                    </ViewModeButton>
+                    <ViewModeButton
+                      active={viewMode === "hwp"}
+                      onClick={() => setViewMode("hwp")}
+                    >
+                      HWP 보기
+                    </ViewModeButton>
+                  </div>
+                  {executionId && (
+                    <button
+                      onClick={handleExport}
+                      className="px-3 py-1.5 text-sm rounded-lg font-medium"
+                      style={{ backgroundColor: "#00B386", color: "#FFFFFF" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#009E77")}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#00B386")}
+                    >
+                      엑셀 내보내기
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {results.map((item, idx) => (
+              {viewMode === "hwp" && (
+                <HwpDocumentPreview
+                  data={buildSummaryHwpData(results, orgName.trim() || "-", file?.name || "-")}
+                />
+              )}
+
+              {viewMode === "default" && results.map((item, idx) => (
                 <div
                   key={idx}
                   className="overflow-hidden rounded-lg shadow-sm"
@@ -470,13 +574,13 @@ export default function DatasetSummaryPage() {
                       </span>
                       <div>
                         <p className="text-sm font-semibold" style={{ color: "#191F28" }}>
-                          {item.common["개방 데이터셋명"] ||
+                          {item.common["데이터셋명"] ||
                             item.group_key ||
                             `그룹 ${item.row_index}`}
                         </p>
-                        {item.common["테이블명(한글)"] && (
+                        {item.common["테이블명"] && (
                           <p className="text-xs" style={{ color: "#8B95A1" }}>
-                            {item.common["테이블명(한글)"]}
+                            {item.common["테이블명"]}
                           </p>
                         )}
                       </div>
@@ -552,7 +656,6 @@ export default function DatasetSummaryPage() {
                         backgroundColor: "#F4F5F8",
                       }}
                     >
-                      {/* Common Info */}
                       {Object.keys(item.common).length > 0 && (
                         <div>
                           <p
@@ -572,7 +675,6 @@ export default function DatasetSummaryPage() {
                         </div>
                       )}
 
-                      {/* Columns */}
                       {item.columns.length > 0 && (
                         <div>
                           <p
@@ -599,7 +701,6 @@ export default function DatasetSummaryPage() {
                         </div>
                       )}
 
-                      {/* Prompt */}
                       {item.prompt && (
                         <div>
                           <p
@@ -609,7 +710,7 @@ export default function DatasetSummaryPage() {
                             프롬프트
                           </p>
                           <pre
-                            className="max-h-48 overflow-auto p-3 text-xs leading-relaxed font-mono"
+                            className="max-h-48 overflow-auto whitespace-pre-wrap break-all p-3 text-xs leading-relaxed font-mono"
                             style={{
                               backgroundColor: "#F0F1F4",
                               borderRadius: "10px",
@@ -621,7 +722,6 @@ export default function DatasetSummaryPage() {
                         </div>
                       )}
 
-                      {/* Raw Rows */}
                       {item.rows && (
                         <div>
                           <p
@@ -631,7 +731,7 @@ export default function DatasetSummaryPage() {
                             원본 행 ({item.rows.length}개)
                           </p>
                           <pre
-                            className="max-h-48 overflow-auto p-3 text-xs leading-relaxed font-mono"
+                            className="max-h-48 overflow-auto whitespace-pre-wrap break-all p-3 text-xs leading-relaxed font-mono"
                             style={{
                               backgroundColor: "#F0F1F4",
                               borderRadius: "10px",
@@ -646,34 +746,6 @@ export default function DatasetSummaryPage() {
                   )}
                 </div>
               ))}
-
-              {/* Debug Info */}
-              {debug && (
-                <div
-                  className="rounded-lg p-4"
-                  style={{
-                    backgroundColor: "#FFF5E6",
-                    border: "1px solid rgba(255,136,0,0.2)",
-                  }}
-                >
-                  <p
-                    className="mb-2 text-xs font-semibold"
-                    style={{ color: "#FF8800" }}
-                  >
-                    디버그 정보
-                  </p>
-                  <pre
-                    className="max-h-48 overflow-auto p-3 text-xs leading-relaxed font-mono"
-                    style={{
-                      backgroundColor: "#F0F1F4",
-                      borderRadius: "10px",
-                      color: "#4E5968",
-                    }}
-                  >
-                    {JSON.stringify(debug, null, 2)}
-                  </pre>
-                </div>
-              )}
             </div>
           )}
         </div>

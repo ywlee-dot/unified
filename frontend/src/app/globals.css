@@ -90,6 +90,12 @@
   --text-overline--line-height: 1.3;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background-color: var(--color-surface-primary);
   color: var(--color-text-primary);

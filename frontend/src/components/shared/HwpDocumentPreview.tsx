@@ -5,7 +5,7 @@ import { Printer, FileText, X } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type FontType = 'gothic' | 'myeongjo';
+type FontType = 'gothic' | 'myeongjo' | 'humanmyeongjo';
 type ZoomLevel = 75 | 100 | 125;
 
 export interface HwpTableCell {
@@ -60,8 +60,9 @@ interface Props {
 const FONTS: Record<FontType, string> = {
   gothic:   "'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Nanum Gothic', sans-serif",
   myeongjo: "'Batang', '바탕체', 'UnBatang', 'Noto Serif KR', Georgia, serif",
+  humanmyeongjo: "'휴먼명조', 'HumanMyeongjo', 'HY신명조', 'HYSinMyeongJo', 'Batang', '바탕', 'Noto Serif KR', serif",
 };
-const FONT_LABELS: Record<FontType, string> = { gothic: '맑은 고딕', myeongjo: '바탕체' };
+const FONT_LABELS: Record<FontType, string> = { gothic: '맑은 고딕', myeongjo: '바탕체', humanmyeongjo: '휴먼명조' };
 
 const A4_W = 794;   // 210mm at 96 dpi
 const A4_H = 1123;  // 297mm at 96 dpi
@@ -249,7 +250,7 @@ export function HwpDocumentPreview({
             className="flex items-center gap-px p-0.5 rounded"
             style={{ background: 'rgba(255,255,255,0.12)' }}
           >
-            {(['gothic', 'myeongjo'] as FontType[]).map(f => (
+            {(['gothic', 'myeongjo', 'humanmyeongjo'] as FontType[]).map(f => (
               <button
                 key={f}
                 onClick={() => setFont(f)}

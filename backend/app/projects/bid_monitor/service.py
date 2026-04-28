@@ -11,6 +11,9 @@ from app.projects.bid_monitor.models import (
     BidKeywordModel,
     BidMonitorConfigModel,
     BidNoticeModel,
+    BidOrderPlanModel,
+    BidPipelineLinkModel,
+    BidPreSpecModel,
 )
 from app.projects.bid_monitor.schemas import (
     AlertResponse,
@@ -24,6 +27,12 @@ from app.projects.bid_monitor.schemas import (
     KeywordUpdate,
     NoticeDetailResponse,
     NoticeResponse,
+    OrderPlanDetailResponse,
+    OrderPlanResponse,
+    PipelineLinkResponse,
+    PipelineTimelineResponse,
+    PreSpecDetailResponse,
+    PreSpecResponse,
     ScoringConfigResponse,
 )
 from app.projects.bid_monitor.core.scheduler import is_scheduler_running, run_check
@@ -605,6 +614,21 @@ class BidMonitorService:
             for r in runs_result.scalars().all()
         ]
 
+        # 발주계획·사전규격 카운트
+        total_op = (await db.execute(select(func.count(BidOrderPlanModel.id)))).scalar() or 0
+        total_ps = (await db.execute(select(func.count(BidPreSpecModel.id)))).scalar() or 0
+        op_grade = {}
+        ps_grade = {}
+        for g in ("high", "medium", "low"):
+            op_grade[g] = (await db.execute(
+                select(func.count(func.distinct(BidAlertModel.order_plan_id)))
+                .where(BidAlertModel.target_type == "order_plan", BidAlertModel.grade == g)
+            )).scalar() or 0
+            ps_grade[g] = (await db.execute(
+                select(func.count(func.distinct(BidAlertModel.pre_spec_id)))
+                .where(BidAlertModel.target_type == "pre_spec", BidAlertModel.grade == g)
+            )).scalar() or 0
+
         return BidMonitorStats(
             total_keywords=total_kw,
             active_keywords=active_kw,
@@ -613,6 +637,392 @@ class BidMonitorService:
             high_count=grade_counts["high"],
             medium_count=grade_counts["medium"],
             low_count=grade_counts["low"],
+            total_order_plans=total_op,
+            total_pre_specs=total_ps,
+            high_count_order_plans=op_grade["high"],
+            medium_count_order_plans=op_grade["medium"],
+            low_count_order_plans=op_grade["low"],
+            high_count_pre_specs=ps_grade["high"],
+            medium_count_pre_specs=ps_grade["medium"],
+            low_count_pre_specs=ps_grade["low"],
             recent_runs=recent_runs,
             scheduler_running=is_scheduler_running(),
+        )
+
+    # -----------------------------------------------------------------------
+    # Order Plans (발주계획)
+    # -----------------------------------------------------------------------
+
+    async def search_order_plans(
+        self,
+        db: AsyncSession,
+        keyword: str | None = None,
+        bid_type: str | None = None,
+        sort: str = "date",
+        page: int = 1,
+        page_size: int = 20,
+        grade: list[str] | None = None,
+    ) -> dict:
+        # alert 집계 서브쿼리 (target_type='order_plan')
+        grade_rank = case(
+            (BidAlertModel.grade == "high", 3),
+            (BidAlertModel.grade == "medium", 2),
+            (BidAlertModel.grade == "low", 1),
+            else_=0,
+        )
+        alert_sub = (
+            select(
+                BidAlertModel.order_plan_id.label("oid"),
+                func.max(BidAlertModel.score).label("best_score"),
+                func.max(grade_rank).label("best_rank"),
+                func.array_agg(BidAlertModel.grade).label("grades"),
+                func.array_agg(BidAlertModel.match_reasons).label("all_reasons"),
+            )
+            .where(BidAlertModel.target_type == "order_plan")
+            .group_by(BidAlertModel.order_plan_id)
+            .subquery()
+        )
+        query = (
+            select(
+                BidOrderPlanModel,
+                alert_sub.c.best_score,
+                alert_sub.c.grades,
+                alert_sub.c.all_reasons,
+            )
+            .outerjoin(alert_sub, BidOrderPlanModel.id == alert_sub.c.oid)
+        )
+        if keyword:
+            query = query.where(BidOrderPlanModel.prdct_clsfc_no_nm.ilike(f"%{keyword}%"))
+        if bid_type:
+            query = query.where(BidOrderPlanModel.bid_type == bid_type)
+        if grade:
+            rmap = {"high": 3, "medium": 2, "low": 1}
+            ranks = [rmap[g] for g in grade if g in rmap]
+            if ranks:
+                query = query.where(or_(*(alert_sub.c.best_rank == r for r in ranks)))
+
+        total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
+
+        if sort == "price":
+            query = query.order_by(BidOrderPlanModel.asign_bdgt_amt.desc().nulls_last())
+        elif sort == "ordr":
+            query = query.order_by(BidOrderPlanModel.ordr_plan_dt.asc().nulls_last())
+        elif sort == "score":
+            query = query.order_by(alert_sub.c.best_score.desc().nulls_last())
+        else:
+            query = query.order_by(BidOrderPlanModel.created_at.desc())
+
+        query = query.offset((page - 1) * page_size).limit(page_size)
+        rows = (await db.execute(query)).all()
+
+        items = []
+        for row, best_score, grades, all_reasons in rows:
+            resp = self._order_plan(row)
+            if best_score is not None:
+                resp.best_score = float(best_score)
+                resp.best_grade = self._best_grade(grades)
+                resp.match_reasons = self._flatten_reasons(all_reasons)
+            items.append(resp)
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+        }
+
+    async def get_order_plan(self, db: AsyncSession, op_id: str) -> OrderPlanDetailResponse | None:
+        row = (await db.execute(
+            select(BidOrderPlanModel).where(BidOrderPlanModel.id == op_id)
+        )).scalar_one_or_none()
+        if not row:
+            return None
+        alerts = (await db.execute(
+            select(BidAlertModel).where(BidAlertModel.order_plan_id == op_id)
+        )).scalars().all()
+        best_score = max((a.score or 0 for a in alerts), default=None) if alerts else None
+        best_grade = self._best_grade([a.grade for a in alerts]) if alerts else None
+        reasons = self._flatten_reasons([a.match_reasons for a in alerts]) if alerts else None
+        base = self._order_plan(row).model_dump()
+        base["best_score"] = float(best_score) if best_score is not None else None
+        base["best_grade"] = best_grade
+        base["match_reasons"] = reasons
+        return OrderPlanDetailResponse(
+            **base,
+            metadata_json=row.metadata_json if isinstance(row.metadata_json, dict) else {},
+            updated_at=row.updated_at,
+        )
+
+    def _order_plan(self, row: BidOrderPlanModel) -> OrderPlanResponse:
+        return OrderPlanResponse(
+            id=row.id,
+            order_plan_unty_no=row.order_plan_unty_no,
+            bid_type=row.bid_type,
+            prdct_clsfc_no_nm=row.prdct_clsfc_no_nm,
+            asign_bdgt_amt=row.asign_bdgt_amt,
+            ordr_plan_dt=row.ordr_plan_dt,
+            ordr_yymm=row.ordr_yymm,
+            ordr_instt_cd=row.ordr_instt_cd,
+            ordr_instt_nm=row.ordr_instt_nm,
+            source_keyword=row.source_keyword,
+            created_at=row.created_at,
+        )
+
+    # -----------------------------------------------------------------------
+    # Pre-Specs (사전규격)
+    # -----------------------------------------------------------------------
+
+    async def search_pre_specs(
+        self,
+        db: AsyncSession,
+        keyword: str | None = None,
+        bid_type: str | None = None,
+        sort: str = "date",
+        page: int = 1,
+        page_size: int = 20,
+        grade: list[str] | None = None,
+    ) -> dict:
+        grade_rank = case(
+            (BidAlertModel.grade == "high", 3),
+            (BidAlertModel.grade == "medium", 2),
+            (BidAlertModel.grade == "low", 1),
+            else_=0,
+        )
+        alert_sub = (
+            select(
+                BidAlertModel.pre_spec_id.label("psid"),
+                func.max(BidAlertModel.score).label("best_score"),
+                func.max(grade_rank).label("best_rank"),
+                func.array_agg(BidAlertModel.grade).label("grades"),
+                func.array_agg(BidAlertModel.match_reasons).label("all_reasons"),
+            )
+            .where(BidAlertModel.target_type == "pre_spec")
+            .group_by(BidAlertModel.pre_spec_id)
+            .subquery()
+        )
+        query = (
+            select(
+                BidPreSpecModel,
+                alert_sub.c.best_score,
+                alert_sub.c.grades,
+                alert_sub.c.all_reasons,
+            )
+            .outerjoin(alert_sub, BidPreSpecModel.id == alert_sub.c.psid)
+        )
+        if keyword:
+            query = query.where(BidPreSpecModel.prdct_clsfc_no_nm.ilike(f"%{keyword}%"))
+        if bid_type:
+            query = query.where(BidPreSpecModel.bid_type == bid_type)
+        if grade:
+            rmap = {"high": 3, "medium": 2, "low": 1}
+            ranks = [rmap[g] for g in grade if g in rmap]
+            if ranks:
+                query = query.where(or_(*(alert_sub.c.best_rank == r for r in ranks)))
+
+        total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
+
+        if sort == "price":
+            query = query.order_by(BidPreSpecModel.asign_bdgt_amt.desc().nulls_last())
+        elif sort == "deadline":
+            query = query.order_by(BidPreSpecModel.rcept_clse_dt.asc().nulls_last())
+        elif sort == "score":
+            query = query.order_by(alert_sub.c.best_score.desc().nulls_last())
+        else:
+            query = query.order_by(BidPreSpecModel.created_at.desc())
+
+        query = query.offset((page - 1) * page_size).limit(page_size)
+        rows = (await db.execute(query)).all()
+        items = []
+        for row, best_score, grades, all_reasons in rows:
+            resp = self._pre_spec(row)
+            if best_score is not None:
+                resp.best_score = float(best_score)
+                resp.best_grade = self._best_grade(grades)
+                resp.match_reasons = self._flatten_reasons(all_reasons)
+            items.append(resp)
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+        }
+
+    async def get_pre_spec(self, db: AsyncSession, ps_id: str) -> PreSpecDetailResponse | None:
+        row = (await db.execute(
+            select(BidPreSpecModel).where(BidPreSpecModel.id == ps_id)
+        )).scalar_one_or_none()
+        if not row:
+            return None
+        alerts = (await db.execute(
+            select(BidAlertModel).where(BidAlertModel.pre_spec_id == ps_id)
+        )).scalars().all()
+        best_score = max((a.score or 0 for a in alerts), default=None) if alerts else None
+        best_grade = self._best_grade([a.grade for a in alerts]) if alerts else None
+        reasons = self._flatten_reasons([a.match_reasons for a in alerts]) if alerts else None
+        base = self._pre_spec(row).model_dump()
+        base["best_score"] = float(best_score) if best_score is not None else None
+        base["best_grade"] = best_grade
+        base["match_reasons"] = reasons
+        return PreSpecDetailResponse(
+            **base,
+            metadata_json=row.metadata_json if isinstance(row.metadata_json, dict) else {},
+            updated_at=row.updated_at,
+        )
+
+    def _pre_spec(self, row: BidPreSpecModel) -> PreSpecResponse:
+        return PreSpecResponse(
+            id=row.id,
+            bf_spec_rgst_no=row.bf_spec_rgst_no,
+            bid_type=row.bid_type,
+            prdct_clsfc_no_nm=row.prdct_clsfc_no_nm,
+            asign_bdgt_amt=row.asign_bdgt_amt,
+            rcept_bgn_dt=row.rcept_bgn_dt,
+            rcept_clse_dt=row.rcept_clse_dt,
+            rgst_dt=row.rgst_dt,
+            ntce_instt_cd=row.ntce_instt_cd,
+            ntce_instt_nm=row.ntce_instt_nm,
+            dminstt_cd=row.dminstt_cd,
+            dminstt_nm=row.dminstt_nm,
+            source_keyword=row.source_keyword,
+            created_at=row.created_at,
+        )
+
+    # -----------------------------------------------------------------------
+    # Pipeline (계약과정통합공개) — 한 사업의 4단계 타임라인
+    # -----------------------------------------------------------------------
+
+    async def get_pipeline_for(
+        self,
+        db: AsyncSession,
+        *,
+        target_type: str,  # "notice" | "order_plan" | "pre_spec"
+        target_id: str,
+    ) -> PipelineTimelineResponse | None:
+        """우리 DB의 한 항목(target)에 대해 link 행을 찾고, 가능하면 외부 API로 보강 후 4단계를 임베드.
+        link가 DB에 없으면 외부 API 한 번 호출해 upsert 시도.
+        """
+        from app.projects.bid_monitor.core.g2b_client import G2BClient
+        from app.projects.bid_monitor.core.scheduler import _upsert_pipeline_link
+        from sqlalchemy import or_ as sql_or
+
+        notice = order_plan = pre_spec = None
+        bid_type = "services"
+        # 1) 대상 행 조회
+        if target_type == "notice":
+            notice = (await db.execute(
+                select(BidNoticeModel).where(BidNoticeModel.id == target_id)
+            )).scalar_one_or_none()
+            if not notice:
+                return None
+            bid_type = notice.bid_type
+        elif target_type == "order_plan":
+            order_plan = (await db.execute(
+                select(BidOrderPlanModel).where(BidOrderPlanModel.id == target_id)
+            )).scalar_one_or_none()
+            if not order_plan:
+                return None
+            bid_type = order_plan.bid_type
+        elif target_type == "pre_spec":
+            pre_spec = (await db.execute(
+                select(BidPreSpecModel).where(BidPreSpecModel.id == target_id)
+            )).scalar_one_or_none()
+            if not pre_spec:
+                return None
+            bid_type = pre_spec.bid_type
+        else:
+            return None
+
+        # 2) 기존 link 검색
+        ors = []
+        if notice:
+            ors.append(BidPipelineLinkModel.notice_id == notice.id)
+            if notice.bid_ntce_no:
+                ors.append(BidPipelineLinkModel.bid_ntce_no == notice.bid_ntce_no)
+        if order_plan:
+            ors.append(BidPipelineLinkModel.order_plan_id == order_plan.id)
+            if order_plan.order_plan_unty_no:
+                ors.append(BidPipelineLinkModel.order_plan_unty_no == order_plan.order_plan_unty_no)
+        if pre_spec:
+            ors.append(BidPipelineLinkModel.pre_spec_id == pre_spec.id)
+            if pre_spec.bf_spec_rgst_no:
+                ors.append(BidPipelineLinkModel.bf_spec_rgst_no == pre_spec.bf_spec_rgst_no)
+
+        link_row: BidPipelineLinkModel | None = None
+        if ors:
+            link_row = (await db.execute(
+                select(BidPipelineLinkModel).where(sql_or(*ors))
+            )).scalar_one_or_none()
+
+        # 3) link 없으면 외부 API 호출
+        if not link_row:
+            g = G2BClient()
+            kwargs = {}
+            if notice:
+                kwargs["bid_ntce_no"] = notice.bid_ntce_no
+                kwargs["bid_ntce_ord"] = notice.bid_ntce_ord
+            elif order_plan:
+                kwargs["order_plan_no"] = order_plan.order_plan_unty_no
+            elif pre_spec:
+                kwargs["bf_spec_rgst_no"] = pre_spec.bf_spec_rgst_no
+            link = await g.fetch_pipeline(bid_type=bid_type, **kwargs)
+            if link:
+                await _upsert_pipeline_link(
+                    db, bid_type=bid_type, link=link,
+                    notice_id=notice.id if notice else None,
+                    order_plan_id=order_plan.id if order_plan else None,
+                    pre_spec_id=pre_spec.id if pre_spec else None,
+                )
+                await db.commit()
+                # 새로 만든 row 다시 로드
+                link_row = (await db.execute(
+                    select(BidPipelineLinkModel).where(sql_or(*ors)) if ors else select(BidPipelineLinkModel).limit(0)
+                )).scalar_one_or_none()
+
+        if not link_row:
+            # 외부 매칭도 없음 — 빈 link 반환
+            return None
+
+        # 4) 4단계 임베드 (각 식별자로 우리 DB 행 조회)
+        emb_notice = None
+        emb_op = None
+        emb_ps = None
+        if link_row.notice_id:
+            n = (await db.execute(select(BidNoticeModel).where(BidNoticeModel.id == link_row.notice_id))).scalar_one_or_none()
+            if n: emb_notice = self._notice(n)
+        elif link_row.bid_ntce_no:
+            n = (await db.execute(select(BidNoticeModel).where(BidNoticeModel.bid_ntce_no == link_row.bid_ntce_no))).scalar_one_or_none()
+            if n: emb_notice = self._notice(n)
+        if link_row.order_plan_id:
+            o = (await db.execute(select(BidOrderPlanModel).where(BidOrderPlanModel.id == link_row.order_plan_id))).scalar_one_or_none()
+            if o: emb_op = self._order_plan(o)
+        elif link_row.order_plan_unty_no:
+            o = (await db.execute(select(BidOrderPlanModel).where(BidOrderPlanModel.order_plan_unty_no == link_row.order_plan_unty_no))).scalar_one_or_none()
+            if o: emb_op = self._order_plan(o)
+        if link_row.pre_spec_id:
+            p = (await db.execute(select(BidPreSpecModel).where(BidPreSpecModel.id == link_row.pre_spec_id))).scalar_one_or_none()
+            if p: emb_ps = self._pre_spec(p)
+        elif link_row.bf_spec_rgst_no:
+            p = (await db.execute(select(BidPreSpecModel).where(BidPreSpecModel.bf_spec_rgst_no == link_row.bf_spec_rgst_no))).scalar_one_or_none()
+            if p: emb_ps = self._pre_spec(p)
+
+        return PipelineTimelineResponse(
+            link=PipelineLinkResponse(
+                id=link_row.id,
+                bid_type=link_row.bid_type,
+                prcrmnt_req_no=link_row.prcrmnt_req_no,
+                order_plan_unty_no=link_row.order_plan_unty_no,
+                bf_spec_rgst_no=link_row.bf_spec_rgst_no,
+                bid_ntce_no=link_row.bid_ntce_no,
+                bid_ntce_ord=link_row.bid_ntce_ord,
+                cntrct_no=link_row.cntrct_no,
+                notice_id=link_row.notice_id,
+                order_plan_id=link_row.order_plan_id,
+                pre_spec_id=link_row.pre_spec_id,
+                last_synced_at=link_row.last_synced_at,
+                created_at=link_row.created_at,
+            ),
+            order_plan=emb_op,
+            pre_spec=emb_ps,
+            notice=emb_notice,
         )
